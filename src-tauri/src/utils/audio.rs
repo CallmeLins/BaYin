@@ -116,8 +116,8 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
         })
     });
 
-    // 生成唯一 ID
-    let id = uuid::Uuid::new_v4().to_string();
+    // 使用文件路径的哈希作为唯一 ID（确保同一文件每次扫描 ID 相同）
+    let id = format!("{:x}", md5::compute(&file_path_str));
 
     Ok(ScannedSong {
         id,

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(cargo build:*)",
-      "Bash(cmd /c:*)"
+      "Bash(cmd /c:*)",
+      "Bash(powershell -Command \"Set-Location ''D:\\\\Learn\\\\RustLearn\\\\BaYin\\\\src-ui''; npx tsc --noEmit 2>&1\")"
     ]
   }
 }

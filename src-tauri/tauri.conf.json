@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "bayin",
-  "version": "0.1.0",
+  "productName": "八音",
+  "version": "1.0.0",
   "identifier": "com.hao.bayin",
   "build": {
     "beforeDevCommand": "npm run dev --prefix src-ui",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "bayin",
+        "title": "八音",
         "width": 800,
         "height": 600,
         "decorations": false

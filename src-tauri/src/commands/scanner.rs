@@ -1,6 +1,7 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use walkdir::WalkDir;
+use rayon::prelude::*;
 use serde::Serialize;
 
 use crate::models::{ScanOptions, ScannedSong};
@@ -70,7 +71,8 @@ pub fn scan_music_files(options: ScanOptions) -> Result<Vec<ScannedSong>, String
     let skip_short = options.skip_short_audio.unwrap_or(false);
     let min_duration = options.min_duration.unwrap_or(30.0);
 
-    let mut songs = Vec::new();
+    // 第一步：快速收集所有音频文件路径（单线程，I/O 受限但很快）
+    let mut audio_paths: Vec<PathBuf> = Vec::new();
 
     for dir in &options.directories {
         let dir_path = Path::new(dir);
@@ -84,33 +86,28 @@ pub fn scan_music_files(options: ScanOptions) -> Result<Vec<ScannedSong>, String
             .filter_map(|e| e.ok())
         {
             let path = entry.path();
-
-            // 只处理文件
-            if !path.is_file() {
-                continue;
-            }
-
-            // 过滤非音频文件
-            if !is_audio_file(path) {
-                continue;
-            }
-
-            // 读取元数据，失败时静默跳过
-            match read_metadata(path) {
-                Ok(song) => {
-                    // 跳过短音频
-                    if skip_short && song.duration < min_duration {
-                        continue;
-                    }
-                    songs.push(song);
-                }
-                Err(_) => {
-                    // 读取失败，静默跳过
-                    continue;
-                }
+            if path.is_file() && is_audio_file(path) {
+                audio_paths.push(path.to_path_buf());
             }
         }
     }
+
+    // 第二步：并行读取元数据
+    let songs: Vec<ScannedSong> = audio_paths
+        .par_iter()
+        .filter_map(|path| {
+            match read_metadata(path) {
+                Ok(song) => {
+                    if skip_short && song.duration < min_duration {
+                        None
+                    } else {
+                        Some(song)
+                    }
+                }
+                Err(_) => None,
+            }
+        })
+        .collect();
 
     Ok(songs)
 }
