@@ -1,6 +1,20 @@
-# 八音 (BaYin)
+<div align="center">
+<img alt="logo" height="120" src="public/app-icon.png" />
+<h1>八音 (BaYin)</h1>
+<p>一款基于 Tauri + React 的跨平台音乐播放器，采用 macOS 风格设计</p>
 
-一款基于 Tauri + React 的跨平台桌面音乐播放器，采用 macOS 风格设计。
+[发行版](https://github.com/CallmeLins/BaYin/releases) | [问题反馈](https://github.com/CallmeLins/BaYin/issues)
+
+<br />
+
+![Stars](https://img.shields.io/github/stars/CallmeLins/BaYin?style=flat)
+![Version](https://img.shields.io/github/v/release/CallmeLins/BaYin)
+![License](https://img.shields.io/github/license/CallmeLins/BaYin)
+![Issues](https://img.shields.io/github/issues/CallmeLins/BaYin)
+
+</div>
+
+![main](public/pc_playpage.png)
 
 ## 技术栈
 
@@ -11,6 +25,93 @@
 - **动画**: Framer Motion
 - **状态管理**: React Context
 - **路由**: React Router
+
+## 功能特性
+
+- 🎵 支持多种音频格式 (MP3, FLAC, WAV, AAC, M4A, OGG, WMA, APE, AIFF, DSF, DFF)
+- 📝 播放队列管理（添加、移除、清空）
+- 🔄 多种播放模式（顺序、随机、单曲循环）
+- 🔊 音量控制与静音
+- 📂 本地文件夹扫描
+- 💿 歌曲、专辑、艺术家分类浏览
+- 🏷️ 音质标签显示 (HR: Hi-Res, SQ: 无损)
+- 📋 歌单创建与管理
+- 🌐 流媒体服务器集成（Navidrome、Jellyfin、Emby、Subsonic、OpenSubsonic）
+- 🎤 LRC 歌词解析与同步滚动
+- 🌙 深色/浅色主题切换
+- 📱 响应式布局（支持桌面和移动端）
+- ✨ macOS 风格毛玻璃效果
+
+## 界面展示
+
+<details>
+<summary>桌面端 - 浅色主题</summary>
+
+![桌面端浅色](public/pc_mainpage_light.png)
+
+</details>
+
+<details>
+<summary>桌面端 - 深色主题</summary>
+
+![桌面端深色](public/pc_mainpage_dark.png)
+
+</details>
+
+<details>
+<summary>桌面端 - 播放页面</summary>
+
+![播放页面](public/pc_playpage.png)
+
+</details>
+
+<details>
+<summary>移动端</summary>
+
+![移动端](public/mobile_mainpage.png)
+
+</details>
+
+## 获取
+
+### 二进制安装
+
+可以在 [Releases](https://github.com/CallmeLins/BaYin/releases) 中获取最新版本
+
+### 本地开发
+
+#### 前置要求
+
+- [Node.js](https://nodejs.org/) >= 18
+- [Rust](https://www.rust-lang.org/tools/install)
+- [Tauri 依赖](https://tauri.app/start/prerequisites/)
+
+#### 安装依赖
+
+```bash
+# 克隆仓库（包含子模块）
+git clone --recursive https://github.com/CallmeLins/BaYin.git
+
+# 或者克隆后初始化子模块
+git submodule update --init --recursive
+
+# 安装前端依赖
+cd src-ui
+npm install
+cd ..
+```
+
+#### 运行开发环境
+
+```bash
+npx tauri dev
+```
+
+#### 构建生产版本
+
+```bash
+npx tauri build
+```
 
 ## 项目结构
 
@@ -40,111 +141,19 @@ BaYin/
 └── README.md
 ```
 
-## 功能特性
+## 支持项目
 
-### 音乐播放
-- 支持多种音频格式 (MP3, FLAC, WAV, AAC, M4A, OGG, WMA, APE, AIFF, DSF, DFF)
-- 播放队列管理（添加、移除、清空）
-- 多种播放模式（顺序、随机、单曲循环）
-- 音量控制与静音
-- 进度条拖拽
+如果觉得本项目对你有帮助，欢迎 Star 支持！
 
-### 音乐库管理
-- 本地文件夹扫描
-- 歌曲、专辑、艺术家分类浏览
-- 音质标签显示 (HR: Hi-Res, SQ: 无损)
-- 歌单创建与管理
-
-### 流媒体服务器集成
-- 支持多种服务器类型：Navidrome、Jellyfin、Emby、Subsonic、OpenSubsonic
-- 远程音乐库浏览与播放
-- 歌词同步获取
-
-### 歌词显示
-- LRC 格式歌词解析
-- 同步滚动高亮
-- 支持内嵌歌词和外部 .lrc 文件
-
-### 界面
-- macOS 风格设计
-- 深色/浅色主题切换
-- 响应式布局（支持桌面和移动端）
-- 毛玻璃效果
-
-## 开发环境
-
-### 前置要求
-
-- [Node.js](https://nodejs.org/) >= 18
-- [Rust](https://www.rust-lang.org/tools/install)
-- [Tauri 依赖](https://tauri.app/start/prerequisites/)
-
-### 安装依赖
-
-```bash
-# 克隆仓库（包含子模块）
-git clone --recursive https://github.com/your-repo/BaYin.git
-
-# 或者克隆后初始化子模块
-git submodule update --init --recursive
-
-# 安装前端依赖
-cd src-ui
-npm install
-cd ..
-```
-
-### 运行开发环境
-
-```bash
-npx tauri dev
-```
-
-### 构建生产版本
-
-```bash
-npx tauri build
-```
-
-## 子仓库说明
-
-前端 UI (`src-ui`) 作为 Git 子模块管理，可以独立开发：
-
-```bash
-# 独立运行前端（浏览器预览）
-cd src-ui
-npm run dev
-```
-
-在浏览器环境下，Tauri API 会自动降级为 mock 数据。
-
-## Services 层
-
-`src-ui/src/services/` 封装了所有 Tauri 相关调用：
-
-| 模块 | 功能 |
-|------|------|
-| `audio.ts` | 音频播放控制（支持本地和流媒体） |
-| `scanner.ts` | 本地音乐扫描、歌词获取 |
-| `streaming.ts` | 流媒体服务器 API（Subsonic/Jellyfin） |
-| `storage.ts` | 持久化存储 |
-| `tauri.ts` | 环境检测工具 |
-
-## 后端命令
-
-`src-tauri/src/commands/` 提供的 Tauri 命令：
-
-| 命令 | 功能 |
-|------|------|
-| `scan_music_files` | 扫描本地音乐文件 |
-| `get_music_metadata` | 获取音频元数据 |
-| `get_lyrics` | 获取本地歌词 |
-| `test_stream_connection` | 测试流媒体服务器连接 |
-| `fetch_stream_songs` | 获取流媒体歌曲列表 |
-| `get_stream_url` | 获取流媒体播放 URL |
-| `get_stream_lyrics` | 获取流媒体歌词 |
-| `jellyfin_authenticate` | Jellyfin/Emby 认证 |
+<div align="center">
+<img src="public/alipay.jpg" alt="支付宝" width="200" />
+<img src="public/wxpay.png" alt="微信支付" width="200" />
+</div>
 
 ## 许可证
 
-Apache License
+本项目基于 [Apache License 2.0](LICENSE) 许可进行开源
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=CallmeLins/BaYin&type=Date)](https://star-history.com/#CallmeLins/BaYin&Date)
