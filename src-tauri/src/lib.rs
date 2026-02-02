@@ -8,6 +8,8 @@ use commands::{
     jellyfin_authenticate, list_directories, scan_music_files, test_stream_connection,
     test_subsonic_connection,
 };
+#[cfg(desktop)]
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -40,6 +42,16 @@ pub fn run() {
             get_subsonic_stream_url,
             get_subsonic_lyrics
         ])
+        .setup(|_app| {
+            // 桌面端：窗口状态已恢复，显示窗口
+            #[cfg(desktop)]
+            {
+                if let Some(window) = _app.get_webview_window("main") {
+                    let _ = window.as_ref().window().show();
+                }
+            }
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
