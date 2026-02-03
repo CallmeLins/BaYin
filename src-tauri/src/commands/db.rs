@@ -181,7 +181,7 @@ pub fn db_migrate_from_localstorage(
             file_size: song.file_size.unwrap_or(0),
             is_hr: song.is_hr,
             is_sq: song.is_sq,
-            cover_url: song.cover_url,
+            cover_hash: None, // Migration skips covers, rescan to get them
             server_song_id: None,
             stream_info: if is_stream { Some(file_path) } else { None },
             file_modified: None,
@@ -268,47 +268,49 @@ use std::sync::Mutex;
 /// Cover cache state wrapper
 pub struct CoverCacheState(pub Mutex<CoverCache>);
 
-/// Get cover URL by song ID and size
+/// Get cover URL by cover hash and size
+/// This is the primary method - frontend should use cover_hash from songs/albums
 #[tauri::command]
 pub fn get_cover_url(
-    db: State<'_, DbState>,
     cover_cache: State<'_, CoverCacheState>,
-    song_id: String,
+    hash: String,
     size: Option<String>,
 ) -> Result<Option<String>, String> {
-    let conn = db.0.lock().map_err(|e| e.to_string())?;
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?;
 
-    // Get song from DB
-    let mut stmt = conn
-        .prepare("SELECT cover_hash, cover_url FROM songs WHERE id = ?1")
-        .map_err(|e| e.to_string())?;
+    let cover_size = match size.as_deref() {
+        Some("small") | Some("list") => CoverSize::Small,
+        Some("original") | Some("orig") => CoverSize::Original,
+        _ => CoverSize::Mid,
+    };
 
-    let result: Option<(Option<String>, Option<String>)> = stmt
-        .query_row([&song_id], |row| Ok((row.get(0)?, row.get(1)?)))
-        .ok();
+    Ok(cache.get_cover_url(&hash, cover_size))
+}
 
-    if let Some((cover_hash, cover_url)) = result {
-        // Try cached cover first
-        if let Some(hash) = cover_hash {
-            let cover_size = match size.as_deref() {
-                Some("original") | Some("orig") => CoverSize::Original,
-                _ => CoverSize::Mid,
-            };
+/// Batch get cover URLs for multiple hashes
+/// More efficient than calling get_cover_url multiple times
+#[tauri::command]
+pub fn get_cover_urls_batch(
+    cover_cache: State<'_, CoverCacheState>,
+    hashes: Vec<String>,
+    size: Option<String>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let cache = cover_cache.0.lock().map_err(|e| e.to_string())?;
 
-            if let Some(path) = cache.get_cover_path(&hash, cover_size) {
-                // Return as asset:// URL for Tauri
-                return Ok(Some(format!("asset://localhost/{}", path.to_string_lossy().replace('\\', "/"))));
-            }
-        }
+    let cover_size = match size.as_deref() {
+        Some("small") | Some("list") => CoverSize::Small,
+        Some("original") | Some("orig") => CoverSize::Original,
+        _ => CoverSize::Mid,
+    };
 
-        // Fall back to cover_url (base64 or remote URL)
-        if let Some(url) = cover_url {
-            return Ok(Some(url));
+    let mut result = std::collections::HashMap::new();
+    for hash in hashes {
+        if let Some(url) = cache.get_cover_url(&hash, cover_size) {
+            result.insert(hash, url);
         }
     }
 
-    Ok(None)
+    Ok(result)
 }
 
 /// Get cover cache statistics

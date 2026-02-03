@@ -11,8 +11,10 @@ pub mod desktop {
     use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
     use tauri::{AppHandle, Emitter, Manager};
 
+    use crate::commands::CoverCacheState;
     use crate::db::{self, DbState, SongInput};
     use crate::utils::audio;
+    use crate::utils::cover::extract_and_cache_cover;
 
     /// Shared state for the file watcher
     pub struct WatcherState {
@@ -149,6 +151,13 @@ pub mod desktop {
     /// Process changed files: mini incremental scan
     fn process_changed_files(app_handle: &AppHandle, paths: &[PathBuf]) {
         let db_state: tauri::State<'_, DbState> = app_handle.state();
+        let cover_cache_state: tauri::State<'_, CoverCacheState> = app_handle.state();
+
+        // Get cover cache for processing
+        let cover_cache = match cover_cache_state.0.lock() {
+            Ok(c) => c.clone_arc(),
+            Err(_) => return,
+        };
 
         // Separate existing files from deleted files
         let mut to_scan: Vec<&PathBuf> = Vec::new();
@@ -170,20 +179,24 @@ pub mod desktop {
             let song_inputs: Vec<SongInput> = to_scan
                 .iter()
                 .filter_map(|path| {
-                    audio::read_metadata_with_mtime(path).ok().map(|song| SongInput {
-                        id: song.id,
-                        title: song.title,
-                        artist: song.artist,
-                        album: song.album,
-                        duration: song.duration,
-                        file_path: song.file_path,
-                        file_size: song.file_size as i64,
-                        is_hr: song.is_hr,
-                        is_sq: song.is_sq,
-                        cover_url: song.cover_url,
-                        server_song_id: None,
-                        stream_info: None,
-                        file_modified: Some(song.file_modified),
+                    audio::read_metadata_with_mtime(path).ok().map(|song| {
+                        // Extract and cache cover
+                        let cover_hash = extract_and_cache_cover(path, &cover_cache).ok().flatten();
+                        SongInput {
+                            id: song.id,
+                            title: song.title,
+                            artist: song.artist,
+                            album: song.album,
+                            duration: song.duration,
+                            file_path: song.file_path,
+                            file_size: song.file_size as i64,
+                            is_hr: song.is_hr,
+                            is_sq: song.is_sq,
+                            cover_hash,
+                            server_song_id: None,
+                            stream_info: None,
+                            file_modified: Some(song.file_modified),
+                        }
                     })
                 })
                 .collect();

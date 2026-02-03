@@ -1,7 +1,8 @@
 //! Cover image caching utilities
 //!
-//! Provides two-tier cover caching:
-//! - mid: 300x300 resized covers for list views
+//! Provides three-tier cover caching:
+//! - small: 120x120 thumbnails for list views
+//! - mid: 300x300 covers for album grids
 //! - orig: Original resolution covers for full-screen view
 
 use image::DynamicImage;
@@ -9,17 +10,21 @@ use sha2::{Digest, Sha256};
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 /// Cover size variants
 #[derive(Debug, Clone, Copy)]
 pub enum CoverSize {
-    /// 300x300 thumbnail for list views
+    /// 120x120 thumbnail for list views
+    Small,
+    /// 300x300 for album/artist grids
     Mid,
     /// Original resolution
     Original,
 }
 
 /// Cover cache manager
+#[derive(Clone)]
 pub struct CoverCache {
     cache_dir: PathBuf,
 }
@@ -30,9 +35,15 @@ impl CoverCache {
         Self { cache_dir }
     }
 
+    /// Get an Arc-wrapped clone for use in parallel processing
+    pub fn clone_arc(&self) -> Arc<Self> {
+        Arc::new(self.clone())
+    }
+
     /// Get the cache directory for a given size
     fn size_dir(&self, size: CoverSize) -> PathBuf {
         match size {
+            CoverSize::Small => self.cache_dir.join("small"),
             CoverSize::Mid => self.cache_dir.join("mid"),
             CoverSize::Original => self.cache_dir.join("orig"),
         }
@@ -46,6 +57,7 @@ impl CoverCache {
 
     /// Ensure cache directories exist
     pub fn ensure_dirs(&self) -> std::io::Result<()> {
+        fs::create_dir_all(self.size_dir(CoverSize::Small))?;
         fs::create_dir_all(self.size_dir(CoverSize::Mid))?;
         fs::create_dir_all(self.size_dir(CoverSize::Original))?;
         Ok(())
@@ -58,24 +70,24 @@ impl CoverCache {
         format!("{:x}", hasher.finalize())
     }
 
-    /// Save cover to cache (both mid and original)
+    /// Save cover to cache (small, mid, and original)
     /// Returns the cover hash
     pub fn save_cover(&self, data: &[u8], mime_type: Option<&str>) -> Result<String, String> {
         let hash = Self::hash_cover(data);
-
-        // Determine extension from mime type
-        let ext = match mime_type {
-            Some("image/png") => "png",
-            Some("image/gif") => "gif",
-            Some("image/webp") => "webp",
-            _ => "jpg", // Default to jpg
-        };
 
         // Check if already cached
         let mid_path = self.cover_path(&hash, CoverSize::Mid, "jpg");
         if mid_path.exists() {
             return Ok(hash);
         }
+
+        // Determine extension from mime type for original
+        let ext = match mime_type {
+            Some("image/png") => "png",
+            Some("image/gif") => "gif",
+            Some("image/webp") => "webp",
+            _ => "jpg",
+        };
 
         // Decode image
         let img = image::load_from_memory(data)
@@ -88,12 +100,20 @@ impl CoverCache {
         }
         fs::write(&orig_path, data).map_err(|e| e.to_string())?;
 
-        // Create and save mid (300x300)
-        let mid_img = img.resize_to_fill(300, 300, image::imageops::FilterType::Lanczos3);
+        // Create and save mid (300x300) - use faster filter
+        let mid_img = img.resize_to_fill(300, 300, image::imageops::FilterType::Triangle);
         if let Some(parent) = mid_path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         save_as_jpeg(&mid_img, &mid_path, 85)?;
+
+        // Create and save small (120x120) - use faster filter
+        let small_path = self.cover_path(&hash, CoverSize::Small, "jpg");
+        let small_img = img.resize_to_fill(120, 120, image::imageops::FilterType::Triangle);
+        if let Some(parent) = small_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        save_as_jpeg(&small_img, &small_path, 80)?;
 
         Ok(hash)
     }
@@ -110,6 +130,21 @@ impl CoverCache {
         None
     }
 
+    /// Get cover URL (asset protocol) by hash and size
+    /// Uses http://asset.localhost/ format for Tauri 2.0
+    pub fn get_cover_url(&self, hash: &str, size: CoverSize) -> Option<String> {
+        self.get_cover_path(hash, size).map(|path| {
+            let path_str = path.to_string_lossy().replace('\\', "/");
+            // URL encode the colon in Windows drive letter (C: -> C%3A)
+            let encoded_path = if path_str.len() > 1 && path_str.chars().nth(1) == Some(':') {
+                format!("{}%3A{}", &path_str[0..1], &path_str[2..])
+            } else {
+                path_str
+            };
+            format!("http://asset.localhost/{}", encoded_path)
+        })
+    }
+
     /// Check if a cover exists in cache
     pub fn has_cover(&self, hash: &str) -> bool {
         self.get_cover_path(hash, CoverSize::Mid).is_some()
@@ -119,7 +154,7 @@ impl CoverCache {
     pub fn get_stats(&self) -> CacheStats {
         let mut stats = CacheStats::default();
 
-        for size in [CoverSize::Mid, CoverSize::Original] {
+        for size in [CoverSize::Small, CoverSize::Mid, CoverSize::Original] {
             let dir = self.size_dir(size);
             if let Ok(entries) = fs::read_dir(&dir) {
                 for entry in entries.flatten() {
@@ -145,7 +180,7 @@ impl CoverCache {
         let valid_set: std::collections::HashSet<_> = valid_hashes.iter().collect();
         let mut removed = 0;
 
-        for size in [CoverSize::Mid, CoverSize::Original] {
+        for size in [CoverSize::Small, CoverSize::Mid, CoverSize::Original] {
             let dir = self.size_dir(size);
             if let Ok(entries) = fs::read_dir(&dir) {
                 for entry in entries.flatten() {
@@ -174,7 +209,7 @@ impl CoverCache {
     pub fn clear_all(&self) -> Result<usize, String> {
         let mut removed = 0;
 
-        for size in [CoverSize::Mid, CoverSize::Original] {
+        for size in [CoverSize::Small, CoverSize::Mid, CoverSize::Original] {
             let dir = self.size_dir(size);
             if dir.exists() {
                 if let Ok(entries) = fs::read_dir(&dir) {

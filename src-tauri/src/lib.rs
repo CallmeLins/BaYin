@@ -14,7 +14,7 @@ use commands::{
     list_directories, scan_music_files, test_stream_connection, test_subsonic_connection,
     scan_local_to_db, scan_stream_to_db,
     // Cover cache commands
-    get_cover_url, get_cover_cache_stats, cleanup_orphaned_covers, clear_cover_cache,
+    get_cover_url, get_cover_urls_batch, get_cover_cache_stats, cleanup_orphaned_covers, clear_cover_cache,
     cleanup_missing_songs, CoverCacheState,
     // File watcher commands
     start_file_watcher, stop_file_watcher,
@@ -75,6 +75,7 @@ pub fn run() {
             scan_stream_to_db,
             // 封面缓存命令
             get_cover_url,
+            get_cover_urls_batch,
             get_cover_cache_stats,
             cleanup_orphaned_covers,
             clear_cover_cache,
@@ -233,6 +234,13 @@ pub fn run() {
                                 return; // No changes, skip
                             }
 
+                            // Get cover cache for use in parallel processing
+                            let cover_cache_state: tauri::State<'_, CoverCacheState> = app_clone.state();
+                            let cover_cache = match cover_cache_state.0.lock() {
+                                Ok(c) => c.clone_arc(),
+                                Err(_) => return,
+                            };
+
                             // Scan new/changed files
                             let song_inputs: Vec<db::SongInput> = new_or_changed
                                 .par_iter()
@@ -242,6 +250,8 @@ pub fn run() {
                                             if min_dur > 0.0 && song.duration < min_dur {
                                                 return None;
                                             }
+                                            // Extract and cache cover
+                                            let cover_hash = utils::cover::extract_and_cache_cover(path, &cover_cache).ok().flatten();
                                             Some(db::SongInput {
                                                 id: song.id,
                                                 title: song.title,
@@ -252,7 +262,7 @@ pub fn run() {
                                                 file_size: song.file_size as i64,
                                                 is_hr: song.is_hr,
                                                 is_sq: song.is_sq,
-                                                cover_url: song.cover_url,
+                                                cover_hash,
                                                 server_song_id: None,
                                                 stream_info: None,
                                                 file_modified: Some(song.file_modified),

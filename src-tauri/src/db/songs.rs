@@ -19,7 +19,7 @@ pub struct DbSong {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_sq: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cover_url: Option<String>,
+    pub cover_hash: Option<String>,  // SHA256 hash for cover lookup
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_id: Option<String>,
@@ -48,7 +48,7 @@ pub struct SongInput {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_sq: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cover_url: Option<String>,
+    pub cover_hash: Option<String>,  // SHA256 hash of cover image
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server_song_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -57,11 +57,11 @@ pub struct SongInput {
     pub file_modified: Option<i64>,
 }
 
-/// Get all songs from the database
+/// Get all songs from the database (fast loading, no cover data)
 pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_url, source_type, server_id, server_song_id,
+                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
                 stream_info, file_modified
          FROM songs
          ORDER BY title COLLATE NOCASE"
@@ -78,7 +78,7 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
             file_size: row.get(6)?,
             is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
             is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_url: row.get(9)?,
+            cover_hash: row.get(9)?,
             source_type: row.get(10)?,
             server_id: row.get(11)?,
             server_song_id: row.get(12)?,
@@ -94,7 +94,7 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
 pub fn get_songs_by_source(conn: &Connection, source_type: &str) -> Result<Vec<DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_url, source_type, server_id, server_song_id,
+                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
                 stream_info, file_modified
          FROM songs
          WHERE source_type = ?1
@@ -112,7 +112,7 @@ pub fn get_songs_by_source(conn: &Connection, source_type: &str) -> Result<Vec<D
             file_size: row.get(6)?,
             is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
             is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_url: row.get(9)?,
+            cover_hash: row.get(9)?,
             source_type: row.get(10)?,
             server_id: row.get(11)?,
             server_song_id: row.get(12)?,
@@ -137,7 +137,7 @@ pub fn save_songs(
         let mut stmt = tx.prepare(
             "INSERT OR REPLACE INTO songs
              (id, title, artist, album, duration, file_path, file_size,
-              is_hr, is_sq, cover_url, source_type, server_id, server_song_id,
+              is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
               stream_info, file_modified, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, strftime('%s','now'))"
         )?;
@@ -153,7 +153,7 @@ pub fn save_songs(
                 song.file_size,
                 song.is_hr.map(|v| if v { 1 } else { 0 }),
                 song.is_sq.map(|v| if v { 1 } else { 0 }),
-                song.cover_url,
+                song.cover_hash,
                 source_type,
                 server_id,
                 song.server_song_id,

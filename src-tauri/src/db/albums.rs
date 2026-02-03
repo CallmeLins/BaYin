@@ -10,7 +10,7 @@ pub struct DbAlbum {
     pub id: String,
     pub name: String,
     pub artist: String,
-    pub cover_url: String,
+    pub cover_hash: Option<String>,  // SHA256 hash for cover lookup
     pub song_count: i64,
 }
 
@@ -20,7 +20,7 @@ pub struct DbAlbum {
 pub struct DbArtist {
     pub id: String,
     pub name: String,
-    pub cover_url: String,
+    pub cover_hash: Option<String>,  // SHA256 hash for cover lookup
     pub song_count: i64,
 }
 
@@ -30,9 +30,10 @@ pub fn get_all_albums(conn: &Connection) -> Result<Vec<DbAlbum>> {
         "SELECT
             album,
             MIN(artist) as artist,
-            MIN(cover_url) as cover_url,
+            MIN(cover_hash) as cover_hash,
             COUNT(*) as song_count
          FROM songs
+         WHERE cover_hash IS NOT NULL OR cover_hash IS NULL
          GROUP BY album
          ORDER BY album COLLATE NOCASE"
     )?;
@@ -40,7 +41,7 @@ pub fn get_all_albums(conn: &Connection) -> Result<Vec<DbAlbum>> {
     let albums = stmt.query_map([], |row| {
         let album_name: String = row.get(0)?;
         let artist: String = row.get(1)?;
-        let cover_url: Option<String> = row.get(2)?;
+        let cover_hash: Option<String> = row.get(2)?;
         let song_count: i64 = row.get(3)?;
 
         // Generate a stable ID from album name
@@ -50,7 +51,7 @@ pub fn get_all_albums(conn: &Connection) -> Result<Vec<DbAlbum>> {
             id,
             name: album_name,
             artist,
-            cover_url: cover_url.unwrap_or_default(),
+            cover_hash,
             song_count,
         })
     })?.collect::<Result<Vec<_>>>()?;
@@ -63,7 +64,7 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
     let mut stmt = conn.prepare(
         "SELECT
             artist,
-            MIN(cover_url) as cover_url,
+            MIN(cover_hash) as cover_hash,
             COUNT(*) as song_count
          FROM songs
          GROUP BY artist
@@ -72,7 +73,7 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
 
     let artists = stmt.query_map([], |row| {
         let artist_name: String = row.get(0)?;
-        let cover_url: Option<String> = row.get(1)?;
+        let cover_hash: Option<String> = row.get(1)?;
         let song_count: i64 = row.get(2)?;
 
         // Generate a stable ID from artist name
@@ -81,7 +82,7 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
         Ok(DbArtist {
             id,
             name: artist_name,
-            cover_url: cover_url.unwrap_or_default(),
+            cover_hash,
             song_count,
         })
     })?.collect::<Result<Vec<_>>>()?;
@@ -93,7 +94,7 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
 pub fn get_songs_by_album(conn: &Connection, album: &str) -> Result<Vec<super::DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_url, source_type, server_id, server_song_id,
+                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
                 stream_info, file_modified
          FROM songs
          WHERE album = ?1
@@ -111,7 +112,7 @@ pub fn get_songs_by_album(conn: &Connection, album: &str) -> Result<Vec<super::D
             file_size: row.get(6)?,
             is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
             is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_url: row.get(9)?,
+            cover_hash: row.get(9)?,
             source_type: row.get(10)?,
             server_id: row.get(11)?,
             server_song_id: row.get(12)?,
@@ -127,7 +128,7 @@ pub fn get_songs_by_album(conn: &Connection, album: &str) -> Result<Vec<super::D
 pub fn get_songs_by_artist(conn: &Connection, artist: &str) -> Result<Vec<super::DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_url, source_type, server_id, server_song_id,
+                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
                 stream_info, file_modified
          FROM songs
          WHERE artist = ?1
@@ -145,7 +146,7 @@ pub fn get_songs_by_artist(conn: &Connection, artist: &str) -> Result<Vec<super:
             file_size: row.get(6)?,
             is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
             is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_url: row.get(9)?,
+            cover_hash: row.get(9)?,
             source_type: row.get(10)?,
             server_id: row.get(11)?,
             server_song_id: row.get(12)?,

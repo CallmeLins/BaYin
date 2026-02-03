@@ -1,6 +1,6 @@
 //! Advanced scanning commands with incremental scan and progress events
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -10,11 +10,13 @@ use rayon::prelude::*;
 use tauri::{AppHandle, Emitter, State};
 use walkdir::WalkDir;
 
+use crate::commands::CoverCacheState;
 use crate::db::{self, DbState, SongInput};
 use crate::models::{
     LocalScanOptions, ScanMode, ScanPhase, ScanProgress, ScanResult, StreamScanOptions,
 };
 use crate::utils::audio::{is_audio_file, read_metadata_with_mtime};
+use crate::utils::cover::extract_and_cache_cover;
 
 /// Emit scan progress event
 fn emit_progress(app: &AppHandle, progress: &ScanProgress) {
@@ -26,11 +28,15 @@ fn emit_progress(app: &AppHandle, progress: &ScanProgress) {
 pub async fn scan_local_to_db(
     app: AppHandle,
     db: State<'_, DbState>,
+    cover_cache: State<'_, CoverCacheState>,
     options: LocalScanOptions,
 ) -> Result<ScanResult, String> {
     let start_time = Instant::now();
     let min_duration = options.min_duration.unwrap_or(0.0);
     let batch_size = options.batch_size;
+
+    // Get cover cache for use in parallel processing
+    let cache = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
 
     // Phase 1: Collect all audio file paths
     emit_progress(
@@ -151,6 +157,7 @@ pub async fn scan_local_to_db(
 
     let processed_count = Arc::new(AtomicUsize::new(0));
     let error_count = Arc::new(AtomicUsize::new(0));
+    let cache_clone = cache.clone();
 
     let songs: Vec<SongInput> = files_to_scan
         .par_iter()
@@ -180,6 +187,9 @@ pub async fn scan_local_to_db(
                         return None;
                     }
 
+                    // Extract and cache cover, get hash
+                    let cover_hash = extract_and_cache_cover(path, &cache_clone).ok().flatten();
+
                     Some(SongInput {
                         id: song.id,
                         title: song.title,
@@ -190,7 +200,7 @@ pub async fn scan_local_to_db(
                         file_size: song.file_size as i64,
                         is_hr: song.is_hr,
                         is_sq: song.is_sq,
-                        cover_url: song.cover_url,
+                        cover_hash, // Store hash instead of base64
                         server_song_id: None,
                         stream_info: None,
                         file_modified: Some(song.file_modified),
@@ -425,6 +435,7 @@ pub async fn scan_stream_to_db(
         }
 
         // Convert to SongInput
+        // Note: Stream songs don't cache covers locally, they use server URLs
         let song_inputs: Vec<SongInput> = stream_songs
             .iter()
             .map(|s| SongInput {
@@ -437,13 +448,14 @@ pub async fn scan_stream_to_db(
                 file_size: s.file_size as i64,
                 is_hr: s.is_hr,
                 is_sq: s.is_sq,
-                cover_url: s.cover_url.clone(),
+                cover_hash: None, // Stream songs use server cover URLs directly
                 server_song_id: Some(s.id.clone()),
                 stream_info: Some(serde_json::json!({
                     "type": "stream",
                     "serverType": server.server_type,
                     "songId": s.id,
                     "serverName": server.server_name,
+                    "coverUrl": s.cover_url, // Store cover URL in stream_info
                     "config": {
                         "serverType": server.server_type,
                         "serverName": server.server_name,
