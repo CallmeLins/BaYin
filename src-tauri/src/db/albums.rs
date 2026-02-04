@@ -26,17 +26,25 @@ pub struct DbArtist {
     pub song_count: i64,
 }
 
+/// Extract coverUrl from stream_info JSON string
+fn extract_cover_url(stream_info: &Option<String>) -> Option<String> {
+    stream_info.as_ref().and_then(|info| {
+        serde_json::from_str::<serde_json::Value>(info)
+            .ok()
+            .and_then(|v| v.get("coverUrl").and_then(|u| u.as_str()).map(String::from))
+    })
+}
+
 /// Get all albums aggregated from songs
 pub fn get_all_albums(conn: &Connection) -> Result<Vec<DbAlbum>> {
     let mut stmt = conn.prepare(
         "SELECT
             album,
             MIN(artist) as artist,
-            MIN(cover_hash) as cover_hash,
-            MIN(json_extract(stream_info, '$.coverUrl')) as stream_cover_url,
+            MAX(cover_hash) as cover_hash,
+            MAX(stream_info) as stream_info,
             COUNT(*) as song_count
          FROM songs
-         WHERE cover_hash IS NOT NULL OR cover_hash IS NULL
          GROUP BY album
          ORDER BY album COLLATE NOCASE"
     )?;
@@ -45,11 +53,14 @@ pub fn get_all_albums(conn: &Connection) -> Result<Vec<DbAlbum>> {
         let album_name: String = row.get(0)?;
         let artist: String = row.get(1)?;
         let cover_hash: Option<String> = row.get(2)?;
-        let stream_cover_url: Option<String> = row.get(3)?;
+        let stream_info: Option<String> = row.get(3)?;
         let song_count: i64 = row.get(4)?;
 
         // Generate a stable ID from album name
         let id = format!("album-{:x}", md5::compute(&album_name));
+
+        // Extract cover URL from stream_info JSON
+        let stream_cover_url = extract_cover_url(&stream_info);
 
         Ok(DbAlbum {
             id,
@@ -69,8 +80,8 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
     let mut stmt = conn.prepare(
         "SELECT
             artist,
-            MIN(cover_hash) as cover_hash,
-            MIN(json_extract(stream_info, '$.coverUrl')) as stream_cover_url,
+            MAX(cover_hash) as cover_hash,
+            MAX(stream_info) as stream_info,
             COUNT(*) as song_count
          FROM songs
          GROUP BY artist
@@ -80,11 +91,14 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
     let artists = stmt.query_map([], |row| {
         let artist_name: String = row.get(0)?;
         let cover_hash: Option<String> = row.get(1)?;
-        let stream_cover_url: Option<String> = row.get(2)?;
+        let stream_info: Option<String> = row.get(2)?;
         let song_count: i64 = row.get(3)?;
 
         // Generate a stable ID from artist name
         let id = format!("artist-{:x}", md5::compute(&artist_name));
+
+        // Extract cover URL from stream_info JSON
+        let stream_cover_url = extract_cover_url(&stream_info);
 
         Ok(DbArtist {
             id,
