@@ -5,7 +5,7 @@ mod utils;
 mod watcher;
 
 use commands::{
-    db_clear_all_songs, db_clear_stream_servers, db_delete_songs_by_source,
+    db_clear_all_songs, db_clear_scan_config, db_clear_stream_servers, db_delete_songs_by_source,
     db_delete_stream_server, db_get_all_albums, db_get_all_artists, db_get_all_songs,
     db_get_library_stats, db_get_scan_config, db_get_stream_servers,
     db_migrate_from_localstorage, db_save_scan_config, db_save_songs, db_save_stream_server,
@@ -68,6 +68,7 @@ pub fn run() {
             db_clear_stream_servers,
             db_save_scan_config,
             db_get_scan_config,
+            db_clear_scan_config,
             db_migrate_from_localstorage,
             db_get_library_stats,
             // 高级扫描命令

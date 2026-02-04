@@ -147,6 +147,13 @@ pub fn db_get_scan_config(db: State<'_, DbState>) -> Result<Option<ScanConfig>, 
     db::servers::get_scan_config(&conn).map_err(|e| e.to_string())
 }
 
+/// Clear scan configuration
+#[tauri::command]
+pub fn db_clear_scan_config(db: State<'_, DbState>) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::servers::clear_scan_config(&conn).map_err(|e| e.to_string())
+}
+
 /// Migrate data from localStorage (one-time migration)
 #[tauri::command]
 pub fn db_migrate_from_localstorage(

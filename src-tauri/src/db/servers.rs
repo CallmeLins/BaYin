@@ -230,3 +230,9 @@ pub fn update_last_scan_time(conn: &Connection) -> Result<()> {
     )?;
     Ok(())
 }
+
+/// Clear scan configuration
+pub fn clear_scan_config(conn: &Connection) -> Result<()> {
+    conn.execute("DELETE FROM scan_configs", [])?;
+    Ok(())
+}
