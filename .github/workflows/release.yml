@@ -167,17 +167,13 @@ jobs:
       # 配置 Gradle 签名
       - name: Configure Gradle Signing
         run: |
-          # 在 app/build.gradle.kts 文件开头添加 import，末尾添加签名配置
           GRADLE_FILE="src-tauri/gen/android/app/build.gradle.kts"
 
-          # 创建临时文件，添加 import 语句
-          echo 'import java.util.Properties' > /tmp/gradle_header.txt
-          echo 'import java.io.FileInputStream' >> /tmp/gradle_header.txt
-          echo '' >> /tmp/gradle_header.txt
-
-          # 合并：imports + 原文件
-          cat /tmp/gradle_header.txt "$GRADLE_FILE" > /tmp/gradle_merged.txt
-          mv /tmp/gradle_merged.txt "$GRADLE_FILE"
+          # 检查是否需要添加 import（避免重复）
+          if ! grep -q "import java.io.FileInputStream" "$GRADLE_FILE"; then
+            # 在文件开头添加 FileInputStream import
+            sed -i '1i import java.io.FileInputStream' "$GRADLE_FILE"
+          fi
 
           # 在文件末尾添加签名配置
           cat >> "$GRADLE_FILE" << 'EOF'
@@ -185,8 +181,8 @@ jobs:
           // Release signing config
           val keystorePropertiesFile = rootProject.file("keystore.properties")
           if (keystorePropertiesFile.exists()) {
-              val keystoreProperties = Properties()
-              keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+              val keystoreProperties = java.util.Properties()
+              keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
 
               android.signingConfigs {
                   create("release") {
