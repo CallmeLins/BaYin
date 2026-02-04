@@ -144,7 +144,7 @@ pub fn run() {
 
                 if let Some(config) = scan_config {
                     if !config.directories.is_empty() {
-                        let watch_dirs = config.directories.clone();
+                        let _watch_dirs = config.directories.clone();
                         // Run incremental local scan
                         let options = models::LocalScanOptions {
                             directories: config.directories,

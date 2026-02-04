@@ -185,15 +185,6 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "未知专辑".to_string());
 
-    // Extract cover
-    let cover_url = tag.and_then(|t| {
-        t.pictures().first().map(|pic| {
-            let mime = pic.mime_type().map(|m| m.as_str()).unwrap_or("image/jpeg");
-            let b64 = BASE64.encode(pic.data());
-            format!("data:{};base64,{}", mime, b64)
-        })
-    });
-
     // Use file path hash as unique ID
     let id = format!("{:x}", md5::compute(&file_path_str));
 
@@ -205,7 +196,6 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
         duration,
         file_path: file_path_str,
         file_size,
-        cover_url,
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         file_modified,
@@ -213,6 +203,7 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
 }
 
 /// Get file modification time without reading full metadata
+#[allow(dead_code)]
 pub fn get_file_mtime(path: &Path) -> Result<i64, String> {
     std::fs::metadata(path)
         .map_err(|e| format!("无法获取文件信息: {}", e))?

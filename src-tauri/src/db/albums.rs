@@ -113,6 +113,7 @@ pub fn get_all_artists(conn: &Connection) -> Result<Vec<DbArtist>> {
 }
 
 /// Get songs for a specific album
+#[allow(dead_code)]
 pub fn get_songs_by_album(conn: &Connection, album: &str) -> Result<Vec<super::DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
@@ -147,6 +148,7 @@ pub fn get_songs_by_album(conn: &Connection, album: &str) -> Result<Vec<super::D
 }
 
 /// Get songs for a specific artist
+#[allow(dead_code)]
 pub fn get_songs_by_artist(conn: &Connection, artist: &str) -> Result<Vec<super::DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,

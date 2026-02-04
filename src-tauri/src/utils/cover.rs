@@ -146,6 +146,7 @@ impl CoverCache {
     }
 
     /// Check if a cover exists in cache
+    #[allow(dead_code)]
     pub fn has_cover(&self, hash: &str) -> bool {
         self.get_cover_path(hash, CoverSize::Mid).is_some()
     }
@@ -278,6 +279,7 @@ pub fn extract_and_cache_cover(
 }
 
 /// Download and cache cover from URL
+#[allow(dead_code)]
 pub async fn download_and_cache_cover(
     url: &str,
     cache: &CoverCache,

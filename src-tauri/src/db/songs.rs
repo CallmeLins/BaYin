@@ -91,6 +91,7 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
 }
 
 /// Get songs by source type
+#[allow(dead_code)]
 pub fn get_songs_by_source(conn: &Connection, source_type: &str) -> Result<Vec<DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,

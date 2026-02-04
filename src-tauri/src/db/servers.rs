@@ -111,6 +111,7 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
 }
 
 /// Get a single stream server by ID
+#[allow(dead_code)]
 pub fn get_stream_server(conn: &Connection, server_id: &str) -> Result<Option<DbStreamServer>> {
     let mut stmt = conn.prepare(
         "SELECT id, server_type, server_name, server_url, username, password,
@@ -223,6 +224,7 @@ pub fn get_scan_config(conn: &Connection) -> Result<Option<ScanConfig>> {
 }
 
 /// Update last scan timestamp
+#[allow(dead_code)]
 pub fn update_last_scan_time(conn: &Connection) -> Result<()> {
     conn.execute(
         "UPDATE scan_configs SET last_scan_at = strftime('%s','now')",

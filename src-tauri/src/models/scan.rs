@@ -108,7 +108,6 @@ pub struct ScannedSongWithMtime {
     pub duration: f64,
     pub file_path: String,
     pub file_size: u64,
-    pub cover_url: Option<String>,
     pub is_hr: Option<bool>,
     pub is_sq: Option<bool>,
     pub file_modified: i64,
