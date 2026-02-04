@@ -1,275 +1,224 @@
-name: Release Tauri App
+name: Release Tauri App (Windows + Android)
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'  # 触发条件：推送 v* 格式 tag（如 v1.0.0）
 
 permissions:
-  contents: write
+  contents: write  # 允许创建/更新 GitHub Release
+
+# 复用步骤锚点（减少冗余代码）
+x-checkout: &checkout
+  uses: actions/checkout@v4
+  with:
+    submodules: recursive
+    token: ${{ secrets.PAT_TOKEN }}
+
+x-setup-node: &setup-node
+  uses: actions/setup-node@v4
+  with:
+    node-version: lts/*  # 锁定 LTS 版本，稳定可靠
+
+x-setup-rust: &setup-rust
+  uses: dtolnay/rust-toolchain@stable
+  with:
+    targets: ${{ matrix.target || 'aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android' }}
+
+x-rust-cache: &rust-cache
+  uses: swatinem/rust-cache@v2
+  with:
+    workspaces: "./src-tauri -> target"  # 缓存 Tauri 构建目录，加速构建
+
+x-install-deps: &install-deps
+  - name: Install Frontend Dependencies
+    run: npm install
+    working-directory: ./src-ui  # 前端代码目录，按实际项目调整
+  - name: Install Tauri CLI
+    run: npm install -g @tauri-apps/cli@latest  # 锁定 CLI 版本
 
 jobs:
-  # 第一步：创建草稿发布
+  # 第一步：创建草稿 Release（所有构建的基础）
   create-release:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.id }}
       tag_name: ${{ steps.get-tag.outputs.tag }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.PAT_TOKEN }}
-
-      - name: Get tag name
+      - *checkout
+      - name: Get Tag Name
         id: get-tag
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT  # 提取 tag 名称
       - name: Create Draft Release
         id: create-release
         uses: actions/github-script@v7
         with:
           script: |
-            const tagName = context.ref.replace('refs/tags/', '');
+            const tagName = "${{ steps.get-tag.outputs.tag }}";
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               tag_name: tagName,
-              name: `BaYin ${tagName}`,
-              draft: true,
+              name: `BaYin ${tagName}`,  # Release 标题，按实际修改
+              draft: true,  # 先创建草稿，构建完成后发布
               prerelease: false
             });
             core.setOutput('id', data.id);
 
-  # 第二步：构建 Windows 版本
+  # 第二步：构建 Windows 版本（x64 + arm64）
   build-windows:
     needs: create-release
     runs-on: windows-latest
     strategy:
-      fail-fast: false
+      fail-fast: false  # 单个架构失败不中断其他
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
             arch: x64
           - target: aarch64-pc-windows-msvc
             arch: arm64
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install Frontend Dependencies
-        run: npm install
-        working-directory: ./src-ui
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
-
-      - name: Build and Upload
-        uses: tauri-apps/tauri-action@v0
+      - *checkout
+      - *setup-node
+      - *setup-rust
+      - *rust-cache
+      - *install-deps
+      - name: Build & Upload Windows App
+        uses: tauri-apps/tauri-action@v0.18.0  # 锁定稳定版本
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
-          tauriScript: npx tauri
+          tauriScript: npx tauri  # 用 npx 执行 Tauri 命令，无需全局安装
 
-  # 第三步：构建 Android 版本（带签名）
+  # 第三步：构建 Android 版本（多架构 + 自动签名）
   build-android:
     needs: create-release
     runs-on: ubuntu-latest
-
+    strategy:
+      fail-fast: false  # 单个架构失败不中断其他
+      matrix:
+        target: [aarch64, armv7, x86_64]  # 多架构矩阵，减少冗余代码
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
-
-      - name: Setup Java
+      - *checkout
+      - name: Setup Java 17 (Tauri 兼容版本)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
-
-      - name: Setup NDK
+      - name: Setup Compatible NDK
         run: |
-          sdkmanager --install "ndk;27.0.12077973"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973" >> $GITHUB_ENV
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
-
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install Frontend Dependencies
-        run: npm install
-        working-directory: ./src-ui
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
-
-      # 初始化 Android 项目（生成 gen/android 目录）
+          # 锁定 Tauri 兼容的 NDK 版本（避免兼容性问题）
+          sdkmanager --install "ndk;26.3.11579264"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> $GITHUB_ENV
+      - *setup-node
+      - *setup-rust
+      - *rust-cache
+      - *install-deps
       - name: Initialize Android Project
-        run: npx tauri android init
-
-      # 配置 Android 签名
-      - name: Decode Keystore
+        run: npx tauri android init  # 生成 gen/android 目录
+      - name: Decode Android Keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > ${{ github.workspace }}/release.keystore
-
-      - name: Create keystore.properties
+      - name: Generate keystore.properties
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
+          mkdir -p src-tauri/gen/android  # 确保目录存在
           cat > src-tauri/gen/android/keystore.properties << EOF
           storeFile=${{ github.workspace }}/release.keystore
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$ANDROID_KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
-
-      # 配置 Gradle 签名
-      - name: Configure Gradle Signing
+      - name: Configure Gradle Signing (Safe Mode)
         run: |
           GRADLE_FILE="src-tauri/gen/android/app/build.gradle.kts"
-
-          # 检查是否需要添加 import（避免重复）
+          # 1. 仅当不存在时添加 import
           if ! grep -q "import java.io.FileInputStream" "$GRADLE_FILE"; then
-            # 在文件开头添加 FileInputStream import
             sed -i '1i import java.io.FileInputStream' "$GRADLE_FILE"
+            sed -i '1i import java.util.Properties' "$GRADLE_FILE"
           fi
+          # 2. 仅当未配置签名时追加配置（避免重复）
+          if ! grep -q "android.signingConfigs" "$GRADLE_FILE"; then
+            cat >> "$GRADLE_FILE" << 'EOF'
 
-          # 在文件末尾添加签名配置
-          cat >> "$GRADLE_FILE" << 'EOF'
-
-          // Release signing config
-          val keystorePropertiesFile = rootProject.file("keystore.properties")
-          if (keystorePropertiesFile.exists()) {
-              val keystoreProperties = java.util.Properties()
-              keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
-
-              android.signingConfigs {
-                  create("release") {
-                      storeFile = file(keystoreProperties["storeFile"] as String)
-                      storePassword = keystoreProperties["storePassword"] as String
-                      keyAlias = keystoreProperties["keyAlias"] as String
-                      keyPassword = keystoreProperties["keyPassword"] as String
-                  }
-              }
-
-              android.buildTypes.getByName("release") {
-                  signingConfig = android.signingConfigs.getByName("release")
-              }
-          }
-          EOF
-
-      - name: Build Android APK (arm64)
-        run: npx tauri android build --target aarch64
-
-      - name: Build Android APK (arm32)
-        run: npx tauri android build --target armv7
-
-      - name: Build Android APK (x86_64)
-        run: npx tauri android build --target x86_64
-
-      - name: Rename and Upload APKs
+// Auto-generated signing config by GitHub Action
+val keystorePropsFile = rootProject.file("keystore.properties")
+if (keystorePropsFile.exists()) {
+    val keystoreProps = Properties().apply {
+        load(FileInputStream(keystorePropsFile))
+    }
+    android.signingConfigs {
+        create("release") {
+            storeFile = file(keystoreProps["storeFile"] as String)
+            storePassword = keystoreProps["storePassword"] as String
+            keyAlias = keystoreProps["keyAlias"] as String
+            keyPassword = keystoreProps["keyPassword"] as String
+        }
+    }
+    android.buildTypes.getByName("release") {
+        signingConfig = android.signingConfigs.getByName("release")
+    }
+}
+EOF
+          fi
+      - name: Build Android APK (${{ matrix.target }})
+        run: npx tauri android build --target ${{ matrix.target }}
+      - name: Upload Signed APK to Release
         uses: actions/github-script@v7
         env:
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
           TAG_NAME: ${{ needs.create-release.outputs.tag_name }}
+          TARGET_ARCH: ${{ matrix.target }}
         with:
           script: |
             const fs = require('fs');
             const path = require('path');
+            const { context } = require('@actions/github');
             const tagName = process.env.TAG_NAME;
+            const arch = process.env.TARGET_ARCH;
+            const releaseId = parseInt(process.env.RELEASE_ID, 10);
 
-            // 查找所有 APK 文件
-            const searchDirs = [
+            // 定义 APK 输出路径（覆盖 Tauri 所有可能的输出目录）
+            const apkPaths = [
+              `src-tauri/gen/android/app/build/outputs/apk/${arch}/release`,
               'src-tauri/gen/android/app/build/outputs/apk/universal/release',
               'src-tauri/gen/android/app/build/outputs/apk/release'
             ];
 
-            const archNames = {
-              'arm64-v8a': 'arm64',
-              'armeabi-v7a': 'arm32',
-              'x86_64': 'x86_64',
-              'x86': 'x86',
-              'universal': 'universal'
-            };
-
-            for (const dir of searchDirs) {
+            let uploaded = false;
+            for (const dir of apkPaths) {
               if (!fs.existsSync(dir)) continue;
-
-              const files = fs.readdirSync(dir).filter(f => f.endsWith('.apk') && !f.includes('unsigned'));
-
-              for (const file of files) {
-                const filePath = path.join(dir, file);
-                const fileContent = fs.readFileSync(filePath);
-
-                // 从文件名提取架构信息
-                let arch = 'universal';
-                for (const [key, value] of Object.entries(archNames)) {
-                  if (file.includes(key)) {
-                    arch = value;
-                    break;
-                  }
-                }
-
+              const apks = fs.readdirSync(dir).filter(f => f.endsWith('.apk') && !f.includes('unsigned'));
+              for (const apk of apks) {
+                const apkPath = path.join(dir, apk);
                 const newName = `BaYin-${tagName}-android-${arch}.apk`;
-
+                // 上传 APK 到 Release
                 await github.rest.repos.uploadReleaseAsset({
                   owner: context.repo.owner,
                   repo: context.repo.repo,
-                  release_id: parseInt(process.env.RELEASE_ID, 10),
+                  release_id: releaseId,
                   name: newName,
-                  data: fileContent
+                  data: fs.readFileSync(apkPath)
                 });
-
-                console.log(`Uploaded: ${file} -> ${newName}`);
+                console.log(`✅ Uploaded: ${newName}`);
+                uploaded = true;
               }
             }
+            if (!uploaded) throw new Error(`❌ No signed APK found for arch: ${arch}`);
+      - name: Cleanup Sensitive Files
+        if: always()  # 无论构建成功/失败，都清理敏感文件
+        run: rm -f ${{ github.workspace }}/release.keystore src-tauri/gen/android/keystore.properties
 
-      - name: Cleanup Keystore
-        if: always()
-        run: rm -f ${{ github.workspace }}/release.keystore
-
-  # 第四步：发布
+  # 第四步：发布正式 Release（所有构建完成后执行）
   publish-release:
     needs: [create-release, build-windows, build-android]
     runs-on: ubuntu-latest
@@ -280,9 +229,11 @@ jobs:
           RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
         with:
           script: |
+            const { context } = require('@actions/github');
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
               release_id: parseInt(process.env.RELEASE_ID, 10),
-              draft: false
+              draft: false  # 转为正式发布
             });
+            console.log('✅ Release published successfully!');
