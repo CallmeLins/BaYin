@@ -18,6 +18,7 @@ import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import java.io.File
 
 class MainActivity : TauriActivity() {
@@ -31,7 +32,23 @@ class MainActivity : TauriActivity() {
   private var progressRunnable: Runnable? = null
   private var currentFilePath: String? = null
 
+  // Splash screen 相关
+  private var keepSplashScreen = true
+  private val splashMinDuration = 1000L // 最小显示 1 秒
+
   override fun onCreate(savedInstanceState: Bundle?) {
+    // 安装 Splash Screen，必须在 super.onCreate 之前调用
+    val splashScreen = installSplashScreen()
+
+    // 记录启动时间
+    val startTime = System.currentTimeMillis()
+
+    // 设置保持条件：至少显示 1 秒
+    splashScreen.setKeepOnScreenCondition {
+      val elapsed = System.currentTimeMillis() - startTime
+      elapsed < splashMinDuration
+    }
+
     enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     Log.d(TAG, "onCreate called")

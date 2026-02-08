@@ -7,4 +7,11 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
     </style>
+
+    <!-- Splash screen theme (night mode) -->
+    <style name="Theme.bayin.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#F34235</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.bayin</item>
+    </style>
 </resources>
