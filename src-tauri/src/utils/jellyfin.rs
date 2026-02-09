@@ -7,6 +7,7 @@ use crate::models::{
     JellyfinItemsResponse, JellyfinLyricsResponse, JellyfinMediaStream, JellyfinSystemInfo,
     ScannedSong, ServerType, StreamServerConfig,
 };
+use crate::utils::audio::extract_filename_from_path_str;
 
 /// 无损音频格式
 const LOSSLESS_CONTAINERS: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -163,9 +164,19 @@ fn convert_item(item: &JellyfinItem, config: &StreamServerConfig) -> ScannedSong
         })
         .unwrap_or(0);
 
+    // 标题：如果 name 为空，尝试从路径提取文件名
+    let title = if item.name.is_empty() {
+        item.path
+            .as_ref()
+            .and_then(|p| extract_filename_from_path_str(p))
+            .unwrap_or_else(|| item.id.clone())
+    } else {
+        item.name.clone()
+    };
+
     ScannedSong {
         id: item.id.clone(),
-        title: item.name.clone(),
+        title,
         artist,
         album: item
             .album

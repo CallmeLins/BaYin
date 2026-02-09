@@ -40,6 +40,20 @@ fn extract_filename(path: &Path) -> String {
         .unwrap_or_else(|| "未知标题".to_string())
 }
 
+/// 从路径字符串中提取文件名（不含扩展名），用于流媒体等场景
+pub fn extract_filename_from_path_str(path_str: &str) -> Option<String> {
+    if path_str.is_empty() {
+        return None;
+    }
+
+    // 处理 Windows 和 Unix 路径
+    let path = std::path::Path::new(path_str);
+    path.file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+}
+
 /// 读取歌词（优先从外部 .lrc 文件，其次从音频文件内嵌歌词）
 pub fn read_lyrics(audio_path: &Path) -> Option<String> {
     // 1. 尝试读取外部 .lrc 文件

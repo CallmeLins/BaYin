@@ -10,6 +10,7 @@ use crate::models::{
     ConnectionTestResult, GetAlbumListResponse, GetAlbumResponse, StreamServerConfig, PingResponse,
     ScannedSong, SearchResponse, SubsonicResponse, SubsonicSong,
 };
+use crate::utils::audio::extract_filename_from_path_str;
 
 /// 无损音频格式
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -113,9 +114,19 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         format!("{}/rest/getCoverArt?id={}&{}", base, cover_id, query)
     });
 
+    // 标题：如果 title 为空，尝试从路径提取文件名
+    let title = if song.title.is_empty() {
+        song.path
+            .as_ref()
+            .and_then(|p| extract_filename_from_path_str(p))
+            .unwrap_or_else(|| song.id.clone())
+    } else {
+        song.title.clone()
+    };
+
     ScannedSong {
         id: song.id.clone(),
-        title: song.title.clone(),
+        title,
         artist: song
             .artist
             .clone()
