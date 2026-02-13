@@ -38,6 +38,8 @@
     },
     "store:default",
     "os:default",
-    "process:default"
+    "process:default",
+    "core:window:allow-hide",
+    "core:window:allow-show"
   ]
 }

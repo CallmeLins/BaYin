@@ -25,6 +25,27 @@ use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
 
+#[cfg(desktop)]
+use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
+use tauri::tray::TrayIconBuilder;
+
+#[cfg(desktop)]
+#[tauri::command]
+fn set_tray_language(app: tauri::AppHandle, lang: String) {
+    if let Some(tray) = app.tray_by_id("main-tray") {
+        let (show_label, exit_label) = if lang == "zh-CN" {
+            ("打开主窗口", "退出")
+        } else {
+            ("Show Window", "Exit")
+        };
+        let show_item = MenuItem::with_id(&app, "show", show_label, true, None::<&str>).unwrap();
+        let exit_item = MenuItem::with_id(&app, "exit", exit_label, true, None::<&str>).unwrap();
+        let menu = Menu::with_items(&app, &[&show_item, &exit_item]).unwrap();
+        let _ = tray.set_menu(Some(menu));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
@@ -84,8 +105,18 @@ pub fn run() {
             cleanup_missing_songs,
             // 文件监听命令
             start_file_watcher,
-            stop_file_watcher
+            stop_file_watcher,
+            // 托盘命令
+            #[cfg(desktop)]
+            set_tray_language
         ])
+        .on_window_event(|_window, _event| {
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = _event {
+                api.prevent_close();
+                let _ = _window.hide();
+            }
+        })
         .setup(|app| {
             // 初始化数据库
             let app_data_dir = app
@@ -117,6 +148,39 @@ pub fn run() {
             {
                 use watcher::desktop::{FileWatcherState, WatcherState};
                 app.manage(FileWatcherState(Mutex::new(WatcherState::new())));
+            }
+
+            // 桌面端：创建系统托盘
+            #[cfg(desktop)]
+            {
+                let show_item = MenuItem::with_id(app, "show", "打开主窗口", true, None::<&str>)?;
+                let exit_item = MenuItem::with_id(app, "exit", "退出", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&show_item, &exit_item])?;
+
+                TrayIconBuilder::with_id("main-tray")
+                    .icon(app.default_window_icon().cloned().expect("no app icon"))
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id().as_ref() {
+                        "show" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "exit" => {
+                            app.exit(0);
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+                            if let Some(w) = tray.app_handle().get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
             }
 
             // 桌面端：窗口状态已恢复，显示窗口
