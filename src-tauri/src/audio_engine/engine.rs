@@ -320,11 +320,22 @@ fn audio_thread(
 
         // 3. Emit time event ~4Hz
         if is_playing && last_time_emit.elapsed() >= Duration::from_millis(250) {
-            update_state(&state, is_playing, position_secs, duration_secs, volume);
+            // Compensate for audio buffered in the ring buffer but not yet played
+            let playback_pos = if let Some(ref out) = output {
+                let buffered_samples = out.producer.occupied_len();
+                let out_rate = out.config.sample_rate.0 as f64;
+                let out_ch = out.config.channels as f64;
+                let buffered_secs = buffered_samples as f64 / (out_rate * out_ch);
+                (position_secs - buffered_secs).max(0.0)
+            } else {
+                position_secs
+            };
+
+            update_state(&state, is_playing, playback_pos, duration_secs, volume);
             let _ = app_handle.emit(
                 "audio:time",
                 TimePayload {
-                    position: position_secs,
+                    position: playback_pos,
                     duration: duration_secs,
                 },
             );

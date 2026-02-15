@@ -39,12 +39,17 @@ impl AudioOutput {
             })
             .ok_or("No suitable audio output configuration found")?;
 
+        // Clamp sample rate to the supported range of the chosen config
+        let actual_rate = sample_rate
+            .max(supported_config.min_sample_rate().0)
+            .min(supported_config.max_sample_rate().0);
+
         let config = supported_config
-            .with_sample_rate(cpal::SampleRate(sample_rate))
+            .with_sample_rate(cpal::SampleRate(actual_rate))
             .config();
 
         // Ring buffer: ~2 seconds for comfortable headroom
-        let buf_size = (sample_rate as usize) * (channels as usize) * 2;
+        let buf_size = (actual_rate as usize) * (config.channels as usize) * 2;
         let rb = HeapRb::<f32>::new(buf_size.max(4096));
         let (producer, consumer) = rb.split();
 
