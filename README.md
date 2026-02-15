@@ -25,52 +25,49 @@
 - **动画**: Framer Motion
 - **状态管理**: React Context
 - **路由**: React Router
+- **音频引擎**: Rust 原生 (symphonia + cpal + rustfft + rubato)
 
 ## 功能特性
 
-- 🎵 支持多种音频格式 (MP3, FLAC, WAV, AAC, M4A, OGG, WMA, APE, AIFF, DSF, DFF)
+- 🎵 支持多种音频格式 (MP3, FLAC, WAV, AAC, M4A, OGG, AIFF, OPUS)
+- 🔊 Rust 原生音频引擎，跨平台统一（Windows / macOS / Linux / Android）
+- 🎛️ 10 段参数化均衡器（Biquad IIR 滤波器，多种预设）
+- 📊 实时音频频谱可视化（底部波浪动效，FFT 驱动）
+- 🥁 封面低音脉冲动效
+- 🎤 LRC 歌词解析与同步滚动，支持双语翻译
+- ✨ 逐字卡拉OK歌词（支持内联时间标签，60fps 平滑高亮）
+- 👆 歌词点击跳转播放
 - 📝 播放队列管理（添加、移除、清空）
 - 🔄 多种播放模式（顺序、随机、单曲循环）
 - 🔊 音量控制与静音
-- 📂 本地文件夹扫描
+- 📂 本地文件夹扫描与增量更新
+- 📁 文件变动实时监听（桌面端）
 - 💿 歌曲、专辑、艺术家分类浏览
 - 🏷️ 音质标签显示 (HR: Hi-Res, SQ: 无损)
 - 📋 歌单创建与管理
 - 🌐 流媒体服务器集成（Navidrome、Jellyfin、Emby、Subsonic、OpenSubsonic）
-- 🎤 LRC 歌词解析与同步滚动
+- 🖥️ 系统托盘支持（桌面端）
 - 🌙 深色/浅色主题切换
 - 📱 响应式布局（支持桌面和移动端）
 - ✨ macOS 风格毛玻璃效果
 
 ## 界面展示
 
-<details>
 <summary>桌面端 - 浅色主题</summary>
 
 ![桌面端浅色](public/pc_mainpage_light.png)
 
-</details>
-
-<details>
 <summary>桌面端 - 深色主题</summary>
 
 ![桌面端深色](public/pc_mainpage_dark.png)
 
-</details>
-
-<details>
 <summary>桌面端 - 播放页面</summary>
 
 ![播放页面](public/pc_playpage.png)
 
-</details>
-
-<details>
 <summary>移动端</summary>
 
 ![移动端](public/mobile_mainpage.png)
-
-</details>
 
 ## 获取
 
@@ -111,34 +108,6 @@ npx tauri dev
 
 ```bash
 npx tauri build
-```
-
-## 项目结构
-
-```
-BaYin/
-├── src-tauri/          # Tauri 后端 (Rust)
-│   ├── src/
-│   │   ├── commands/   # Tauri 命令
-│   │   ├── models/     # 数据模型
-│   │   ├── utils/      # 工具函数
-│   │   └── lib.rs      # 主入口
-│   ├── capabilities/   # 权限配置
-│   ├── icons/          # 应用图标
-│   ├── Cargo.toml
-│   └── tauri.conf.json
-│
-├── src-ui/             # 前端子仓库 (React)
-│   ├── src/
-│   │   ├── components/ # UI 组件
-│   │   ├── context/    # 状态管理
-│   │   ├── services/   # Tauri 服务层
-│   │   ├── hooks/      # 自定义 Hooks
-│   │   └── routes.ts   # 路由配置
-│   ├── package.json
-│   └── vite.config.ts
-│
-└── README.md
 ```
 
 ## 支持项目
