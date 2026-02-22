@@ -217,6 +217,9 @@ fn audio_thread(
     let mut source_sample_rate: u32 = 44100;
     let mut source_channels: usize = 2;
     let mut fade_state = FadeState::None;
+    // Decoder reached EOF; keep output running until its ring buffer drains,
+    // then emit `audio:ended` so the UI doesn't advance early.
+    let mut end_pending = false;
 
     let mut last_time_emit = Instant::now();
     let mut last_fft_emit = Instant::now();
@@ -226,7 +229,38 @@ fn audio_thread(
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 AudioCommand::Play { source } => {
+                    let was_draining = end_pending;
+                    // Any explicit play cancels a pending natural end/drain.
+                    end_pending = false;
                     if is_playing {
+                        if was_draining {
+                            // We're only draining buffered samples (decoder EOF). There is no new decoded audio
+                            // to apply a fade envelope to, so switch immediately.
+                            if let Some(ref out) = output {
+                                out.flush();
+                            }
+                            pending_samples.clear();
+                            execute_play(
+                                &source,
+                                true,
+                                &mut decoder,
+                                &mut output,
+                                &mut resampler,
+                                &mut resample_buffer,
+                                &mut eq,
+                                &mut fade_state,
+                                &mut source_sample_rate,
+                                &mut source_channels,
+                                &mut position_secs,
+                                &mut duration_secs,
+                                &mut is_playing,
+                                volume,
+                                &state,
+                                &app_handle,
+                            );
+                            pending_samples.clear();
+                            continue;
+                        }
                         // Currently playing: fade out then switch
                         if let Some(ref out) = output {
                             out.flush();
@@ -257,6 +291,16 @@ fn audio_thread(
                 }
                 AudioCommand::Pause => {
                     if is_playing {
+                        if end_pending {
+                            // EOF reached: we're only draining buffered samples, so pause immediately.
+                            is_playing = false;
+                            if let Some(ref out) = output {
+                                out.pause();
+                            }
+                            update_state(&state, false, position_secs, duration_secs, volume);
+                            let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
+                            continue;
+                        }
                         if let Some(ref out) = output {
                             out.flush();
                         }
@@ -302,7 +346,26 @@ fn audio_thread(
                     }
                 }
                 AudioCommand::Stop => {
+                    let was_draining = end_pending;
+                    // Any explicit stop cancels a pending natural end/drain.
+                    end_pending = false;
                     if is_playing {
+                        if was_draining {
+                            // Only draining buffered samples (decoder EOF): stop immediately (no fade possible).
+                            decoder = None;
+                            output = None;
+                            resampler = None;
+                            resample_buffer.clear();
+                            pending_samples.clear();
+                            is_playing = false;
+                            position_secs = 0.0;
+                            duration_secs = 0.0;
+                            fade_state = FadeState::None;
+                            fft_proc.set_enabled(false);
+                            update_state(&state, false, 0.0, 0.0, volume);
+                            let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
+                            continue;
+                        }
                         if let Some(ref out) = output {
                             out.flush();
                         }
@@ -333,6 +396,8 @@ fn audio_thread(
                     }
                 }
                 AudioCommand::Seek { position_secs: pos } => {
+                    // Seeking during drain should resume decoding from the new position.
+                    end_pending = false;
                     if let Some(ref mut dec) = decoder {
                         let clamped = if duration_secs > 0.0 {
                             pos.clamp(0.0, duration_secs)
@@ -383,6 +448,9 @@ fn audio_thread(
                 }
 
                 for _ in 0..32 {
+                    if end_pending {
+                        break;
+                    }
                     // Don't decode more if we still have unsent samples
                     if !pending_samples.is_empty() {
                         break;
@@ -454,11 +522,8 @@ fn audio_thread(
                             if duration_secs <= 0.0 || (position_secs - duration_secs).abs() > 1.0 {
                                 duration_secs = position_secs;
                             }
-                            is_playing = false;
-                            fade_state = FadeState::None;
-                            update_state(&state, false, duration_secs, duration_secs, volume);
-                            let _ = app_handle.emit("audio:ended", ());
-                            let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
+                            // Mark end-of-stream, but wait to notify the UI until the output buffer drains.
+                            end_pending = true;
                             break;
                         }
                         Err(e) => {
@@ -513,6 +578,22 @@ fn audio_thread(
                     }
                 },
                 _ => {}
+            }
+        }
+
+        // 3b. Natural end: only emit `audio:ended` once the output ring buffer drains.
+        if end_pending {
+            let buffered = output
+                .as_ref()
+                .map(|o| o.producer.occupied_len())
+                .unwrap_or(0);
+            if pending_samples.is_empty() && buffered == 0 {
+                end_pending = false;
+                is_playing = false;
+                fade_state = FadeState::None;
+                update_state(&state, false, duration_secs, duration_secs, volume);
+                let _ = app_handle.emit("audio:ended", ());
+                let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
             }
         }
 
