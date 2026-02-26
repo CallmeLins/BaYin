@@ -1,34 +1,69 @@
+mod audio_engine;
 mod commands;
 mod db;
 mod models;
 mod utils;
 mod watcher;
-mod audio_engine;
 
 use commands::{
-    db_clear_all_songs, db_clear_scan_config, db_clear_stream_servers, db_delete_songs_by_source,
-    db_delete_stream_server, db_get_all_albums, db_get_all_artists, db_get_all_songs,
-    db_get_library_stats, db_get_scan_config, db_get_stream_servers,
-    db_migrate_from_localstorage, db_save_scan_config, db_save_songs, db_save_stream_server,
-    fetch_stream_songs, fetch_subsonic_songs, get_lyrics, get_music_metadata, get_stream_lyrics,
-    get_stream_url, get_subsonic_lyrics, get_subsonic_stream_url, jellyfin_authenticate,
-    list_directories, scan_music_files, test_stream_connection, test_subsonic_connection,
-    scan_local_to_db, scan_stream_to_db,
-    // Cover cache commands
-    get_cover_url, get_cover_urls_batch, get_cover_cache_stats, cleanup_orphaned_covers, clear_cover_cache,
-    cleanup_missing_songs, CoverCacheState,
-    // File watcher commands
-    start_file_watcher, stop_file_watcher,
+    audio_enable_visualization,
+    audio_get_state,
+    audio_pause,
     // Audio engine commands
-    audio_play, audio_pause, audio_resume, audio_stop, audio_seek,
-    audio_set_volume, audio_set_eq_bands, audio_set_eq_enabled,
-    audio_enable_visualization, audio_get_state,
+    audio_play,
+    audio_resume,
+    audio_seek,
+    audio_set_eq_bands,
+    audio_set_eq_enabled,
+    audio_set_volume,
+    audio_stop,
+    cleanup_missing_songs,
+    cleanup_orphaned_covers,
+    clear_cover_cache,
+    db_clear_all_songs,
+    db_clear_scan_config,
+    db_clear_stream_servers,
+    db_delete_songs_by_source,
+    db_delete_stream_server,
+    db_get_all_albums,
+    db_get_all_artists,
+    db_get_all_songs,
+    db_get_library_stats,
+    db_get_scan_config,
+    db_get_stream_servers,
+    db_migrate_from_localstorage,
+    db_save_scan_config,
+    db_save_songs,
+    db_save_stream_server,
+    fetch_stream_songs,
+    fetch_subsonic_songs,
+    get_cover_cache_stats,
+    // Cover cache commands
+    get_cover_url,
+    get_cover_urls_batch,
+    get_lyrics,
+    get_music_metadata,
+    get_stream_lyrics,
+    get_stream_url,
+    get_subsonic_lyrics,
+    get_subsonic_stream_url,
+    jellyfin_authenticate,
+    list_directories,
+    scan_local_to_db,
+    scan_music_files,
+    scan_stream_to_db,
+    // File watcher commands
+    start_file_watcher,
+    stop_file_watcher,
+    test_stream_connection,
+    test_subsonic_connection,
+    CoverCacheState,
 };
 use db::DbState;
-use utils::cover::CoverCache;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
-use rayon::iter::{ParallelIterator, IntoParallelRefIterator};
+use utils::cover::CoverCache;
 
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
@@ -54,9 +89,7 @@ fn set_tray_language(app: tauri::AppHandle, lang: String) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
@@ -242,11 +275,9 @@ pub fn run() {
                             batch_size: 500,
                         };
 
-                        // Use tokio runtime to run async scan
-                        let rt = tokio::runtime::Runtime::new().unwrap();
-                        let app_clone = app_handle.clone();
-                        rt.block_on(async move {
-                            let db_state2: tauri::State<'_, DbState> = app_clone.state();
+                        // Run incremental local scan. Keep it isolated so early returns don't prevent starting the watcher.
+                        (|| {
+                            let db_state2: tauri::State<'_, DbState> = app_handle.state();
                             // Collect files
                             let mut audio_paths = Vec::new();
                             for dir in &options.directories {
@@ -325,7 +356,7 @@ pub fn run() {
                             }
 
                             // Get cover cache for use in parallel processing
-                            let cover_cache_state: tauri::State<'_, CoverCacheState> = app_clone.state();
+                            let cover_cache_state: tauri::State<'_, CoverCacheState> = app_handle.state();
                             let cover_cache = match cover_cache_state.0.lock() {
                                 Ok(c) => c.clone_arc(),
                                 Err(_) => return,
@@ -386,9 +417,9 @@ pub fn run() {
 
                             // Emit library-updated event
                             if !song_inputs.is_empty() || !deleted_ids.is_empty() {
-                                let _ = app_clone.emit("library-updated", ());
+                                let _ = app_handle.emit("library-updated", ());
                             }
-                        });
+                        })();
 
                         // Start file watcher after scan completes (desktop only)
                         #[cfg(desktop)]

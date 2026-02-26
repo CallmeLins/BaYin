@@ -19,9 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
-tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
 tauri-plugin-store = "2"
 tauri-plugin-os = "2"
 tauri-plugin-process = "2"
@@ -29,17 +27,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 lofty = "0.21"
 walkdir = "2"
-uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
-tokio = { version = "1", features = ["full"] }
 md5 = "0.7"
 rand = "0.8"
 rayon = "1.11.0"
 rusqlite = { version = "0.31", features = ["bundled"] }
 sha2 = "0.10"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
-percent-encoding = "2.3"
 
 # 音频引擎
 symphonia = { version = "0.5", features = [
@@ -55,4 +50,3 @@ ringbuf = "0.4"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"
 notify = { version = "6", features = ["macos_fsevent"] }
-

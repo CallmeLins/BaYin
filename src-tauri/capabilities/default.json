@@ -10,32 +10,8 @@
     "core:window:allow-toggle-maximize",
     "core:window:allow-is-maximized",
     "core:window:allow-start-dragging",
-    "opener:default",
     "dialog:default",
     "dialog:allow-open",
-    "fs:default",
-    "fs:allow-read",
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        { "path": "$HOME/**" },
-        { "path": "$DESKTOP/**" },
-        { "path": "$DOCUMENT/**" },
-        { "path": "$DOWNLOAD/**" },
-        { "path": "$AUDIO/**" },
-        { "path": "$APPDATA/**" },
-        { "path": "$LOCALAPPDATA/**" },
-        { "path": "**" }
-      ]
-    },
-    {
-      "identifier": "fs:allow-read-file",
-      "allow": [
-        { "path": "$APPDATA/**" },
-        { "path": "$LOCALAPPDATA/**" },
-        { "path": "**" }
-      ]
-    },
     "store:default",
     "os:default",
     "process:default",
