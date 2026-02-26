@@ -1,14 +1,12 @@
 //! Subsonic API 工具函数
 //! 支持 Navidrome、Subsonic、OpenSubsonic 等兼容服务器
-#![allow(dead_code)]
-
 use rand::Rng;
 use reqwest::Client;
 use serde::Deserialize;
 
 use crate::models::{
-    ConnectionTestResult, GetAlbumListResponse, GetAlbumResponse, StreamServerConfig, PingResponse,
-    ScannedSong, SearchResponse, SubsonicResponse, SubsonicSong,
+    ConnectionTestResult, PingResponse, ScannedSong, SearchResponse, StreamServerConfig,
+    SubsonicResponse, SubsonicSong,
 };
 use crate::utils::audio::extract_filename_from_path_str;
 
@@ -192,86 +190,6 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
     Ok(all_songs)
 }
 
-/// 获取专辑列表
-pub async fn fetch_albums(
-    config: &StreamServerConfig,
-) -> Result<Vec<crate::models::SubsonicAlbum>, String> {
-    let client = Client::new();
-    let url = build_url(config, "getAlbumList2");
-    let mut params = generate_auth_params(config);
-    params.push(("type", "alphabeticalByName".to_string()));
-    params.push(("size", "500".to_string()));
-
-    let response = client
-        .get(&url)
-        .query(&params)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    let data: SubsonicResponse<GetAlbumListResponse> = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-
-    let inner = data.subsonic_response;
-    if inner.status != "ok" {
-        if let Some(error) = inner.error {
-            return Err(format!("API 错误: {}", error.message));
-        }
-        return Err("未知错误".to_string());
-    }
-
-    if let Some(album_list_data) = inner.data {
-        if let Some(album_list) = album_list_data.album_list2 {
-            return Ok(album_list.album.unwrap_or_default());
-        }
-    }
-
-    Ok(Vec::new())
-}
-
-/// 获取专辑中的所有歌曲
-pub async fn fetch_album_songs(
-    config: &StreamServerConfig,
-    album_id: &str,
-) -> Result<Vec<ScannedSong>, String> {
-    let client = Client::new();
-    let url = build_url(config, "getAlbum");
-    let mut params = generate_auth_params(config);
-    params.push(("id", album_id.to_string()));
-
-    let response = client
-        .get(&url)
-        .query(&params)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
-
-    let data: SubsonicResponse<GetAlbumResponse> = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-
-    let inner = data.subsonic_response;
-    if inner.status != "ok" {
-        if let Some(error) = inner.error {
-            return Err(format!("API 错误: {}", error.message));
-        }
-        return Err("未知错误".to_string());
-    }
-
-    if let Some(album_data) = inner.data {
-        if let Some(album) = album_data.album {
-            if let Some(songs) = album.song {
-                return Ok(songs.iter().map(|s| convert_song(s, config)).collect());
-            }
-        }
-    }
-
-    Ok(Vec::new())
-}
-
 /// 获取歌曲流 URL
 pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
@@ -295,19 +213,6 @@ pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
         .collect::<Vec<_>>()
         .join("&");
     format!("{}/rest/stream?id={}&{}", base, song_id, query)
-}
-
-/// 获取歌词响应
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetLyricsResponse {
-    pub lyrics: Option<LyricsData>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LyricsData {
-    pub value: Option<String>,
 }
 
 /// 获取结构化歌词响应 (OpenSubsonic 扩展)
@@ -348,7 +253,10 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
 
     if let Ok(response) = client.get(&url).query(&params).send().await {
         if response.status().is_success() {
-            if let Ok(data) = response.json::<SubsonicResponse<GetLyricsBySongIdResponse>>().await {
+            if let Ok(data) = response
+                .json::<SubsonicResponse<GetLyricsBySongIdResponse>>()
+                .await
+            {
                 if data.subsonic_response.status == "ok" {
                     if let Some(lyrics_data) = data.subsonic_response.data {
                         if let Some(lyrics_list) = lyrics_data.lyrics_list {
@@ -357,14 +265,18 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
                                 for sl in &structured {
                                     if sl.synced == Some(true) {
                                         if let Some(lines) = &sl.line {
-                                            let lrc = lines.iter()
+                                            let lrc = lines
+                                                .iter()
                                                 .filter_map(|l| {
                                                     let start = l.start.unwrap_or(0);
                                                     let value = l.value.as_ref()?;
                                                     let mins = start / 60000;
                                                     let secs = (start % 60000) / 1000;
                                                     let ms = (start % 1000) / 10;
-                                                    Some(format!("[{:02}:{:02}.{:02}]{}", mins, secs, ms, value))
+                                                    Some(format!(
+                                                        "[{:02}:{:02}.{:02}]{}",
+                                                        mins, secs, ms, value
+                                                    ))
                                                 })
                                                 .collect::<Vec<_>>()
                                                 .join("\n");
@@ -377,7 +289,8 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
                                 // 如果没有同步歌词，使用非同步歌词
                                 for sl in &structured {
                                     if let Some(lines) = &sl.line {
-                                        let text = lines.iter()
+                                        let text = lines
+                                            .iter()
                                             .filter_map(|l| l.value.as_ref())
                                             .cloned()
                                             .collect::<Vec<_>>()

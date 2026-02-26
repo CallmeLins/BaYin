@@ -1,6 +1,6 @@
 //! Song database operations
 
-use rusqlite::{Connection, Result, params};
+use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 
 /// Database song record
@@ -84,73 +84,35 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
                 is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
                 stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels
          FROM songs
-         ORDER BY title COLLATE NOCASE"
+         ORDER BY title COLLATE NOCASE",
     )?;
 
-    let songs = stmt.query_map([], |row| {
-        Ok(DbSong {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            artist: row.get(2)?,
-            album: row.get(3)?,
-            duration: row.get(4)?,
-            file_path: row.get(5)?,
-            file_size: row.get(6)?,
-            is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
-            is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_hash: row.get(9)?,
-            source_type: row.get(10)?,
-            server_id: row.get(11)?,
-            server_song_id: row.get(12)?,
-            stream_info: row.get(13)?,
-            file_modified: row.get(14)?,
-            format: row.get(15)?,
-            bit_depth: row.get::<_, Option<u8>>(16)?,
-            sample_rate: row.get::<_, Option<u32>>(17)?,
-            bitrate: row.get::<_, Option<u32>>(18)?,
-            channels: row.get::<_, Option<u8>>(19)?,
-        })
-    })?.collect::<Result<Vec<_>>>()?;
-
-    Ok(songs)
-}
-
-/// Get songs by source type
-#[allow(dead_code)]
-pub fn get_songs_by_source(conn: &Connection, source_type: &str) -> Result<Vec<DbSong>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
-                stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels
-         FROM songs
-         WHERE source_type = ?1
-         ORDER BY title COLLATE NOCASE"
-    )?;
-
-    let songs = stmt.query_map([source_type], |row| {
-        Ok(DbSong {
-            id: row.get(0)?,
-            title: row.get(1)?,
-            artist: row.get(2)?,
-            album: row.get(3)?,
-            duration: row.get(4)?,
-            file_path: row.get(5)?,
-            file_size: row.get(6)?,
-            is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
-            is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-            cover_hash: row.get(9)?,
-            source_type: row.get(10)?,
-            server_id: row.get(11)?,
-            server_song_id: row.get(12)?,
-            stream_info: row.get(13)?,
-            file_modified: row.get(14)?,
-            format: row.get(15)?,
-            bit_depth: row.get::<_, Option<u8>>(16)?,
-            sample_rate: row.get::<_, Option<u32>>(17)?,
-            bitrate: row.get::<_, Option<u32>>(18)?,
-            channels: row.get::<_, Option<u8>>(19)?,
-        })
-    })?.collect::<Result<Vec<_>>>()?;
+    let songs = stmt
+        .query_map([], |row| {
+            Ok(DbSong {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                artist: row.get(2)?,
+                album: row.get(3)?,
+                duration: row.get(4)?,
+                file_path: row.get(5)?,
+                file_size: row.get(6)?,
+                is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+                is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
+                cover_hash: row.get(9)?,
+                source_type: row.get(10)?,
+                server_id: row.get(11)?,
+                server_song_id: row.get(12)?,
+                stream_info: row.get(13)?,
+                file_modified: row.get(14)?,
+                format: row.get(15)?,
+                bit_depth: row.get::<_, Option<u8>>(16)?,
+                sample_rate: row.get::<_, Option<u32>>(17)?,
+                bitrate: row.get::<_, Option<u32>>(18)?,
+                channels: row.get::<_, Option<u8>>(19)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(songs)
 }

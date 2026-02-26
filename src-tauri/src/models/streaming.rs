@@ -1,6 +1,4 @@
 //! 流媒体服务器数据模型（支持 Navidrome/Subsonic/Jellyfin/Emby 等）
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 
 /// 服务器类型
@@ -78,26 +76,12 @@ pub struct SubsonicResponseInner<T> {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubsonicError {
-    pub code: i32,
     pub message: String,
 }
 
 /// ping 响应（用于测试连接）
 #[derive(Debug, Deserialize)]
 pub struct PingResponse {}
-
-/// 获取所有歌曲的响应
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetSongsResponse {
-    pub random_songs: Option<RandomSongs>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RandomSongs {
-    pub song: Option<Vec<SubsonicSong>>,
-}
 
 /// 搜索响应
 #[derive(Debug, Deserialize)]
@@ -140,59 +124,6 @@ pub struct SubsonicSong {
     pub path: Option<String>,
 }
 
-/// 获取专辑列表响应
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetAlbumListResponse {
-    pub album_list2: Option<AlbumList2>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumList2 {
-    pub album: Option<Vec<SubsonicAlbum>>,
-}
-
-/// Subsonic 专辑信息
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SubsonicAlbum {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub artist: Option<String>,
-    #[serde(default)]
-    pub cover_art: Option<String>,
-    #[serde(default)]
-    pub song_count: Option<u32>,
-    #[serde(default)]
-    pub year: Option<u32>,
-}
-
-/// 获取专辑详情响应
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GetAlbumResponse {
-    pub album: Option<AlbumWithSongs>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AlbumWithSongs {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub artist: Option<String>,
-    #[serde(default)]
-    pub cover_art: Option<String>,
-    #[serde(default)]
-    pub song_count: Option<u32>,
-    #[serde(default)]
-    pub year: Option<u32>,
-    #[serde(default)]
-    pub song: Option<Vec<SubsonicSong>>,
-}
-
 // ============ Jellyfin/Emby API 模型 ============
 
 /// Jellyfin 认证请求
@@ -209,15 +140,12 @@ pub struct JellyfinAuthRequest {
 pub struct JellyfinAuthResponse {
     pub access_token: String,
     pub user: JellyfinUser,
-    #[serde(default)]
-    pub server_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct JellyfinUser {
     pub id: String,
-    pub name: String,
 }
 
 /// Jellyfin 系统信息响应
@@ -225,8 +153,6 @@ pub struct JellyfinUser {
 #[serde(rename_all = "PascalCase")]
 pub struct JellyfinSystemInfo {
     pub version: Option<String>,
-    pub product_name: Option<String>,
-    pub server_name: Option<String>,
 }
 
 /// Jellyfin Items 查询响应
@@ -269,8 +195,6 @@ pub struct JellyfinMediaSource {
     #[serde(default)]
     pub bitrate: Option<u32>,
     #[serde(default)]
-    pub container: Option<String>,
-    #[serde(default)]
     pub size: Option<u64>,
     #[serde(default)]
     pub media_streams: Option<Vec<JellyfinMediaStream>>,
@@ -281,8 +205,6 @@ pub struct JellyfinMediaSource {
 pub struct JellyfinMediaStream {
     #[serde(default, rename = "Type")]
     pub stream_type: Option<String>,
-    #[serde(default)]
-    pub codec: Option<String>,
     #[serde(default)]
     pub sample_rate: Option<u32>,
     #[serde(default)]

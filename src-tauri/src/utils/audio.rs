@@ -66,7 +66,10 @@ pub fn read_lyrics(audio_path: &Path) -> Option<String> {
 
     // 2. 尝试从音频文件读取内嵌歌词
     if let Ok(tagged_file) = Probe::open(audio_path).and_then(|p| p.read()) {
-        if let Some(tag) = tagged_file.primary_tag().or_else(|| tagged_file.first_tag()) {
+        if let Some(tag) = tagged_file
+            .primary_tag()
+            .or_else(|| tagged_file.first_tag())
+        {
             // 尝试获取 LYRICS 标签（不同格式可能有不同的标签名）
             // lofty 使用 ItemKey::Lyrics 来获取歌词
             if let Some(lyrics) = tag.get_string(&lofty::tag::ItemKey::Lyrics) {
@@ -102,7 +105,8 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
     let channels = properties.channels().map(|c| c as u8);
 
     // 获取文件格式（从扩展名）
-    let format = path.extension()
+    let format = path
+        .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| ext.to_uppercase());
 
@@ -111,7 +115,9 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
     let is_hr = sample_rate > 44100 || bit_depth.map(|d| d > 16).unwrap_or(false);
 
     // 获取标签信息
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag());
 
     let title = tag
         .and_then(|t| t.title().map(|s| s.to_string()))
@@ -153,7 +159,11 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
         is_sq: Some(is_sq),
         format,
         bit_depth: bit_depth.map(|d| d as u8),
-        sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+        sample_rate: if sample_rate > 0 {
+            Some(sample_rate)
+        } else {
+            None
+        },
         bitrate,
         channels,
     })
@@ -164,8 +174,7 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
     let file_path_str = path.to_string_lossy().to_string();
 
     // Get file metadata
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| format!("无法获取文件信息: {}", e))?;
+    let metadata = std::fs::metadata(path).map_err(|e| format!("无法获取文件信息: {}", e))?;
 
     let file_size = metadata.len();
 
@@ -192,7 +201,8 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
     let channels = properties.channels().map(|c| c as u8);
 
     // Get file format from extension
-    let format = path.extension()
+    let format = path
+        .extension()
         .and_then(|ext| ext.to_str())
         .map(|ext| ext.to_uppercase());
 
@@ -201,7 +211,9 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
     let is_hr = sample_rate > 44100 || bit_depth.map(|d| d > 16).unwrap_or(false);
 
     // Get tag information
-    let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag());
+    let tag = tagged_file
+        .primary_tag()
+        .or_else(|| tagged_file.first_tag());
 
     let title = tag
         .and_then(|t| t.title().map(|s| s.to_string()))
@@ -233,21 +245,13 @@ pub fn read_metadata_with_mtime(path: &Path) -> Result<ScannedSongWithMtime, Str
         is_sq: Some(is_sq),
         format,
         bit_depth: bit_depth.map(|d| d as u8),
-        sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+        sample_rate: if sample_rate > 0 {
+            Some(sample_rate)
+        } else {
+            None
+        },
         bitrate,
         channels,
         file_modified,
     })
-}
-
-/// Get file modification time without reading full metadata
-#[allow(dead_code)]
-pub fn get_file_mtime(path: &Path) -> Result<i64, String> {
-    std::fs::metadata(path)
-        .map_err(|e| format!("无法获取文件信息: {}", e))?
-        .modified()
-        .map_err(|e| format!("无法获取文件修改时间: {}", e))?
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .map_err(|e| format!("时间转换错误: {}", e))
 }

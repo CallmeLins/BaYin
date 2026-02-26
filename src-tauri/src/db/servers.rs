@@ -1,8 +1,8 @@
 //! Stream server configuration database operations
 
-use rusqlite::{Connection, Result, params};
+use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 /// Database stream server record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -89,72 +89,36 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
         "SELECT id, server_type, server_name, server_url, username, password,
                 access_token, user_id, enabled, created_at
          FROM stream_servers
-         ORDER BY created_at"
+         ORDER BY created_at",
     )?;
 
-    let servers = stmt.query_map([], |row| {
-        Ok(DbStreamServer {
-            id: row.get(0)?,
-            server_type: row.get(1)?,
-            server_name: row.get(2)?,
-            server_url: row.get(3)?,
-            username: row.get(4)?,
-            password: row.get(5)?,
-            access_token: row.get(6)?,
-            user_id: row.get(7)?,
-            enabled: row.get::<_, i32>(8)? != 0,
-            created_at: row.get(9)?,
-        })
-    })?.collect::<Result<Vec<_>>>()?;
+    let servers = stmt
+        .query_map([], |row| {
+            Ok(DbStreamServer {
+                id: row.get(0)?,
+                server_type: row.get(1)?,
+                server_name: row.get(2)?,
+                server_url: row.get(3)?,
+                username: row.get(4)?,
+                password: row.get(5)?,
+                access_token: row.get(6)?,
+                user_id: row.get(7)?,
+                enabled: row.get::<_, i32>(8)? != 0,
+                created_at: row.get(9)?,
+            })
+        })?
+        .collect::<Result<Vec<_>>>()?;
 
     Ok(servers)
-}
-
-/// Get a single stream server by ID
-#[allow(dead_code)]
-pub fn get_stream_server(conn: &Connection, server_id: &str) -> Result<Option<DbStreamServer>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, server_type, server_name, server_url, username, password,
-                access_token, user_id, enabled, created_at
-         FROM stream_servers
-         WHERE id = ?1"
-    )?;
-
-    let server = stmt.query_row([server_id], |row| {
-        Ok(DbStreamServer {
-            id: row.get(0)?,
-            server_type: row.get(1)?,
-            server_name: row.get(2)?,
-            server_url: row.get(3)?,
-            username: row.get(4)?,
-            password: row.get(5)?,
-            access_token: row.get(6)?,
-            user_id: row.get(7)?,
-            enabled: row.get::<_, i32>(8)? != 0,
-            created_at: row.get(9)?,
-        })
-    });
-
-    match server {
-        Ok(s) => Ok(Some(s)),
-        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(e),
-    }
 }
 
 /// Delete a stream server and all associated songs
 pub fn delete_stream_server(conn: &Connection, server_id: &str) -> Result<()> {
     // Delete associated songs first
-    conn.execute(
-        "DELETE FROM songs WHERE server_id = ?1",
-        [server_id],
-    )?;
+    conn.execute("DELETE FROM songs WHERE server_id = ?1", [server_id])?;
 
     // Delete the server config
-    conn.execute(
-        "DELETE FROM stream_servers WHERE id = ?1",
-        [server_id],
-    )?;
+    conn.execute("DELETE FROM stream_servers WHERE id = ?1", [server_id])?;
 
     Ok(())
 }
@@ -170,8 +134,8 @@ pub fn clear_stream_servers(conn: &Connection) -> Result<()> {
 
 /// Save scan configuration
 pub fn save_scan_config(conn: &Connection, config: &ScanConfig) -> Result<()> {
-    let directories_json = serde_json::to_string(&config.directories)
-        .unwrap_or_else(|_| "[]".to_string());
+    let directories_json =
+        serde_json::to_string(&config.directories).unwrap_or_else(|_| "[]".to_string());
 
     // We keep only one scan config, so delete and insert
     conn.execute("DELETE FROM scan_configs", [])?;
@@ -194,7 +158,7 @@ pub fn get_scan_config(conn: &Connection) -> Result<Option<ScanConfig>> {
     let mut stmt = conn.prepare(
         "SELECT id, directories, skip_short, min_duration, last_scan_at
          FROM scan_configs
-         LIMIT 1"
+         LIMIT 1",
     )?;
 
     let config = stmt.query_row([], |row| {
@@ -204,8 +168,7 @@ pub fn get_scan_config(conn: &Connection) -> Result<Option<ScanConfig>> {
         let min_duration: f64 = row.get(3)?;
         let last_scan_at: Option<i64> = row.get(4)?;
 
-        let directories: Vec<String> = serde_json::from_str(&directories_json)
-            .unwrap_or_default();
+        let directories: Vec<String> = serde_json::from_str(&directories_json).unwrap_or_default();
 
         Ok(ScanConfig {
             id: Some(id),
@@ -221,16 +184,6 @@ pub fn get_scan_config(conn: &Connection) -> Result<Option<ScanConfig>> {
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e),
     }
-}
-
-/// Update last scan timestamp
-#[allow(dead_code)]
-pub fn update_last_scan_time(conn: &Connection) -> Result<()> {
-    conn.execute(
-        "UPDATE scan_configs SET last_scan_at = strftime('%s','now')",
-        [],
-    )?;
-    Ok(())
 }
 
 /// Clear scan configuration

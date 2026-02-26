@@ -52,7 +52,9 @@ impl CoverCache {
     /// Get the path for a cached cover by hash
     fn cover_path(&self, hash: &str, size: CoverSize, ext: &str) -> PathBuf {
         let prefix = &hash[..2.min(hash.len())];
-        self.size_dir(size).join(prefix).join(format!("{}.{}", hash, ext))
+        self.size_dir(size)
+            .join(prefix)
+            .join(format!("{}.{}", hash, ext))
     }
 
     /// Ensure cache directories exist
@@ -90,8 +92,8 @@ impl CoverCache {
         };
 
         // Decode image
-        let img = image::load_from_memory(data)
-            .map_err(|e| format!("Failed to decode image: {}", e))?;
+        let img =
+            image::load_from_memory(data).map_err(|e| format!("Failed to decode image: {}", e))?;
 
         // Save original
         let orig_path = self.cover_path(&hash, CoverSize::Original, ext);
@@ -143,12 +145,6 @@ impl CoverCache {
             };
             format!("http://asset.localhost/{}", encoded_path)
         })
-    }
-
-    /// Check if a cover exists in cache
-    #[allow(dead_code)]
-    pub fn has_cover(&self, hash: &str) -> bool {
-        self.get_cover_path(hash, CoverSize::Mid).is_some()
     }
 
     /// Get cache statistics
@@ -276,37 +272,4 @@ pub fn extract_and_cache_cover(
     }
 
     Ok(None)
-}
-
-/// Download and cache cover from URL
-#[allow(dead_code)]
-pub async fn download_and_cache_cover(
-    url: &str,
-    cache: &CoverCache,
-) -> Result<Option<String>, String> {
-    let response = reqwest::get(url)
-        .await
-        .map_err(|e| format!("Failed to download: {}", e))?;
-
-    if !response.status().is_success() {
-        return Ok(None);
-    }
-
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    let data = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    if data.is_empty() {
-        return Ok(None);
-    }
-
-    let hash = cache.save_cover(&data, content_type.as_deref())?;
-    Ok(Some(hash))
 }
