@@ -62,28 +62,111 @@ use commands::{
 use db::DbState;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::sync::Mutex;
+#[cfg(desktop)]
+use std::sync::OnceLock;
 use tauri::{Emitter, Manager};
 use utils::cover::CoverCache;
 
 #[cfg(desktop)]
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 #[cfg(desktop)]
 use tauri::tray::TrayIconBuilder;
 
 #[cfg(desktop)]
-#[tauri::command]
-fn set_tray_language(app: tauri::AppHandle, lang: String) {
+#[derive(Clone, serde::Serialize)]
+struct TrayCommandPayload {
+    command: String,
+}
+
+#[cfg(desktop)]
+#[derive(Clone)]
+struct TrayMenuState {
+    lang: String,
+    muted: bool,
+}
+
+#[cfg(desktop)]
+static TRAY_MENU_STATE: OnceLock<Mutex<TrayMenuState>> = OnceLock::new();
+
+#[cfg(desktop)]
+fn tray_menu_state() -> &'static Mutex<TrayMenuState> {
+    TRAY_MENU_STATE.get_or_init(|| Mutex::new(TrayMenuState {
+        lang: "zh-CN".to_string(),
+        muted: false,
+    }))
+}
+
+#[cfg(desktop)]
+fn build_tray_menu(app: &tauri::AppHandle, lang: &str, muted: bool) -> Menu<tauri::Wry> {
+    let zh = lang == "zh-CN";
+
+    let (play_pause_label, prev_label, next_label, show_label, exit_label) = if zh {
+        ("播放/暂停", "上一曲", "下一曲", "打开主窗口", "退出")
+    } else {
+        ("Play/Pause", "Previous", "Next", "Show Window", "Exit")
+    };
+
+    let toggle_mute_label = if zh {
+        if muted { "关闭静音" } else { "静音" }
+    } else {
+        if muted { "Unmute" } else { "Mute" }
+    };
+
+    let play_pause_item =
+        MenuItem::with_id(app, "play_pause", play_pause_label, true, None::<&str>).unwrap();
+    let prev_item = MenuItem::with_id(app, "previous", prev_label, true, None::<&str>).unwrap();
+    let next_item = MenuItem::with_id(app, "next", next_label, true, None::<&str>).unwrap();
+    // Single toggle item: label reflects the *action*.
+    let toggle_mute_item =
+        MenuItem::with_id(app, "toggle_mute", toggle_mute_label, true, None::<&str>).unwrap();
+    let show_item = MenuItem::with_id(app, "show", show_label, true, None::<&str>).unwrap();
+    let exit_item = MenuItem::with_id(app, "exit", exit_label, true, None::<&str>).unwrap();
+
+    Menu::with_items(
+        app,
+        &[
+            &play_pause_item,
+            &prev_item,
+            &next_item,
+            &PredefinedMenuItem::separator(app).unwrap(),
+            &toggle_mute_item,
+            &PredefinedMenuItem::separator(app).unwrap(),
+            &show_item,
+            &exit_item,
+        ],
+    )
+    .unwrap()
+}
+
+#[cfg(desktop)]
+fn refresh_tray_menu(app: &tauri::AppHandle) {
+    let state = match tray_menu_state().lock() {
+        Ok(s) => s.clone(),
+        Err(_) => return,
+    };
+
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let (show_label, exit_label) = if lang == "zh-CN" {
-            ("打开主窗口", "退出")
-        } else {
-            ("Show Window", "Exit")
-        };
-        let show_item = MenuItem::with_id(&app, "show", show_label, true, None::<&str>).unwrap();
-        let exit_item = MenuItem::with_id(&app, "exit", exit_label, true, None::<&str>).unwrap();
-        let menu = Menu::with_items(&app, &[&show_item, &exit_item]).unwrap();
+        let menu = build_tray_menu(app, &state.lang, state.muted);
         let _ = tray.set_menu(Some(menu));
     }
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn set_tray_language(app: tauri::AppHandle, lang: String) {
+    if let Ok(mut state) = tray_menu_state().lock() {
+        state.lang = lang;
+    }
+    refresh_tray_menu(&app);
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
+    if let Ok(mut state) = tray_menu_state().lock() {
+        state.muted = muted;
+    }
+    refresh_tray_menu(&app);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -148,6 +231,8 @@ pub fn run() {
             // 托盘命令
             #[cfg(desktop)]
             set_tray_language,
+            #[cfg(desktop)]
+            set_tray_muted,
             // 音频引擎命令
             audio_play,
             audio_pause,
@@ -210,14 +295,60 @@ pub fn run() {
             // 桌面端：创建系统托盘
             #[cfg(desktop)]
             {
-                let show_item = MenuItem::with_id(app, "show", "打开主窗口", true, None::<&str>)?;
-                let exit_item = MenuItem::with_id(app, "exit", "退出", true, None::<&str>)?;
-                let menu = Menu::with_items(app, &[&show_item, &exit_item])?;
+                let app_handle = app.handle().clone();
+                // Default tray language is Chinese; frontend can call `set_tray_language` to update.
+                // Also initialize the shared state used for "mute/unmute" pair enabling.
+                {
+                    let _ = tray_menu_state();
+                }
+                let menu = build_tray_menu(&app_handle, "zh-CN", false);
 
                 TrayIconBuilder::with_id("main-tray")
                     .icon(app.default_window_icon().cloned().expect("no app icon"))
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id().as_ref() {
+                        "play_pause" => {
+                            let _ = app.emit(
+                                "tray:command",
+                                TrayCommandPayload {
+                                    command: "toggle_play".to_string(),
+                                },
+                            );
+                        }
+                        "previous" => {
+                            let _ = app.emit(
+                                "tray:command",
+                                TrayCommandPayload {
+                                    command: "previous".to_string(),
+                                },
+                            );
+                        }
+                        "next" => {
+                            let _ = app.emit(
+                                "tray:command",
+                                TrayCommandPayload {
+                                    command: "next".to_string(),
+                                },
+                            );
+                        }
+                        "toggle_mute" => {
+                            let muted = if let Ok(mut state) = tray_menu_state().lock() {
+                                state.muted = !state.muted;
+                                state.muted
+                            } else {
+                                false
+                            };
+
+                            // Refresh immediately so label flips right away.
+                            refresh_tray_menu(app);
+
+                            let _ = app.emit(
+                                "tray:command",
+                                TrayCommandPayload {
+                                    command: (if muted { "mute" } else { "unmute" }).to_string(),
+                                },
+                            );
+                        }
                         "show" => {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.show();
