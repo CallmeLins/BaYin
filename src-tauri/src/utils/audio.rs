@@ -1,10 +1,13 @@
 use std::path::Path;
+use std::io::Read;
 
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use flate2::read::ZlibDecoder;
 use lofty::file::AudioFile;
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use lofty::tag::{ItemKey, ItemValue, Tag};
 
 use crate::models::{ScannedSong, ScannedSongWithMtime};
 
@@ -64,21 +67,249 @@ pub fn read_lyrics(audio_path: &Path) -> Option<String> {
         }
     }
 
+    // 1b. 尝试读取外部 .krc (KuGou) 逐字歌词，并转换成 LRC + 绝对时间 token 格式
+    let krc_path = audio_path.with_extension("krc");
+    if krc_path.exists() {
+        if let Some(content) = read_krc_as_lrc(&krc_path) {
+            return Some(content);
+        }
+    }
+
     // 2. 尝试从音频文件读取内嵌歌词
     if let Ok(tagged_file) = Probe::open(audio_path).and_then(|p| p.read()) {
-        if let Some(tag) = tagged_file
-            .primary_tag()
-            .or_else(|| tagged_file.first_tag())
-        {
-            // 尝试获取 LYRICS 标签（不同格式可能有不同的标签名）
-            // lofty 使用 ItemKey::Lyrics 来获取歌词
-            if let Some(lyrics) = tag.get_string(&lofty::tag::ItemKey::Lyrics) {
-                return Some(lyrics.to_string());
+        // Prefer scanning all tags instead of just the primary tag, because FLAC can carry
+        // multiple tag blocks (Vorbis comments, ID3v2, etc.), and lyrics may live in a non-primary tag.
+        let mut best: Option<String> = None;
+
+        for tag in tagged_file.tags() {
+            if let Some(lyrics) = extract_lyrics_from_tag(tag) {
+                // If we found something that looks like time-tagged lyrics, return immediately.
+                if looks_time_tagged(&lyrics) || looks_like_krc_plaintext(&lyrics) {
+                    return Some(normalize_lyrics_text(&lyrics));
+                }
+                best = best.or(Some(lyrics));
+            }
+        }
+
+        if let Some(fallback) = best {
+            return Some(normalize_lyrics_text(&fallback));
+        }
+    }
+
+    None
+}
+
+fn looks_time_tagged(s: &str) -> bool {
+    // Cheap checks for LRC and karaoke tags.
+    s.contains('[') && s.contains(':') && s.contains(']')
+}
+
+fn looks_like_krc_plaintext(s: &str) -> bool {
+    // KuGou KRC plaintext has headers like `[12345,678]` and tokens like `<0,500,0>`.
+    if !s.contains('[') || !s.contains(',') || !s.contains(']') || !s.contains('<') || !s.contains('>') {
+        return false;
+    }
+    // Guard against normal LRC `<mm:ss.xxx>` which also contains ',' rarely.
+    let bytes = s.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'[' {
+            let mut j = i + 1;
+            let mut saw_digit = false;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                saw_digit = true;
+                j += 1;
+            }
+            if saw_digit && j < bytes.len() && bytes[j] == b',' {
+                return true;
+            }
+        }
+        i += 1;
+    }
+    false
+}
+
+fn normalize_lyrics_text(s: &str) -> String {
+    if looks_like_krc_plaintext(s) {
+        // Embedded KRC-like plaintext (already decompressed) is common in some taggers.
+        // Convert it so the frontend can parse and render word-by-word karaoke.
+        return krc_text_to_lrc(s);
+    }
+
+    s.to_string()
+}
+
+fn extract_lyrics_from_tag(tag: &Tag) -> Option<String> {
+    // 1) Standard mapped lyrics key.
+    if let Some(lyrics) = tag.get_string(&ItemKey::Lyrics) {
+        return Some(lyrics.to_string());
+    }
+
+    // 2) Try common "lyrics-like" unknown keys (e.g. Vorbis comments such as LYRICS, UNSYNCEDLYRICS).
+    for item in tag.items() {
+        let key = item.key();
+        let key_name = match key {
+            ItemKey::Unknown(s) => s.as_str(),
+            _ => continue,
+        };
+
+        let upper = key_name.to_ascii_uppercase();
+        if !upper.contains("LYRIC") && !upper.contains("LRC") {
+            continue;
+        }
+
+        // Prefer text values; some taggers store lyrics as binary bytes.
+        let v = item.value();
+        if let ItemValue::Text(text) = v {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        } else if let ItemValue::Binary(data) = v {
+            if let Ok(text) = std::str::from_utf8(&data) {
+                let t = text.trim();
+                if !t.is_empty() {
+                    return Some(t.to_string());
+                }
             }
         }
     }
 
     None
+}
+
+/// Decode KuGou `.krc` lyrics to a LRC-like format that the frontend can parse and render
+/// as word-by-word (karaoke) lyrics.
+///
+/// KRC format:
+/// - File starts with `krc1` header
+/// - Remaining bytes are XOR-obfuscated and then zlib-compressed
+/// - Decompressed text contains lines like: `[start_ms,duration_ms]<offset_ms,dur_ms,0>词...`
+///
+/// We convert to:
+/// - Line timestamp: `[mm:ss.mmm]`
+/// - Word timestamps: `<mm:ss.mmm>` absolute times, so the existing LRC karaoke parser works.
+fn read_krc_as_lrc(krc_path: &Path) -> Option<String> {
+    let data = std::fs::read(krc_path).ok()?;
+    if data.len() < 8 || &data[0..4] != b"krc1" {
+        return None;
+    }
+
+    // KuGou KRC XOR key (repeats).
+    const KEY: [u8; 16] = [
+        0x40, 0x47, 0x61, 0x77, 0x5E, 0x32, 0x74, 0x47,
+        0x51, 0x36, 0x31, 0x2D, 0xCE, 0xD2, 0x6E, 0x69,
+    ];
+
+    let mut buf = data[4..].to_vec();
+    for (i, b) in buf.iter_mut().enumerate() {
+        *b ^= KEY[i % KEY.len()];
+    }
+
+    let mut decoder = ZlibDecoder::new(&buf[..]);
+    let mut decompressed = Vec::new();
+    decoder.read_to_end(&mut decompressed).ok()?;
+    let text = String::from_utf8(decompressed).ok()?;
+
+    Some(krc_text_to_lrc(&text))
+}
+
+fn ms_to_timestamp(ms: u64) -> String {
+    let minutes = ms / 60_000;
+    let seconds = (ms / 1_000) % 60;
+    let millis = ms % 1_000;
+    format!("{:02}:{:02}.{:03}", minutes, seconds, millis)
+}
+
+fn krc_text_to_lrc(text: &str) -> String {
+    let mut out = String::new();
+
+    for raw_line in text.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Skip metadata like [ti:], [ar:], [id:], etc.
+        if line.starts_with('[') && line.contains(':') {
+            continue;
+        }
+
+        // Parse `[start_ms,duration_ms]...`
+        let Some(close_bracket) = line.find(']') else { continue };
+        if !line.starts_with('[') || close_bracket < 3 {
+            continue;
+        }
+
+        let header = &line[1..close_bracket];
+        let mut parts = header.split(',');
+        let start_ms: u64 = match parts.next().and_then(|v| v.parse().ok()) {
+            Some(v) => v,
+            None => continue,
+        };
+        let _dur_ms: u64 = parts.next().and_then(|v| v.parse().ok()).unwrap_or(0);
+
+        let body = &line[(close_bracket + 1)..];
+
+        // Build absolute-time karaoke tags: `<mm:ss.mmm>词`
+        let mut rendered = String::new();
+        let mut idx = 0usize;
+        let bytes = body.as_bytes();
+        while idx < bytes.len() {
+            if bytes[idx] != b'<' {
+                idx += 1;
+                continue;
+            }
+
+            let Some(tag_end_rel) = body[idx..].find('>') else { break };
+            let tag = &body[(idx + 1)..(idx + tag_end_rel)];
+            let mut tag_parts = tag.split(',');
+            let offset_ms: u64 = match tag_parts.next().and_then(|v| v.parse().ok()) {
+                Some(v) => v,
+                None => {
+                    idx += tag_end_rel + 1;
+                    continue;
+                }
+            };
+
+            let text_start = idx + tag_end_rel + 1;
+            let next_tag = body[text_start..]
+                .find('<')
+                .map(|p| text_start + p)
+                .unwrap_or(body.len());
+            let seg = body[text_start..next_tag].replace('\r', "");
+
+            let abs_ms = start_ms.saturating_add(offset_ms);
+            rendered.push('<');
+            rendered.push_str(&ms_to_timestamp(abs_ms));
+            rendered.push('>');
+            rendered.push_str(&seg);
+
+            idx = next_tag;
+        }
+
+        let ts = ms_to_timestamp(start_ms);
+        if !rendered.is_empty() {
+            out.push_str(&format!("[{}]{}\n", ts, rendered.trim_end()));
+        } else if !body.trim().is_empty() {
+            out.push_str(&format!("[{}]{}\n", ts, body.trim()));
+        }
+    }
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::krc_text_to_lrc;
+
+    #[test]
+    fn converts_krc_line_to_lrc_karaoke() {
+        let krc = "[1000,2000]<0,500,0>你<500,500,0>好";
+        let lrc = krc_text_to_lrc(krc);
+        assert!(lrc.contains("[00:01.000]"));
+        assert!(lrc.contains("<00:01.000>你"));
+        assert!(lrc.contains("<00:01.500>好"));
+    }
 }
 
 /// 读取音频文件元数据

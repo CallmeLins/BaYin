@@ -272,6 +272,7 @@ dependencies = [
  "base64 0.22.1",
  "cpal",
  "crossbeam-channel",
+ "flate2",
  "image",
  "lofty",
  "md5",
