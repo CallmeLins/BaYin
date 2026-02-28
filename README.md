@@ -16,10 +16,7 @@
 
 <br />
 
-<div align="center" style="display: flex; justify-content: center; align-items: center; gap: 15px; flex-wrap: wrap; margin: 20px 0;">
-  <img alt="桌面端播放器" src="public/pc_playerpage.png" style="height: 350px; width: auto; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);" />
-  <img alt="移动端播放器" src="public/mobile_playerpage1.png" style="height: 350px; width: auto; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);" />
-</div>
+![播放器](public/main.png)
 
 ## 技术栈
 
@@ -59,17 +56,10 @@
 ## 界面展示
 
 ### 桌面端
-<div align="center" style="display: flex; justify-content: center; gap: 15px; flex-wrap: wrap; margin: 15px 0;">
-  <img alt="桌面端主页面" src="public/pc_mainpage.png" style="height: 320px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" />
-  <img alt="桌面端播放器页面" src="public/pc_playerpage.png" style="height: 320px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" />
-</div>
+![桌面端](public/pc.png)
 
 ### 移动端
-<div align="center" style="display: flex; justify-content: center; align-items: center; gap: 12px; flex-wrap: wrap; margin: 15px 0;">
-  <img alt="移动端主页面" src="public/mobile_mainpage.png" style="height: 380px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" />
-  <img alt="移动端播放器页面1" src="public/mobile_playerpage1.png" style="height: 380px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" />
-  <img alt="移动端播放器页面2" src="public/mobile_playerpage2.png" style="height: 380px; width: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);" />
-</div>
+![移动端](public/mobile.png)
 
 ## 获取
 
