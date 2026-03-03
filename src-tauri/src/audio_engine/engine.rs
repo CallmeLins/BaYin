@@ -54,6 +54,7 @@ pub struct PlaybackState {
 struct TimePayload {
     position: f64,
     duration: f64,
+    session_id: u64,
 }
 
 #[derive(Clone, Serialize)]
@@ -220,15 +221,19 @@ fn audio_thread(
     // Decoder reached EOF; keep output running until its ring buffer drains,
     // then emit `audio:ended` so the UI doesn't advance early.
     let mut end_pending = false;
+    let mut pause_target_secs: Option<f64> = None;
 
     let mut last_time_emit = Instant::now();
     let mut last_fft_emit = Instant::now();
+    let mut session_id: u64 = 0;
+    let mut last_emitted_pos: f64 = 0.0;
 
     loop {
         // 1. Process all pending commands
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 AudioCommand::Play { source } => {
+                    pause_target_secs = None;
                     let was_draining = end_pending;
                     // Any explicit play cancels a pending natural end/drain.
                     end_pending = false;
@@ -240,7 +245,11 @@ fn audio_thread(
                                 out.flush();
                             }
                             pending_samples.clear();
-                            execute_play(
+                            session_id = session_id.wrapping_add(1);
+                            if session_id == 0 {
+                                session_id = 1;
+                            }
+                            if execute_play(
                                 &source,
                                 true,
                                 &mut decoder,
@@ -257,7 +266,9 @@ fn audio_thread(
                                 volume,
                                 &state,
                                 &app_handle,
-                            );
+                            ) {
+                                last_emitted_pos = 0.0;
+                            }
                             pending_samples.clear();
                             continue;
                         }
@@ -278,31 +289,39 @@ fn audio_thread(
                             action: FadeAction::PlayNext { source },
                         };
                     } else {
-                        execute_play(
+                        session_id = session_id.wrapping_add(1);
+                        if session_id == 0 {
+                            session_id = 1;
+                        }
+                        if execute_play(
                             &source, true,
                             &mut decoder, &mut output, &mut resampler, &mut resample_buffer,
                             &mut eq, &mut fade_state,
                             &mut source_sample_rate, &mut source_channels,
                             &mut position_secs, &mut duration_secs, &mut is_playing,
                             volume, &state, &app_handle,
-                        );
+                        ) {
+                            last_emitted_pos = 0.0;
+                        }
                         pending_samples.clear();
                     }
                 }
                 AudioCommand::Pause => {
                     if is_playing {
+                        pause_target_secs = Some(current_playback_position(position_secs, &output));
                         if end_pending {
                             // EOF reached: we're only draining buffered samples, so pause immediately.
                             is_playing = false;
                             if let Some(ref out) = output {
                                 out.pause();
                             }
+                            if let Some(target) = pause_target_secs.take() {
+                                position_secs = target;
+                                last_emitted_pos = target;
+                            }
                             update_state(&state, false, position_secs, duration_secs, volume);
                             let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
                             continue;
-                        }
-                        if let Some(ref out) = output {
-                            out.flush();
                         }
                         let out_rate = output.as_ref().map(|o| o.config.sample_rate.0).unwrap_or(source_sample_rate);
                         let out_ch = output.as_ref().map(|o| o.config.channels as usize).unwrap_or(2);
@@ -320,6 +339,7 @@ fn audio_thread(
                 }
                 AudioCommand::Resume => {
                     if !is_playing && decoder.is_some() {
+                        pause_target_secs = None;
                         is_playing = true;
                         if let Some(ref out) = output {
                             out.resume();
@@ -335,6 +355,7 @@ fn audio_thread(
                     } else if is_playing {
                         // Currently fading out for a pause — reverse into fade-in
                         if let FadeState::FadingOut { gain, action: FadeAction::Pause, .. } = &fade_state {
+                            pause_target_secs = None;
                             let current_gain = *gain;
                             let out_rate = output.as_ref().map(|o| o.config.sample_rate.0).unwrap_or(source_sample_rate);
                             let out_ch = output.as_ref().map(|o| o.config.channels as usize).unwrap_or(2);
@@ -346,6 +367,7 @@ fn audio_thread(
                     }
                 }
                 AudioCommand::Stop => {
+                    pause_target_secs = None;
                     let was_draining = end_pending;
                     // Any explicit stop cancels a pending natural end/drain.
                     end_pending = false;
@@ -396,6 +418,7 @@ fn audio_thread(
                     }
                 }
                 AudioCommand::Seek { position_secs: pos } => {
+                    pause_target_secs = None;
                     // Seeking during drain should resume decoding from the new position.
                     end_pending = false;
                     if let Some(ref mut dec) = decoder {
@@ -408,6 +431,7 @@ fn audio_thread(
                             eprintln!("Seek error: {}", e);
                         } else {
                             position_secs = clamped;
+                            last_emitted_pos = clamped;
                             if let Some(ref out) = output {
                                 out.flush();
                             }
@@ -548,10 +572,29 @@ fn audio_thread(
                         if let Some(ref out) = output {
                             out.pause();
                         }
+                        if let Some(target) = pause_target_secs.take() {
+                            if let Some(ref mut dec) = decoder {
+                                if let Err(e) = dec.seek(target) {
+                                    eprintln!("Pause seek-back error: {}", e);
+                                } else {
+                                    position_secs = target;
+                                    last_emitted_pos = target;
+                                    if let Some(ref out) = output {
+                                        out.flush();
+                                    }
+                                    eq.reset();
+                                    pending_samples.clear();
+                                }
+                            } else {
+                                position_secs = target;
+                                last_emitted_pos = target;
+                            }
+                        }
                         update_state(&state, false, position_secs, duration_secs, volume);
                         let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
                     }
                     FadeAction::Stop => {
+                        pause_target_secs = None;
                         decoder = None;
                         output = None;
                         resampler = None;
@@ -560,20 +603,28 @@ fn audio_thread(
                         is_playing = false;
                         position_secs = 0.0;
                         duration_secs = 0.0;
+                        last_emitted_pos = 0.0;
                         fade_state = FadeState::None;
                         fft_proc.set_enabled(false);
                         update_state(&state, false, 0.0, 0.0, volume);
                         let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
                     }
                     FadeAction::PlayNext { source } => {
-                        execute_play(
+                        pause_target_secs = None;
+                        session_id = session_id.wrapping_add(1);
+                        if session_id == 0 {
+                            session_id = 1;
+                        }
+                        if execute_play(
                             &source, true,
                             &mut decoder, &mut output, &mut resampler, &mut resample_buffer,
                             &mut eq, &mut fade_state,
                             &mut source_sample_rate, &mut source_channels,
                             &mut position_secs, &mut duration_secs, &mut is_playing,
                             volume, &state, &app_handle,
-                        );
+                        ) {
+                            last_emitted_pos = 0.0;
+                        }
                         pending_samples.clear();
                     }
                 },
@@ -590,6 +641,7 @@ fn audio_thread(
             if pending_samples.is_empty() && buffered == 0 {
                 end_pending = false;
                 is_playing = false;
+                pause_target_secs = None;
                 fade_state = FadeState::None;
                 update_state(&state, false, duration_secs, duration_secs, volume);
                 let _ = app_handle.emit("audio:ended", ());
@@ -608,6 +660,12 @@ fn audio_thread(
             } else {
                 position_secs
             };
+            let playback_pos = if playback_pos + 0.03 < last_emitted_pos {
+                last_emitted_pos
+            } else {
+                last_emitted_pos = playback_pos;
+                playback_pos
+            };
 
             update_state(&state, is_playing, playback_pos, duration_secs, volume);
             let _ = app_handle.emit(
@@ -615,6 +673,7 @@ fn audio_thread(
                 TimePayload {
                     position: playback_pos,
                     duration: duration_secs,
+                    session_id,
                 },
             );
             last_time_emit = Instant::now();
@@ -655,6 +714,19 @@ fn update_state(
         s.duration_secs = duration_secs;
         s.volume = volume;
     }
+}
+
+fn current_playback_position(position_secs: f64, output: &Option<AudioOutput>) -> f64 {
+    if let Some(out) = output.as_ref() {
+        let buffered_samples = out.producer.occupied_len();
+        let out_rate = out.config.sample_rate.0 as f64;
+        let out_ch = out.config.channels as f64;
+        if out_rate > 0.0 && out_ch > 0.0 {
+            let buffered_secs = buffered_samples as f64 / (out_rate * out_ch);
+            return (position_secs - buffered_secs).max(0.0);
+        }
+    }
+    position_secs.max(0.0)
 }
 
 fn fade_step(duration_ms: f32, sample_rate: u32, channels: usize) -> f32 {
