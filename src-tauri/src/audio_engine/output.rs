@@ -15,7 +15,8 @@ pub struct AudioOutput {
 
 impl AudioOutput {
     /// Create a new audio output with a ring buffer.
-    /// The ring buffer size is ~1 second of audio at the given sample rate and channels.
+    /// The ring buffer size is ~250ms of audio at the given sample rate and channels
+    /// to keep volume/mute response snappy while still absorbing small jitter.
     pub fn new(sample_rate: u32, channels: u16) -> Result<Self, String> {
         let host = cpal::default_host();
         let device = host
@@ -49,8 +50,9 @@ impl AudioOutput {
             .with_sample_rate(cpal::SampleRate(actual_rate))
             .config();
 
-        // Ring buffer: ~2 seconds for comfortable headroom
-        let buf_size = (actual_rate as usize) * (config.channels as usize) * 2;
+        // Ring buffer: ~250ms for lower control latency (volume/mute), still enough headroom
+        let frames_250ms = (actual_rate as usize) / 4;
+        let buf_size = frames_250ms * (config.channels as usize);
         let rb = HeapRb::<f32>::new(buf_size.max(4096));
         let (producer, consumer) = rb.split();
 
