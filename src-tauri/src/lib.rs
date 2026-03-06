@@ -1,9 +1,14 @@
 mod audio_engine;
 mod commands;
+mod playback;
+mod playback_control;
 mod db;
 mod models;
 mod utils;
 mod watcher;
+
+#[cfg(target_os = "android")]
+mod system_media_android;
 
 use commands::{
     audio_enable_visualization,
@@ -17,6 +22,11 @@ use commands::{
     audio_set_eq_enabled,
     audio_set_volume,
     audio_stop,
+    playback_next,
+    playback_play_index,
+    playback_previous,
+    playback_set_mode,
+    playback_set_queue,
     cleanup_missing_songs,
     cleanup_orphaned_covers,
     clear_cover_cache,
@@ -174,6 +184,7 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(bayin_system_media::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
@@ -244,6 +255,13 @@ pub fn run() {
             audio_set_eq_enabled,
             audio_enable_visualization,
             audio_get_state
+            ,
+            // Playback domain commands (queue + cross-platform control)
+            playback_set_queue,
+            playback_set_mode,
+            playback_play_index,
+            playback_next,
+            playback_previous
         ])
         .on_window_event(|_window, _event| {
             #[cfg(desktop)]
@@ -253,6 +271,12 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            {
+                // Let the Android ForegroundService / MediaSession control Rust playback via JNI.
+                system_media_android::set_app_handle(app.handle().clone());
+            }
+
             // 初始化数据库
             let app_data_dir = app
                 .path()
@@ -290,6 +314,11 @@ pub fn run() {
                 use audio_engine::engine::AudioEngine;
                 let audio_engine = AudioEngine::new(app.handle().clone());
                 app.manage(audio_engine::AudioEngineState::new(audio_engine));
+            }
+
+            // Playback domain state (queue + play mode)
+            {
+                app.manage(playback::PlaybackDomainState::new());
             }
 
             // 桌面端：创建系统托盘

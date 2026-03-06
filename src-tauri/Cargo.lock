@@ -270,10 +270,13 @@ name = "bayin"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "bayin-playback",
+ "bayin-system-media",
  "cpal",
  "crossbeam-channel",
  "flate2",
  "image",
+ "jni",
  "lofty",
  "md5",
  "notify",
@@ -297,6 +300,24 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-window-state",
  "walkdir",
+]
+
+[[package]]
+name = "bayin-playback"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "bayin-system-media"
+version = "0.1.0"
+dependencies = [
+ "bayin-playback",
+ "serde",
+ "serde_json",
+ "tauri",
 ]
 
 [[package]]

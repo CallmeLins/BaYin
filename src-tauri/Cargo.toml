@@ -7,6 +7,13 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[workspace]
+members = [
+    ".",
+    "crates/bayin-playback",
+    "plugins/system-media",
+]
+
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
@@ -47,8 +54,13 @@ rustfft = "6.2"
 rubato = "0.15"
 crossbeam-channel = "0.5"
 ringbuf = "0.4"
+bayin-playback = { path = "crates/bayin-playback" }
+bayin-system-media = { path = "plugins/system-media" }
 
 # 桌面端专用依赖（排除 Android 和 iOS）
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"
 notify = { version = "6", features = ["macos_fsevent"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
