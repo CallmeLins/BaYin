@@ -30,12 +30,12 @@ pub fn playback_play_index(
     domain: State<'_, PlaybackDomainState>,
     engine: State<'_, AudioEngineState>,
 ) -> () {
-    playback_control::play_index(index, &domain, &engine);
+    let _ = playback_control::play_index(index, &domain, &engine);
 }
 
 #[tauri::command]
 pub fn playback_next(domain: State<'_, PlaybackDomainState>, engine: State<'_, AudioEngineState>) -> () {
-    playback_control::next(&domain, &engine);
+    let _ = playback_control::next(&domain, &engine);
 }
 
 #[tauri::command]
@@ -43,5 +43,5 @@ pub fn playback_previous(
     domain: State<'_, PlaybackDomainState>,
     engine: State<'_, AudioEngineState>,
 ) -> () {
-    playback_control::previous(&domain, &engine);
+    let _ = playback_control::previous(&domain, &engine);
 }

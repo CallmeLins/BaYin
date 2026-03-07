@@ -140,7 +140,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
         };
         if st.duration_secs <= 0.0 && st.position_secs <= 0.0 {
             let idx = { domain.0.lock().unwrap().index };
-            playback_control::play_index(idx, &domain, &engine);
+            let _ = playback_control::play_index(idx, &domain, &engine);
             emit_domain_changed(app);
         } else {
             let engine = engine.lock().unwrap();
@@ -190,7 +190,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     with_app(|app| {
         let domain = app.state::<PlaybackDomainState>();
         let engine = app.state::<AudioEngineState>();
-        playback_control::next(&domain, &engine);
+        let _ = playback_control::next(&domain, &engine);
         emit_domain_changed(app);
     });
 }
@@ -203,7 +203,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     with_app(|app| {
         let domain = app.state::<PlaybackDomainState>();
         let engine = app.state::<AudioEngineState>();
-        playback_control::previous(&domain, &engine);
+        let _ = playback_control::previous(&domain, &engine);
         emit_domain_changed(app);
     });
 }

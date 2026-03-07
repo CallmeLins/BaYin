@@ -5,12 +5,20 @@ use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "android")]
+use tauri::Manager;
 
 use super::decoder::AudioDecoder;
 use super::dsp::Equalizer;
 use super::fft::FftProcessor;
 use super::output::AudioOutput;
 use super::resampler::AudioResampler;
+#[cfg(target_os = "android")]
+use crate::audio_engine::AudioEngineState;
+#[cfg(target_os = "android")]
+use crate::playback::PlaybackDomainState;
+#[cfg(target_os = "android")]
+use crate::playback_control;
 
 const FADE_OUT_MS: f32 = 150.0;
 const FADE_IN_MS: f32 = 200.0;
@@ -640,12 +648,45 @@ fn audio_thread(
                 .unwrap_or(0);
             if pending_samples.is_empty() && buffered == 0 {
                 end_pending = false;
+
+                // On Android we handle "ended -> next track" in Rust so playback can continue
+                // when the WebView is backgrounded or suspended.
+                #[cfg(target_os = "android")]
+                {
+                    let domain = app_handle.state::<PlaybackDomainState>();
+                    let engine = app_handle.state::<AudioEngineState>();
+                    if playback_control::next(&domain, &engine) {
+                        // Notify UI (when alive) that the playback domain advanced.
+                        let (index, track_id) = {
+                            let d = domain.0.lock().unwrap();
+                            if d.queue.is_empty() || d.index >= d.queue.len() {
+                                (0, String::new())
+                            } else {
+                                (d.index, d.queue[d.index].id.clone())
+                            }
+                        };
+                        if !track_id.is_empty() {
+                            let _ = app_handle.emit(
+                                "playback:domain_changed",
+                                serde_json::json!({ "index": index, "track_id": track_id }),
+                            );
+                        }
+
+                        // Do not emit `audio:ended` when we auto-advance.
+                        pending_samples.clear();
+                        continue;
+                    }
+                }
+
                 is_playing = false;
                 pause_target_secs = None;
                 fade_state = FadeState::None;
                 update_state(&state, false, duration_secs, duration_secs, volume);
                 let _ = app_handle.emit("audio:ended", ());
-                let _ = app_handle.emit("audio:state_changed", StateChangedPayload { is_playing: false });
+                let _ = app_handle.emit(
+                    "audio:state_changed",
+                    StateChangedPayload { is_playing: false },
+                );
             }
         }
 

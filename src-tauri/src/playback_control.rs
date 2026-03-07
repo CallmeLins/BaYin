@@ -1,7 +1,22 @@
 use bayin_playback::PlayMode;
+use rand::Rng;
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
 use crate::playback::PlaybackDomainState;
+
+fn random_other_index(len: usize, current: usize) -> usize {
+    if len <= 1 {
+        return current;
+    }
+
+    let mut rng = rand::thread_rng();
+    loop {
+        let idx = rng.gen_range(0..len);
+        if idx != current {
+            return idx;
+        }
+    }
+}
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,11 +49,15 @@ fn resolve_source(file_path: &str) -> String {
     }
 }
 
-pub(crate) fn play_index(index: usize, domain: &PlaybackDomainState, engine: &AudioEngineState) {
+pub(crate) fn play_index(
+    index: usize,
+    domain: &PlaybackDomainState,
+    engine: &AudioEngineState,
+) -> bool {
     let file = {
         let mut d = domain.0.lock().unwrap();
         if d.queue.is_empty() || index >= d.queue.len() {
-            return;
+            return false;
         }
         d.index = index;
         let resolved = resolve_source(&d.queue[index].file_path);
@@ -48,38 +67,41 @@ pub(crate) fn play_index(index: usize, domain: &PlaybackDomainState, engine: &Au
 
     let engine = engine.lock().unwrap();
     engine.send(AudioCommand::Play { source: file });
+    true
 }
 
-pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) {
-    let (next, mode, len) = {
-        let d = domain.0.lock().unwrap();
-        if d.queue.is_empty() {
-            return;
-        }
-        (d.index, d.mode, d.queue.len())
-    };
-
-    let idx = match mode {
-        PlayMode::RepeatOne => next,
-        _ => (next + 1) % len,
-    };
-
-    play_index(idx, domain, engine);
-}
-
-pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState) {
+pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
     let (cur, mode, len) = {
         let d = domain.0.lock().unwrap();
         if d.queue.is_empty() {
-            return;
+            return false;
         }
         (d.index, d.mode, d.queue.len())
     };
 
     let idx = match mode {
         PlayMode::RepeatOne => cur,
+        PlayMode::Shuffle => random_other_index(len, cur),
+        _ => (cur + 1) % len,
+    };
+
+    play_index(idx, domain, engine)
+}
+
+pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
+    let (cur, mode, len) = {
+        let d = domain.0.lock().unwrap();
+        if d.queue.is_empty() {
+            return false;
+        }
+        (d.index, d.mode, d.queue.len())
+    };
+
+    let idx = match mode {
+        PlayMode::RepeatOne => cur,
+        PlayMode::Shuffle => random_other_index(len, cur),
         _ => (cur + len - 1) % len,
     };
 
-    play_index(idx, domain, engine);
+    play_index(idx, domain, engine)
 }
