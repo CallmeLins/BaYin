@@ -1,5 +1,5 @@
 fn main() {
-    // Tauri defines a `mobile` cfg when building for Android/iOS.
-    println!("cargo:rustc-check-cfg=cfg(mobile)");
+    tauri_plugin::Builder::new(&[])
+        .android_path("android")
+        .build();
 }
-
