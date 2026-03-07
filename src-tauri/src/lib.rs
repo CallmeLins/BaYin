@@ -271,12 +271,6 @@ pub fn run() {
             }
         })
         .setup(|app| {
-            #[cfg(target_os = "android")]
-            {
-                // Let the Android ForegroundService / MediaSession control Rust playback via JNI.
-                system_media_android::set_app_handle(app.handle().clone());
-            }
-
             // 初始化数据库
             let app_data_dir = app
                 .path()
@@ -319,6 +313,13 @@ pub fn run() {
             // Playback domain state (queue + play mode)
             {
                 app.manage(playback::PlaybackDomainState::new());
+            }
+
+            #[cfg(target_os = "android")]
+            {
+                // Only expose the AppHandle to JNI after all required states are managed,
+                // otherwise background threads (MediaPlaybackService) can crash by calling `state()` too early.
+                system_media_android::set_app_handle(app.handle().clone());
             }
 
             // 桌面端：创建系统托盘

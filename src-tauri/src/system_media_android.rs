@@ -46,7 +46,10 @@ struct DomainChangedPayload {
 }
 
 fn emit_domain_changed(app: &tauri::AppHandle) {
-    let domain = app.state::<PlaybackDomainState>();
+    let domain = match app.try_state::<PlaybackDomainState>() {
+        Some(s) => s,
+        None => return,
+    };
     let (index, track_id) = {
         let d = domain.0.lock().unwrap();
         if d.queue.is_empty() || d.index >= d.queue.len() {
@@ -61,8 +64,8 @@ fn emit_domain_changed(app: &tauri::AppHandle) {
 }
 
 fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
-    let domain = app.state::<PlaybackDomainState>();
-    let engine = app.state::<AudioEngineState>();
+    let domain = app.try_state::<PlaybackDomainState>()?;
+    let engine = app.try_state::<AudioEngineState>()?;
 
     let (track, queue_len) = {
         let d = domain.0.lock().unwrap();
@@ -129,8 +132,14 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     _class: JClass,
 ) {
     with_app(|app| {
-        let domain = app.state::<PlaybackDomainState>();
-        let engine = app.state::<AudioEngineState>();
+        let domain = match app.try_state::<PlaybackDomainState>() {
+            Some(s) => s,
+            None => return,
+        };
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
 
         // If nothing is loaded yet, kick off playing the current index.
         let st = {
@@ -155,7 +164,10 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     _class: JClass,
 ) {
     with_app(|app| {
-        let engine = app.state::<AudioEngineState>();
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
         let engine = engine.lock().unwrap();
         engine.send(AudioCommand::Pause);
     });
@@ -167,7 +179,10 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     _class: JClass,
 ) {
     with_app(|app| {
-        let engine = app.state::<AudioEngineState>();
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
         let st = {
             let engine = engine.lock().unwrap();
             let s = engine.state.lock().unwrap().clone();
@@ -188,8 +203,14 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     _class: JClass,
 ) {
     with_app(|app| {
-        let domain = app.state::<PlaybackDomainState>();
-        let engine = app.state::<AudioEngineState>();
+        let domain = match app.try_state::<PlaybackDomainState>() {
+            Some(s) => s,
+            None => return,
+        };
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
         let _ = playback_control::next(&domain, &engine);
         emit_domain_changed(app);
     });
@@ -201,8 +222,14 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
     _class: JClass,
 ) {
     with_app(|app| {
-        let domain = app.state::<PlaybackDomainState>();
-        let engine = app.state::<AudioEngineState>();
+        let domain = match app.try_state::<PlaybackDomainState>() {
+            Some(s) => s,
+            None => return,
+        };
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
         let _ = playback_control::previous(&domain, &engine);
         emit_domain_changed(app);
     });
@@ -216,7 +243,10 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
 ) {
     let position_secs = (position_ms.max(0) as f64) / 1000.0;
     with_app(|app| {
-        let engine = app.state::<AudioEngineState>();
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
         let engine = engine.lock().unwrap();
         engine.send(AudioCommand::Seek { position_secs });
     });

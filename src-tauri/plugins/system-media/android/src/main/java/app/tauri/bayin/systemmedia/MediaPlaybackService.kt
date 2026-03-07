@@ -71,7 +71,8 @@ class MediaPlaybackService : Service() {
         session.isActive = true
 
         ensureNotificationChannel()
-        startPolling()
+        // Delay polling until the Rust side has finished managing app state.
+        scheduler.schedule({ startPolling() }, 800, TimeUnit.MILLISECONDS)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
