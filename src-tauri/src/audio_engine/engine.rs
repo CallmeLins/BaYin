@@ -647,14 +647,44 @@ fn audio_thread(
                 .map(|o| o.producer.occupied_len())
                 .unwrap_or(0);
             if pending_samples.is_empty() && buffered == 0 {
-                end_pending = false;
-
                 // On Android we handle "ended -> next track" in Rust so playback can continue
                 // when the WebView is backgrounded or suspended.
                 #[cfg(target_os = "android")]
                 {
-                    let domain = app_handle.state::<PlaybackDomainState>();
-                    let engine = app_handle.state::<AudioEngineState>();
+                    let domain = match app_handle.try_state::<PlaybackDomainState>() {
+                        Some(s) => s,
+                        None => {
+                            // App state not ready; fall back to ended.
+                            end_pending = false;
+                            is_playing = false;
+                            pause_target_secs = None;
+                            fade_state = FadeState::None;
+                            update_state(&state, false, duration_secs, duration_secs, volume);
+                            let _ = app_handle.emit("audio:ended", ());
+                            let _ = app_handle.emit(
+                                "audio:state_changed",
+                                StateChangedPayload { is_playing: false },
+                            );
+                            continue;
+                        }
+                    };
+                    let engine = match app_handle.try_state::<AudioEngineState>() {
+                        Some(s) => s,
+                        None => {
+                            end_pending = false;
+                            is_playing = false;
+                            pause_target_secs = None;
+                            fade_state = FadeState::None;
+                            update_state(&state, false, duration_secs, duration_secs, volume);
+                            let _ = app_handle.emit("audio:ended", ());
+                            let _ = app_handle.emit(
+                                "audio:state_changed",
+                                StateChangedPayload { is_playing: false },
+                            );
+                            continue;
+                        }
+                    };
+
                     if playback_control::next(&domain, &engine) {
                         // Notify UI (when alive) that the playback domain advanced.
                         let (index, track_id) = {
@@ -678,6 +708,8 @@ fn audio_thread(
                     }
                 }
 
+                // No auto-advance (or not on Android): end playback and notify UI.
+                end_pending = false;
                 is_playing = false;
                 pause_target_secs = None;
                 fade_state = FadeState::None;
