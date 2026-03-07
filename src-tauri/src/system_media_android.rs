@@ -16,8 +16,10 @@ use serde::Serialize;
 use tauri::{Emitter, Manager};
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
+use crate::commands::CoverCacheState;
 use crate::playback::PlaybackDomainState;
 use crate::playback_control;
+use crate::utils::cover::CoverSize;
 
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
 
@@ -32,6 +34,7 @@ struct AndroidNowPlaying {
     title: String,
     artist: String,
     album: String,
+    artwork_path: Option<String>,
     is_playing: bool,
     position_ms: i64,
     duration_ms: i64,
@@ -73,6 +76,14 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
         (t, d.queue.len())
     };
 
+    let artwork_path = track.artwork_ref.as_ref().and_then(|hash| {
+        let cache = app.try_state::<CoverCacheState>()?;
+        let cache = cache.0.lock().ok()?;
+        cache
+            .get_cover_path(hash, CoverSize::Mid)
+            .map(|p| p.to_string_lossy().to_string())
+    });
+
     let s = {
         let engine = engine.lock().unwrap();
         let s = engine.state.lock().unwrap().clone();
@@ -92,6 +103,7 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
         title: track.title,
         artist: track.artist,
         album: track.album,
+        artwork_path,
         is_playing: s.is_playing,
         position_ms: pos_ms,
         duration_ms: dur_ms,

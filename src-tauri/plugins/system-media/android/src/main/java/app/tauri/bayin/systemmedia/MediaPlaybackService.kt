@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -31,6 +32,7 @@ class MediaPlaybackService : Service() {
 
     private var isForeground = false
     private var lastNowPlayingId: String? = null
+    private var lastArtworkPath: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -116,6 +118,7 @@ class MediaPlaybackService : Service() {
         val title = obj.optString("title", "")
         val artist = obj.optString("artist", "")
         val album = obj.optString("album", "")
+        val artworkPath = obj.optString("artwork_path", "")
         val isPlaying = obj.optBoolean("is_playing", false)
         val positionMs = obj.optLong("position_ms", 0L).coerceAtLeast(0L)
         val durationMs = obj.optLong("duration_ms", 0L).coerceAtLeast(0L)
@@ -143,13 +146,24 @@ class MediaPlaybackService : Service() {
         // Metadata only needs updating when the track changes.
         if (id.isNotEmpty() && id != lastNowPlayingId) {
             lastNowPlayingId = id
-            val meta = MediaMetadata.Builder()
+            val metaBuilder = MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, album)
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
-                .build()
-            session.setMetadata(meta)
+
+            // Attach album art if available (this is what system UIs use for lockscreen / cast / flows).
+            val art = if (artworkPath.isNotEmpty() && artworkPath != lastArtworkPath) {
+                lastArtworkPath = artworkPath
+                runCatching { BitmapFactory.decodeFile(artworkPath) }.getOrNull()
+            } else null
+            if (art != null) {
+                metaBuilder
+                    .putBitmap(MediaMetadata.METADATA_KEY_ART, art)
+                    .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
+            }
+
+            session.setMetadata(metaBuilder.build())
         }
 
         val actions = buildActions(canPrevious, canNext, durationMs > 0L)
@@ -161,7 +175,7 @@ class MediaPlaybackService : Service() {
         session.setPlaybackState(playbackState)
 
         // Notification/foreground policy.
-        val notif = buildNotification(isPlaying, canPrevious, canNext, title, artist)
+        val notif = buildNotification(isPlaying, canPrevious, canNext, title, artist, artworkPath)
         if (isPlaying) {
             if (!isForeground) {
                 startForeground(NOTIFICATION_ID, notif)
@@ -194,7 +208,8 @@ class MediaPlaybackService : Service() {
         canPrevious: Boolean,
         canNext: Boolean,
         title: String,
-        artist: String
+        artist: String,
+        artworkPath: String
     ): Notification {
         val playPauseIntent = PendingIntent.getService(
             this,
@@ -234,6 +249,14 @@ class MediaPlaybackService : Service() {
             }
             .setOngoing(isPlaying)
             .setOnlyAlertOnce(true)
+            .apply {
+                // Large icon is shown in notification shade, and some system panels pick it up too.
+                if (artworkPath.isNotEmpty()) {
+                    runCatching { BitmapFactory.decodeFile(artworkPath) }.getOrNull()?.let { bmp ->
+                        setLargeIcon(bmp)
+                    }
+                }
+            }
 
         val compact = mutableListOf<Int>()
         var idx = 0
