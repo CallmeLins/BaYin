@@ -18,6 +18,8 @@ import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -33,6 +35,8 @@ class MediaPlaybackService : Service() {
     private var isForeground = false
     private var lastNowPlayingId: String? = null
     private var lastArtworkPath: String? = null
+    private var lastArtworkUrl: String? = null
+    private var currentArtwork: android.graphics.Bitmap? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -119,6 +123,7 @@ class MediaPlaybackService : Service() {
         val artist = obj.optString("artist", "")
         val album = obj.optString("album", "")
         val artworkPath = obj.optString("artwork_path", "")
+        val artworkUrl = obj.optString("artwork_url", "")
         val isPlaying = obj.optBoolean("is_playing", false)
         val positionMs = obj.optLong("position_ms", 0L).coerceAtLeast(0L)
         val durationMs = obj.optLong("duration_ms", 0L).coerceAtLeast(0L)
@@ -143,9 +148,22 @@ class MediaPlaybackService : Service() {
             return
         }
 
-        // Metadata only needs updating when the track changes.
-        if (id.isNotEmpty() && id != lastNowPlayingId) {
-            lastNowPlayingId = id
+        // Update metadata when:
+        // - track changes, OR
+        // - artwork becomes available/changes (e.g. stream cover gets cached after first poll)
+        val isTrackChanged = id.isNotEmpty() && id != lastNowPlayingId
+        val isArtworkChanged =
+            (artworkPath.isNotEmpty() && artworkPath != lastArtworkPath) ||
+            (artworkPath.isEmpty() && artworkUrl.isNotEmpty() && artworkUrl != lastArtworkUrl)
+
+        if (id.isNotEmpty() && (isTrackChanged || isArtworkChanged)) {
+            if (isTrackChanged) {
+                lastNowPlayingId = id
+                currentArtwork = null
+                lastArtworkPath = null
+                lastArtworkUrl = null
+            }
+
             val metaBuilder = MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, title)
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, artist)
@@ -153,11 +171,37 @@ class MediaPlaybackService : Service() {
                 .putLong(MediaMetadata.METADATA_KEY_DURATION, durationMs)
 
             // Attach album art if available (this is what system UIs use for lockscreen / cast / flows).
-            val art = if (artworkPath.isNotEmpty() && artworkPath != lastArtworkPath) {
-                lastArtworkPath = artworkPath
-                runCatching { BitmapFactory.decodeFile(artworkPath) }.getOrNull()
-            } else null
+            val art = if (artworkPath.isNotEmpty()) {
+                if (artworkPath == lastArtworkPath && currentArtwork != null) {
+                    currentArtwork
+                } else {
+                    lastArtworkPath = artworkPath
+                    lastArtworkUrl = null
+                    runCatching { BitmapFactory.decodeFile(artworkPath) }.getOrNull()
+                }
+            } else if (artworkUrl.isNotEmpty()) {
+                if (artworkUrl == lastArtworkUrl && currentArtwork != null) {
+                    currentArtwork
+                } else {
+                    lastArtworkUrl = artworkUrl
+                    lastArtworkPath = null
+                    runCatching {
+                        // URL may include auth query params; this runs on a background thread (poll executor).
+                        val conn = (URL(artworkUrl).openConnection() as HttpURLConnection).apply {
+                            connectTimeout = 5_000
+                            readTimeout = 10_000
+                            instanceFollowRedirects = true
+                        }
+                        conn.inputStream.use { input -> BitmapFactory.decodeStream(input) }
+                    }.getOrNull()
+                }
+            } else {
+                lastArtworkPath = null
+                lastArtworkUrl = null
+                null
+            }
             if (art != null) {
+                currentArtwork = art
                 metaBuilder
                     .putBitmap(MediaMetadata.METADATA_KEY_ART, art)
                     .putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, art)
@@ -175,7 +219,7 @@ class MediaPlaybackService : Service() {
         session.setPlaybackState(playbackState)
 
         // Notification/foreground policy.
-        val notif = buildNotification(isPlaying, canPrevious, canNext, title, artist, artworkPath)
+        val notif = buildNotification(isPlaying, canPrevious, canNext, title, artist)
         if (isPlaying) {
             if (!isForeground) {
                 startForeground(NOTIFICATION_ID, notif)
@@ -208,8 +252,7 @@ class MediaPlaybackService : Service() {
         canPrevious: Boolean,
         canNext: Boolean,
         title: String,
-        artist: String,
-        artworkPath: String
+        artist: String
     ): Notification {
         val playPauseIntent = PendingIntent.getService(
             this,
@@ -251,11 +294,7 @@ class MediaPlaybackService : Service() {
             .setOnlyAlertOnce(true)
             .apply {
                 // Large icon is shown in notification shade, and some system panels pick it up too.
-                if (artworkPath.isNotEmpty()) {
-                    runCatching { BitmapFactory.decodeFile(artworkPath) }.getOrNull()?.let { bmp ->
-                        setLargeIcon(bmp)
-                    }
-                }
+                currentArtwork?.let { setLargeIcon(it) }
             }
 
         val compact = mutableListOf<Int>()

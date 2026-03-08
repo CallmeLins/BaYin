@@ -2,6 +2,7 @@
 
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Database song record
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -203,5 +204,62 @@ pub fn get_song_count_by_source(conn: &Connection, source_type: &str) -> Result<
         "SELECT COUNT(*) FROM songs WHERE source_type = ?1",
         [source_type],
         |row| row.get(0),
+    )
+}
+
+/// Get existing `cover_hash` values for songs of a given source/server.
+///
+/// This is used to preserve cached covers across re-scans (e.g. streaming libraries),
+/// even if we delete-and-reinsert songs for that source.
+pub fn get_cover_hashes_by_source(
+    conn: &Connection,
+    source_type: &str,
+    server_id: Option<&str>,
+) -> Result<HashMap<String, String>> {
+    let mut map = HashMap::new();
+
+    if let Some(sid) = server_id {
+        let mut stmt = conn.prepare(
+            "SELECT id, cover_hash FROM songs
+             WHERE source_type = ?1 AND server_id = ?2 AND cover_hash IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![source_type, sid], |row| {
+            let id: String = row.get(0)?;
+            let hash: String = row.get(1)?;
+            Ok((id, hash))
+        })?;
+
+        for row in rows {
+            let (id, hash) = row?;
+            map.insert(id, hash);
+        }
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT id, cover_hash FROM songs
+             WHERE source_type = ?1 AND cover_hash IS NOT NULL",
+        )?;
+        let rows = stmt.query_map(params![source_type], |row| {
+            let id: String = row.get(0)?;
+            let hash: String = row.get(1)?;
+            Ok((id, hash))
+        })?;
+
+        for row in rows {
+            let (id, hash) = row?;
+            map.insert(id, hash);
+        }
+    }
+
+    Ok(map)
+}
+
+/// Update a song's cover hash (reference into CoverCache).
+///
+/// Currently used by Android system media integration for lazy cover caching.
+#[cfg(target_os = "android")]
+pub fn update_song_cover_hash(conn: &Connection, song_id: &str, cover_hash: &str) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET cover_hash = ?1, updated_at = strftime('%s','now') WHERE id = ?2",
+        params![cover_hash, song_id],
     )
 }

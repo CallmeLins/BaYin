@@ -432,6 +432,15 @@ pub async fn scan_stream_to_db(
             }
         };
 
+        // Preserve existing cached covers for this server.
+        // Stream songs are frequently delete-and-reinserted, so without this we would lose
+        // `cover_hash` references and end up re-downloading covers repeatedly.
+        let existing_cover_hashes = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::songs::get_cover_hashes_by_source(&conn, "stream", Some(&server.id))
+                .map_err(|e| e.to_string())?
+        };
+
         // Clear old songs for this server
         {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -443,8 +452,10 @@ pub async fn scan_stream_to_db(
         // Note: Stream songs don't cache covers locally, they use server URLs
         let song_inputs: Vec<SongInput> = stream_songs
             .iter()
-            .map(|s| SongInput {
-                id: format!("{}-{}", server.id, s.id),
+            .map(|s| {
+                let id = format!("{}-{}", server.id, s.id);
+                SongInput {
+                id: id.clone(),
                 title: s.title.clone(),
                 artist: s.artist.clone(),
                 album: s.album.clone(),
@@ -453,7 +464,7 @@ pub async fn scan_stream_to_db(
                 file_size: s.file_size as i64,
                 is_hr: s.is_hr,
                 is_sq: s.is_sq,
-                cover_hash: None, // Stream songs use server cover URLs directly
+                cover_hash: existing_cover_hashes.get(&id).cloned(),
                 server_song_id: Some(s.id.clone()),
                 stream_info: Some(serde_json::json!({
                     "type": "stream",
@@ -477,6 +488,7 @@ pub async fn scan_stream_to_db(
                 sample_rate: s.sample_rate,
                 bitrate: s.bitrate,
                 channels: s.channels,
+            }
             })
             .collect();
 

@@ -22,6 +22,8 @@ pub struct Track {
     pub duration_secs: f64,
     pub file_path: String,
     pub artwork_ref: Option<String>,
+    /// For streaming sources, pass a directly fetchable artwork URL (may include auth query params).
+    pub artwork_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

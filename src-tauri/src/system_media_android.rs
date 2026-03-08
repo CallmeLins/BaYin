@@ -6,6 +6,12 @@
 #![cfg(target_os = "android")]
 
 use std::sync::OnceLock;
+use std::{
+    collections::HashSet,
+    io::Read,
+    sync::{Mutex, MutexGuard},
+    time::Duration,
+};
 
 use jni::{
     objects::{JClass, JString},
@@ -17,11 +23,13 @@ use tauri::{Emitter, Manager};
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
 use crate::commands::CoverCacheState;
+use crate::db::DbState;
 use crate::playback::PlaybackDomainState;
 use crate::playback_control;
 use crate::utils::cover::CoverSize;
 
 static APP_HANDLE: OnceLock<tauri::AppHandle> = OnceLock::new();
+static ARTWORK_CACHE_INFLIGHT: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
 
 pub fn set_app_handle(handle: tauri::AppHandle) {
     let _ = APP_HANDLE.set(handle);
@@ -35,6 +43,7 @@ struct AndroidNowPlaying {
     artist: String,
     album: String,
     artwork_path: Option<String>,
+    artwork_url: Option<String>,
     is_playing: bool,
     position_ms: i64,
     duration_ms: i64,
@@ -66,6 +75,109 @@ fn emit_domain_changed(app: &tauri::AppHandle) {
     );
 }
 
+fn inflight_set() -> MutexGuard<'static, HashSet<String>> {
+    ARTWORK_CACHE_INFLIGHT
+        .get_or_init(|| Mutex::new(HashSet::new()))
+        .lock()
+        .unwrap()
+}
+
+fn try_mark_artwork_inflight(track_id: &str) -> bool {
+    let mut set = inflight_set();
+    if set.contains(track_id) {
+        return false;
+    }
+    set.insert(track_id.to_string());
+    true
+}
+
+fn unmark_artwork_inflight(track_id: &str) {
+    let mut set = inflight_set();
+    set.remove(track_id);
+}
+
+fn spawn_lazy_cache_artwork(app: tauri::AppHandle, track_id: String, artwork_url: String) {
+    if !try_mark_artwork_inflight(&track_id) {
+        return;
+    }
+
+    std::thread::spawn(move || {
+        let result: Result<String, String> = (|| {
+            // 1) Download
+            let client = reqwest::blocking::Client::builder()
+                .connect_timeout(Duration::from_secs(8))
+                .timeout(Duration::from_secs(15))
+                .build()
+                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+            let mut resp = client
+                .get(&artwork_url)
+                .send()
+                .map_err(|e| format!("Artwork request failed: {}", e))?;
+
+            let status = resp.status().as_u16();
+            if status != 200 {
+                return Err(format!("Artwork request failed with status {}", status));
+            }
+
+            let mime_type = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string());
+
+            // Avoid pathological downloads; covers should be small.
+            let max_bytes: usize = 8 * 1024 * 1024;
+            let mut buf = Vec::new();
+            resp.take(max_bytes as u64)
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to read artwork bytes: {}", e))?;
+            if buf.is_empty() {
+                return Err("Empty artwork response".to_string());
+            }
+
+            // 2) Save into CoverCache
+            let hash = {
+                let cache = app
+                    .try_state::<CoverCacheState>()
+                    .ok_or_else(|| "CoverCacheState not available".to_string())?;
+                let mut cache = cache.0.lock().map_err(|_| "CoverCache lock poisoned".to_string())?;
+                cache.save_cover(&buf, mime_type.as_deref())
+            }?;
+
+            // 3) Persist into DB
+            {
+                let db = app
+                    .try_state::<DbState>()
+                    .ok_or_else(|| "DbState not available".to_string())?;
+                let conn = db.0.lock().map_err(|_| "DbState lock poisoned".to_string())?;
+                let _ = crate::db::songs::update_song_cover_hash(&conn, &track_id, &hash)
+                    .map_err(|e| e.to_string())?;
+            }
+
+            // 4) Patch playback domain so subsequent polls can return `artwork_path` without waiting for UI.
+            if let Some(domain) = app.try_state::<PlaybackDomainState>() {
+                let mut d = domain.0.lock().unwrap();
+                if let Some(t) = d.queue.iter_mut().find(|t| t.id == track_id) {
+                    t.artwork_ref = Some(hash.clone());
+                }
+            }
+
+            Ok(hash)
+        })();
+
+        unmark_artwork_inflight(&track_id);
+
+        if let Ok(hash) = result {
+            // Optional: UI may choose to refresh covers when this fires.
+            let _ = app.emit(
+                "playback:artwork_cached",
+                serde_json::json!({ "trackId": track_id, "coverHash": hash }),
+            );
+        }
+    });
+}
+
 fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
     let domain = app.try_state::<PlaybackDomainState>()?;
     let engine = app.try_state::<AudioEngineState>()?;
@@ -83,6 +195,16 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
             .get_cover_path(hash, CoverSize::Mid)
             .map(|p| p.to_string_lossy().to_string())
     });
+
+    // Lazy cover caching for streaming tracks:
+    // - If we already have a cached `cover_hash`, prefer local `artwork_path`.
+    // - Otherwise, return `artwork_url` immediately (so system UI can show something),
+    //   while caching the image into CoverCache + DB in the background.
+    if artwork_path.is_none() && track.artwork_ref.is_none() {
+        if let Some(url) = track.artwork_url.clone() {
+            spawn_lazy_cache_artwork(app.clone(), track.id.clone(), url);
+        }
+    }
 
     let s = {
         let engine = engine.lock().unwrap();
@@ -104,6 +226,7 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
         artist: track.artist,
         album: track.album,
         artwork_path,
+        artwork_url: track.artwork_url,
         is_playing: s.is_playing,
         position_ms: pos_ms,
         duration_ms: dur_ms,
