@@ -227,6 +227,7 @@ pub async fn fetch_playlists(config: &StreamServerConfig) -> Result<Vec<(String,
         .data
         .and_then(|d| d.playlists)
         .and_then(|p| p.playlist)
+        .map(|p| p.into_vec())
         .unwrap_or_default();
 
     Ok(playlists
@@ -274,6 +275,7 @@ pub async fn fetch_playlist_song_ids(
         .data
         .and_then(|d| d.playlist)
         .and_then(|p| p.entry)
+        .map(|e| e.into_vec())
         .unwrap_or_default();
 
     Ok(entries.into_iter().map(|e| e.id).collect())

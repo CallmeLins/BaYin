@@ -1,6 +1,22 @@
 //! 流媒体服务器数据模型（支持 Navidrome/Subsonic/Jellyfin/Emby 等）
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum OneOrMany<T> {
+    One(T),
+    Many(Vec<T>),
+}
+
+impl<T> OneOrMany<T> {
+    pub fn into_vec(self) -> Vec<T> {
+        match self {
+            OneOrMany::One(v) => vec![v],
+            OneOrMany::Many(v) => v,
+        }
+    }
+}
+
 /// 服务器类型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
@@ -138,7 +154,7 @@ pub struct SubsonicPlaylistsResponse {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubsonicPlaylists {
-    pub playlist: Option<Vec<SubsonicPlaylistSummary>>,
+    pub playlist: Option<OneOrMany<SubsonicPlaylistSummary>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -162,7 +178,7 @@ pub struct SubsonicPlaylistResponse {
 #[serde(rename_all = "camelCase")]
 pub struct SubsonicPlaylist {
     #[serde(default)]
-    pub entry: Option<Vec<SubsonicPlaylistEntry>>,
+    pub entry: Option<OneOrMany<SubsonicPlaylistEntry>>,
 }
 
 #[derive(Debug, Deserialize)]
