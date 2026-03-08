@@ -260,6 +260,93 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
     Ok(all_songs)
 }
 
+// ============ Playlists ============
+
+/// Fetch playlist summaries from a Jellyfin/Emby server.
+pub async fn fetch_playlists(
+    config: &StreamServerConfig,
+) -> Result<Vec<(String, String, u32)>, String> {
+    let user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("缺少 userId，请先测试连接")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("缺少 accessToken，请先测试连接")?;
+
+    let client = Client::new();
+    let url = format!("{}/Users/{}/Items", base_url(config), user_id);
+
+    let auth_headers = build_auth_header(config);
+    let mut req = client.get(&url).query(&[
+        ("IncludeItemTypes", "Playlist"),
+        ("Recursive", "true"),
+        ("SortBy", "SortName"),
+        ("SortOrder", "Ascending"),
+        ("Fields", "ChildCount"),
+        ("Limit", "10000"),
+    ]);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("请求失败: HTTP {}", response.status()));
+    }
+
+    let data: JellyfinItemsResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    Ok(data
+        .items
+        .into_iter()
+        .map(|p| (p.id, p.name, p.child_count.unwrap_or(0)))
+        .collect())
+}
+
+/// Fetch playlist track ids from a Jellyfin/Emby server.
+pub async fn fetch_playlist_song_ids(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<Vec<String>, String> {
+    let user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("缺少 userId，请先测试连接")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("缺少 accessToken，请先测试连接")?;
+
+    let client = Client::new();
+    let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
+
+    let auth_headers = build_auth_header(config);
+    let mut req = client.get(&url).query(&[
+        ("UserId", user_id),
+        ("Limit", "10000"),
+    ]);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("请求失败: HTTP {}", response.status()));
+    }
+
+    let data: JellyfinItemsResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    Ok(data.items.into_iter().map(|i| i.id).collect())
+}
+
 /// 获取流 URL
 pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
     let token = config.access_token.as_deref().unwrap_or("");

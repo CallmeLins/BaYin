@@ -62,6 +62,8 @@ use commands::{
     scan_local_to_db,
     scan_music_files,
     scan_stream_to_db,
+    stream_get_playlist_tracks,
+    stream_get_playlists,
     // File watcher commands
     start_file_watcher,
     stop_file_watcher,
@@ -261,7 +263,10 @@ pub fn run() {
             playback_set_mode,
             playback_play_index,
             playback_next,
-            playback_previous
+            playback_previous,
+            // Stream playlists (remote)
+            stream_get_playlists,
+            stream_get_playlist_tracks
         ])
         .on_window_event(|_window, _event| {
             #[cfg(desktop)]

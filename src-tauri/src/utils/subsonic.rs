@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::models::{
     ConnectionTestResult, PingResponse, ScannedSong, SearchResponse, StreamServerConfig,
-    SubsonicResponse, SubsonicSong,
+    SubsonicPlaylistResponse, SubsonicPlaylistsResponse, SubsonicResponse, SubsonicSong,
 };
 use crate::utils::audio::extract_filename_from_path_str;
 
@@ -188,6 +188,95 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
     }
 
     Ok(all_songs)
+}
+
+// ============ Playlists ============
+
+/// Fetch playlist summaries from a Subsonic-compatible server (Navidrome/OpenSubsonic/Subsonic).
+pub async fn fetch_playlists(config: &StreamServerConfig) -> Result<Vec<(String, String, u32, Option<String>)>, String> {
+    let client = Client::new();
+    let url = build_url(config, "getPlaylists");
+    let params = generate_auth_params(config);
+
+    let response = client
+        .get(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("请求失败: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<SubsonicPlaylistsResponse> = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "未知错误".to_string());
+        return Err(msg);
+    }
+
+    let playlists = inner
+        .data
+        .and_then(|d| d.playlists)
+        .and_then(|p| p.playlist)
+        .unwrap_or_default();
+
+    Ok(playlists
+        .into_iter()
+        .map(|p| (p.id, p.name, p.song_count.unwrap_or(0), p.changed))
+        .collect())
+}
+
+/// Fetch playlist track ids from a Subsonic-compatible server.
+pub async fn fetch_playlist_song_ids(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<Vec<String>, String> {
+    let client = Client::new();
+    let url = build_url(config, "getPlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("id", playlist_id.to_string()));
+
+    let response = client
+        .get(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("请求失败: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<SubsonicPlaylistResponse> = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "未知错误".to_string());
+        return Err(msg);
+    }
+
+    let entries = inner
+        .data
+        .and_then(|d| d.playlist)
+        .and_then(|p| p.entry)
+        .unwrap_or_default();
+
+    Ok(entries.into_iter().map(|e| e.id).collect())
 }
 
 /// 获取歌曲流 URL

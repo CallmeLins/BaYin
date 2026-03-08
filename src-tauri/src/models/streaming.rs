@@ -127,6 +127,50 @@ pub struct SubsonicSong {
 // ============ Jellyfin/Emby API 模型 ============
 
 /// Jellyfin 认证请求
+// ============ Subsonic playlists ============
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylistsResponse {
+    pub playlists: Option<SubsonicPlaylists>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylists {
+    pub playlist: Option<Vec<SubsonicPlaylistSummary>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylistSummary {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub song_count: Option<u32>,
+    #[serde(default)]
+    pub changed: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylistResponse {
+    pub playlist: Option<SubsonicPlaylist>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylist {
+    #[serde(default)]
+    pub entry: Option<Vec<SubsonicPlaylistEntry>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicPlaylistEntry {
+    pub id: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct JellyfinAuthRequest {
@@ -169,6 +213,8 @@ pub struct JellyfinItemsResponse {
 pub struct JellyfinItem {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub child_count: Option<u32>,
     #[serde(default)]
     pub album: Option<String>,
     #[serde(default)]

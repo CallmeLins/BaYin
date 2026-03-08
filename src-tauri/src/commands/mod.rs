@@ -4,6 +4,7 @@ pub mod db;
 pub mod scan;
 pub mod audio;
 pub mod playback;
+pub mod playlists;
 
 pub use streaming::*;
 pub use scanner::*;
@@ -11,3 +12,4 @@ pub use db::*;
 pub use scan::*;
 pub use audio::*;
 pub use playback::*;
+pub use playlists::*;

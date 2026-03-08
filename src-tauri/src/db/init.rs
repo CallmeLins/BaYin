@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 3;
+const CURRENT_SCHEMA_VERSION: i32 = 4;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -39,6 +39,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 3 {
         migrate_v3(conn)?;
+    }
+    if from_version < 4 {
+        migrate_v4(conn)?;
     }
 
     Ok(())
@@ -165,6 +168,49 @@ fn migrate_v3(conn: &Connection) -> Result<()> {
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [3])?;
 
+    Ok(())
+}
+
+/// Version 4: Stream playlists cache (remote playlist index + items).
+fn migrate_v4(conn: &Connection) -> Result<()> {
+    // Playlist summaries fetched from remote servers.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS stream_playlists (
+            server_id       TEXT NOT NULL,
+            playlist_id     TEXT NOT NULL,
+            name            TEXT NOT NULL,
+            song_count      INTEGER NOT NULL DEFAULT 0,
+            kind            TEXT NOT NULL DEFAULT 'manual',
+            updated_at      INTEGER,
+            synced_at       INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            PRIMARY KEY (server_id, playlist_id)
+        )",
+        [],
+    )?;
+
+    // Playlist items (song ids) fetched from remote servers.
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS stream_playlist_items (
+            server_id       TEXT NOT NULL,
+            playlist_id     TEXT NOT NULL,
+            position        INTEGER NOT NULL,
+            song_id         TEXT NOT NULL,
+            synced_at       INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            PRIMARY KEY (server_id, playlist_id, position)
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stream_playlists_server ON stream_playlists(server_id)",
+        [],
+    )?;
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_stream_playlist_items_server_playlist ON stream_playlist_items(server_id, playlist_id)",
+        [],
+    )?;
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [4])?;
     Ok(())
 }
 

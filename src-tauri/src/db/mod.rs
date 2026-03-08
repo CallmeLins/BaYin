@@ -7,6 +7,7 @@ pub mod init;
 pub mod songs;
 pub mod albums;
 pub mod servers;
+pub mod playlists;
 
 use rusqlite::Connection;
 use std::sync::Mutex;

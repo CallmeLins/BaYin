@@ -112,6 +112,38 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
     Ok(servers)
 }
 
+/// Get a single stream server configuration by id.
+pub fn get_stream_server_by_id(conn: &Connection, server_id: &str) -> Result<Option<DbStreamServer>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, server_type, server_name, server_url, username, password,
+                access_token, user_id, enabled, created_at
+         FROM stream_servers
+         WHERE id = ?1
+         LIMIT 1",
+    )?;
+
+    let row = stmt.query_row(params![server_id], |row| {
+        Ok(DbStreamServer {
+            id: row.get(0)?,
+            server_type: row.get(1)?,
+            server_name: row.get(2)?,
+            server_url: row.get(3)?,
+            username: row.get(4)?,
+            password: row.get(5)?,
+            access_token: row.get(6)?,
+            user_id: row.get(7)?,
+            enabled: row.get::<_, i32>(8)? != 0,
+            created_at: row.get(9)?,
+        })
+    });
+
+    match row {
+        Ok(v) => Ok(Some(v)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
 /// Delete a stream server and all associated songs
 pub fn delete_stream_server(conn: &Connection, server_id: &str) -> Result<()> {
     // Delete associated songs first
