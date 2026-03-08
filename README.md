@@ -102,6 +102,12 @@ npx tauri dev
 npx tauri build
 ```
 
+## 联系我
+
+### TG群组
+
+[https://t.me/+sQPyUqlcYaY5OTI9](https://t.me/+sQPyUqlcYaY5OTI9)
+
 ## 支持项目
 
 如果觉得本项目对你有帮助，欢迎 Star 支持！

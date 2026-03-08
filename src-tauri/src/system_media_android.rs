@@ -110,7 +110,7 @@ fn spawn_lazy_cache_artwork(app: tauri::AppHandle, track_id: String, artwork_url
                 .build()
                 .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-            let mut resp = client
+            let resp = client
                 .get(&artwork_url)
                 .send()
                 .map_err(|e| format!("Artwork request failed: {}", e))?;
@@ -141,7 +141,7 @@ fn spawn_lazy_cache_artwork(app: tauri::AppHandle, track_id: String, artwork_url
                 let cache = app
                     .try_state::<CoverCacheState>()
                     .ok_or_else(|| "CoverCacheState not available".to_string())?;
-                let mut cache = cache.0.lock().map_err(|_| "CoverCache lock poisoned".to_string())?;
+                let cache = cache.0.lock().map_err(|_| "CoverCache lock poisoned".to_string())?;
                 cache.save_cover(&buf, mime_type.as_deref())
             }?;
 
