@@ -40,6 +40,8 @@ pub struct DbSong {
     pub bitrate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u8>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 /// Input data for saving a song
@@ -83,7 +85,8 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
     let mut stmt = conn.prepare(
         "SELECT id, title, artist, album, duration, file_path, file_size,
                 is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
-                stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels
+                stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
+                created_at, updated_at
          FROM songs
          ORDER BY title COLLATE NOCASE",
     )?;
@@ -111,6 +114,8 @@ pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
                 sample_rate: row.get::<_, Option<u32>>(17)?,
                 bitrate: row.get::<_, Option<u32>>(18)?,
                 channels: row.get::<_, Option<u8>>(19)?,
+                created_at: row.get(20)?,
+                updated_at: row.get(21)?,
             })
         })?
         .collect::<Result<Vec<_>>>()?;
