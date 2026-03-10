@@ -27,7 +27,7 @@ use windows::Media::{
 use windows::Media::Playback::MediaPlayer;
 use windows::Storage::StorageFile;
 use windows::Storage::Streams::RandomAccessStreamReference;
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
 
 #[derive(Debug, Clone)]
 struct NowPlayingSnapshot {
@@ -252,9 +252,9 @@ pub fn init(app: tauri::AppHandle) {
     let app_for_thread = app.clone();
 
     std::thread::spawn(move || {
-        // WinRT APIs require COM initialization on this thread.
+        // WinRT APIs require apartment initialization on this thread.
         unsafe {
-            let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            let _ = RoInitialize(RO_INIT_MULTITHREADED);
         }
 
         let player = match MediaPlayer::new() {

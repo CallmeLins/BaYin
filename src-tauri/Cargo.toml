@@ -75,4 +75,5 @@ windows = { version = "0.61", features = [
     "Storage_Streams",
     "Win32_Foundation",
     "Win32_System_Com",
+    "Win32_System_WinRT",
 ] }
