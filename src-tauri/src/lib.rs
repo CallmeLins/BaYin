@@ -2,6 +2,8 @@ mod audio_engine;
 mod commands;
 mod playback;
 mod playback_control;
+#[cfg(target_os = "windows")]
+mod system_media_windows;
 mod db;
 mod models;
 mod utils;
@@ -328,6 +330,12 @@ pub fn run() {
             }
 
             // 桌面端：创建系统托盘
+            #[cfg(target_os = "windows")]
+            {
+                // Integrate with Windows' System Media Transport Controls (media keys / volume flyout).
+                system_media_windows::init(app.handle().clone());
+            }
+
             #[cfg(desktop)]
             {
                 let app_handle = app.handle().clone();

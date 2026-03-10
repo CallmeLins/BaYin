@@ -301,6 +301,7 @@ dependencies = [
  "tauri-plugin-store",
  "tauri-plugin-window-state",
  "walkdir",
+ "windows 0.61.3",
 ]
 
 [[package]]
