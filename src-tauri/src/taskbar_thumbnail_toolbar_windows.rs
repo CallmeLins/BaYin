@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::Manager;
+use tauri::Emitter;
 
 use windows::core::PCWSTR;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
@@ -43,6 +44,27 @@ static MAIN_HWND_RAW: OnceLock<isize> = OnceLock::new();
 static OLD_WNDPROC: OnceLock<isize> = OnceLock::new();
 static TASKBAR_BTN_CREATED_MSG: OnceLock<u32> = OnceLock::new();
 static TASKBAR_REINIT: AtomicBool = AtomicBool::new(false);
+
+fn emit_domain_changed(app: &tauri::AppHandle) {
+    let domain = match app.try_state::<PlaybackDomainState>() {
+        Some(s) => s,
+        None => return,
+    };
+    let (index, track_id) = {
+        let d = match domain.0.lock() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        if d.queue.is_empty() || d.index >= d.queue.len() {
+            return;
+        }
+        (d.index, d.queue[d.index].id.clone())
+    };
+    let _ = app.emit(
+        "playback:domain_changed",
+        serde_json::json!({ "index": index, "track_id": track_id }),
+    );
+}
 
 static ICON_PREV: OnceLock<isize> = OnceLock::new();
 static ICON_NEXT: OnceLock<isize> = OnceLock::new();
@@ -376,7 +398,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                 app.try_state::<PlaybackDomainState>(),
                                 app.try_state::<AudioEngineState>(),
                             ) {
-                                let _ = crate::playback_control::previous(&domain, &engine);
+                                if crate::playback_control::previous(&domain, &engine) {
+                                    emit_domain_changed(app);
+                                }
                             }
                             return LRESULT(0);
                         }
@@ -385,7 +409,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                 app.try_state::<PlaybackDomainState>(),
                                 app.try_state::<AudioEngineState>(),
                             ) {
-                                let _ = crate::playback_control::next(&domain, &engine);
+                                if crate::playback_control::next(&domain, &engine) {
+                                    emit_domain_changed(app);
+                                }
                             }
                             return LRESULT(0);
                         }
@@ -423,7 +449,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 
                             if let Some(domain) = domain {
                                 let idx = domain.0.lock().ok().map(|d| d.index).unwrap_or(0);
-                                let _ = crate::playback_control::play_index(idx, &domain, &engine);
+                                if crate::playback_control::play_index(idx, &domain, &engine) {
+                                    emit_domain_changed(app);
+                                }
                             }
                             return LRESULT(0);
                         }

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::Manager;
+use tauri::Emitter;
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
 use crate::commands::CoverCacheState;
@@ -223,7 +224,9 @@ fn handle_button(app: &tauri::AppHandle, button: SystemMediaTransportControlsBut
             }
 
             let idx = { domain.0.lock().ok().map(|d| d.index).unwrap_or(0) };
-            let _ = crate::playback_control::play_index(idx, &domain, &engine);
+            if crate::playback_control::play_index(idx, &domain, &engine) {
+                emit_domain_changed(app);
+            }
         }
         SystemMediaTransportControlsButton::Pause => {
             if let Ok(engine) = engine.lock() {
@@ -236,13 +239,38 @@ fn handle_button(app: &tauri::AppHandle, button: SystemMediaTransportControlsBut
             }
         }
         SystemMediaTransportControlsButton::Next => {
-            let _ = crate::playback_control::next(&domain, &engine);
+            if crate::playback_control::next(&domain, &engine) {
+                emit_domain_changed(app);
+            }
         }
         SystemMediaTransportControlsButton::Previous => {
-            let _ = crate::playback_control::previous(&domain, &engine);
+            if crate::playback_control::previous(&domain, &engine) {
+                emit_domain_changed(app);
+            }
         }
         _ => {}
     }
+}
+
+fn emit_domain_changed(app: &tauri::AppHandle) {
+    let domain = match app.try_state::<PlaybackDomainState>() {
+        Some(s) => s,
+        None => return,
+    };
+    let (index, track_id) = {
+        let d = match domain.0.lock() {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        if d.queue.is_empty() || d.index >= d.queue.len() {
+            return;
+        }
+        (d.index, d.queue[d.index].id.clone())
+    };
+    let _ = app.emit(
+        "playback:domain_changed",
+        serde_json::json!({ "index": index, "track_id": track_id }),
+    );
 }
 
 pub fn init(app: tauri::AppHandle) {
