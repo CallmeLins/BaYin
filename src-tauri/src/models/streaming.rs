@@ -138,6 +138,8 @@ pub struct SubsonicSong {
     pub bit_depth: Option<u8>,
     #[serde(default)]
     pub path: Option<String>,
+    #[serde(default)]
+    pub created: Option<String>,
 }
 
 // ============ Jellyfin/Emby API 模型 ============
@@ -249,6 +251,8 @@ pub struct JellyfinItem {
     pub image_tags: Option<std::collections::HashMap<String, String>>,
     #[serde(default)]
     pub media_sources: Option<Vec<JellyfinMediaSource>>,
+    #[serde(default)]
+    pub date_created: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

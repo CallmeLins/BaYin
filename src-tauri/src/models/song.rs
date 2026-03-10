@@ -27,6 +27,8 @@ pub struct ScannedSong {
     pub bitrate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<i64>,
 }
 
 /// 扫描选项

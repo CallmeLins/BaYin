@@ -559,6 +559,7 @@ pub fn run() {
                                                 sample_rate: song.sample_rate,
                                                 bitrate: song.bitrate,
                                                 channels: song.channels,
+                                                created_at: None,
                                             })
                                         }
                                         Err(_) => None,

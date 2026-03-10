@@ -272,6 +272,7 @@ dependencies = [
  "base64 0.22.1",
  "bayin-playback",
  "bayin-system-media",
+ "chrono",
  "cpal",
  "crossbeam-channel",
  "flate2",

@@ -8,6 +8,7 @@ use crate::models::{
     ScannedSong, ServerType, StreamServerConfig,
 };
 use crate::utils::audio::extract_filename_from_path_str;
+use crate::utils::datetime::parse_datetime_to_epoch_seconds;
 
 /// 无损音频格式
 const LOSSLESS_CONTAINERS: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -196,6 +197,10 @@ fn convert_item(item: &JellyfinItem, config: &StreamServerConfig) -> ScannedSong
             .and_then(|s| s.bitrate)
             .map(|b| b / 1000), // Jellyfin reports bps, convert to kbps
         channels: audio_stream.and_then(|s| s.channels).map(|c| c as u8),
+        created_at: item
+            .date_created
+            .as_deref()
+            .and_then(parse_datetime_to_epoch_seconds),
     }
 }
 
@@ -223,7 +228,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
             .query(&[
                 ("IncludeItemTypes", "Audio"),
                 ("Recursive", "true"),
-                ("Fields", "MediaSources,Path"),
+                ("Fields", "MediaSources,Path,DateCreated"),
                 ("SortBy", "SortName"),
                 ("SortOrder", "Ascending"),
             ])

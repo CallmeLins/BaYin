@@ -197,6 +197,7 @@ pub fn db_migrate_from_localstorage(
             sample_rate: None,
             bitrate: None,
             channels: None,
+            created_at: None,
         };
 
         if is_stream {

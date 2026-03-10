@@ -78,6 +78,8 @@ pub struct SongInput {
     pub bitrate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<i64>,
 }
 
 /// Get all songs from the database (fast loading, no cover data)
@@ -137,8 +139,10 @@ pub fn save_songs(
             "INSERT OR REPLACE INTO songs
              (id, title, artist, album, duration, file_path, file_size,
               is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
-              stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, strftime('%s','now'))"
+              stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
+                     COALESCE(?21, strftime('%s','now')),
+                     strftime('%s','now'))"
         )?;
 
         for song in songs {
@@ -163,6 +167,7 @@ pub fn save_songs(
                 song.sample_rate,
                 song.bitrate,
                 song.channels,
+                song.created_at,
             ])?;
         }
     }
@@ -252,6 +257,52 @@ pub fn get_cover_hashes_by_source(
         for row in rows {
             let (id, hash) = row?;
             map.insert(id, hash);
+        }
+    }
+
+    Ok(map)
+}
+
+/// Get existing `created_at` values for songs of a given source/server.
+///
+/// This is used to preserve "date added" across re-scans when we delete-and-reinsert
+/// streaming libraries (so new songs sort after old ones).
+pub fn get_created_ats_by_source(
+    conn: &Connection,
+    source_type: &str,
+    server_id: Option<&str>,
+) -> Result<HashMap<String, i64>> {
+    let mut map = HashMap::new();
+
+    if let Some(sid) = server_id {
+        let mut stmt = conn.prepare(
+            "SELECT id, created_at FROM songs
+             WHERE source_type = ?1 AND server_id = ?2",
+        )?;
+        let rows = stmt.query_map(params![source_type, sid], |row| {
+            let id: String = row.get(0)?;
+            let created_at: i64 = row.get(1)?;
+            Ok((id, created_at))
+        })?;
+
+        for row in rows {
+            let (id, created_at) = row?;
+            map.insert(id, created_at);
+        }
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT id, created_at FROM songs
+             WHERE source_type = ?1",
+        )?;
+        let rows = stmt.query_map(params![source_type], |row| {
+            let id: String = row.get(0)?;
+            let created_at: i64 = row.get(1)?;
+            Ok((id, created_at))
+        })?;
+
+        for row in rows {
+            let (id, created_at) = row?;
+            map.insert(id, created_at);
         }
     }
 

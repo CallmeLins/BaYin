@@ -9,6 +9,7 @@ use crate::models::{
     SubsonicPlaylistResponse, SubsonicPlaylistsResponse, SubsonicResponse, SubsonicSong,
 };
 use crate::utils::audio::extract_filename_from_path_str;
+use crate::utils::datetime::parse_datetime_to_epoch_seconds;
 
 /// 无损音频格式
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -141,6 +142,7 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         sample_rate: song.sampling_rate,
         bitrate: song.bit_rate,
         channels: None,
+        created_at: song.created.as_deref().and_then(parse_datetime_to_epoch_seconds),
     }
 }
 

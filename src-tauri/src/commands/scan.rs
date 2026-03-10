@@ -209,6 +209,7 @@ pub async fn scan_local_to_db(
                         sample_rate: song.sample_rate,
                         bitrate: song.bitrate,
                         channels: song.channels,
+                        created_at: None,
                     })
                 }
                 Err(_) => {
@@ -441,6 +442,13 @@ pub async fn scan_stream_to_db(
                 .map_err(|e| e.to_string())?
         };
 
+        // Preserve existing created_at so "date added" sorting stays stable across re-scans.
+        let existing_created_ats = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::songs::get_created_ats_by_source(&conn, "stream", Some(&server.id))
+                .map_err(|e| e.to_string())?
+        };
+
         // Clear old songs for this server
         {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -455,40 +463,46 @@ pub async fn scan_stream_to_db(
             .map(|s| {
                 let id = format!("{}-{}", server.id, s.id);
                 SongInput {
-                id: id.clone(),
-                title: s.title.clone(),
-                artist: s.artist.clone(),
-                album: s.album.clone(),
-                duration: s.duration,
-                file_path: String::new(),
-                file_size: s.file_size as i64,
-                is_hr: s.is_hr,
-                is_sq: s.is_sq,
-                cover_hash: existing_cover_hashes.get(&id).cloned(),
-                server_song_id: Some(s.id.clone()),
-                stream_info: Some(serde_json::json!({
-                    "type": "stream",
-                    "serverType": server.server_type,
-                    "songId": s.id,
-                    "serverName": server.server_name,
-                    "coverUrl": s.cover_url, // Store cover URL in stream_info
-                    "config": {
-                        "serverType": server.server_type,
-                        "serverName": server.server_name,
-                        "serverUrl": server.server_url,
-                        "username": server.username,
-                        "password": server.password,
-                        "accessToken": server.access_token,
-                        "userId": server.user_id
-                    }
-                }).to_string()),
-                file_modified: None,
-                format: s.format.clone(),
-                bit_depth: s.bit_depth,
-                sample_rate: s.sample_rate,
-                bitrate: s.bitrate,
-                channels: s.channels,
-            }
+                    id: id.clone(),
+                    title: s.title.clone(),
+                    artist: s.artist.clone(),
+                    album: s.album.clone(),
+                    duration: s.duration,
+                    file_path: String::new(),
+                    file_size: s.file_size as i64,
+                    is_hr: s.is_hr,
+                    is_sq: s.is_sq,
+                    cover_hash: existing_cover_hashes.get(&id).cloned(),
+                    server_song_id: Some(s.id.clone()),
+                    stream_info: Some(
+                        serde_json::json!({
+                            "type": "stream",
+                            "serverType": server.server_type,
+                            "songId": s.id,
+                            "serverName": server.server_name,
+                            "coverUrl": s.cover_url, // Store cover URL in stream_info
+                            "config": {
+                                "serverType": server.server_type,
+                                "serverName": server.server_name,
+                                "serverUrl": server.server_url,
+                                "username": server.username,
+                                "password": server.password,
+                                "accessToken": server.access_token,
+                                "userId": server.user_id
+                            }
+                        })
+                        .to_string(),
+                    ),
+                    file_modified: None,
+                    format: s.format.clone(),
+                    bit_depth: s.bit_depth,
+                    sample_rate: s.sample_rate,
+                    bitrate: s.bitrate,
+                    channels: s.channels,
+                    created_at: s
+                        .created_at
+                        .or(existing_created_ats.get(&id).copied()),
+                }
             })
             .collect();
 

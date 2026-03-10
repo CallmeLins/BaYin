@@ -397,6 +397,7 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
         },
         bitrate,
         channels,
+        created_at: None,
     })
 }
 
