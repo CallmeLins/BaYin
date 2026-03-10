@@ -4,6 +4,8 @@ mod playback;
 mod playback_control;
 #[cfg(target_os = "windows")]
 mod system_media_windows;
+#[cfg(target_os = "windows")]
+mod taskbar_thumbnail_toolbar_windows;
 mod db;
 mod models;
 mod utils;
@@ -419,6 +421,16 @@ pub fn run() {
             {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.as_ref().window().show();
+
+                    #[cfg(target_os = "windows")]
+                    {
+                        if let Ok(hwnd) = window.hwnd() {
+                            taskbar_thumbnail_toolbar_windows::init(
+                                app.handle().clone(),
+                                hwnd.0 as isize,
+                            );
+                        }
+                    }
                 }
             }
 
