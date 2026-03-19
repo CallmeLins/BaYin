@@ -1,4 +1,4 @@
-name: Release Tauri App (Windows + Android)
+name: Release Tauri App (Windows + macOS + Android)
 
 on:
   push:
@@ -92,7 +92,51 @@ jobs:
           args: --target ${{ matrix.target }}
           tauriScript: npx tauri
 
-  # 第三步：构建 Android 版本
+  # 第三步：构建 MacOS 版本
+  build-macos:
+    needs: create-release
+    runs-on: macos-14
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add macOS targets
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install Frontend Dependencies
+        run: npm install
+        working-directory: ./src-ui
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@latest
+
+      - name: Build & Upload macOS App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: --target universal-apple-darwin
+          tauriScript: npx tauri
+
+  # 第四步：构建 Android 版本
   build-android:
     needs: create-release
     runs-on: ubuntu-latest
@@ -244,9 +288,9 @@ jobs:
         if: always()
         run: rm -f $GITHUB_WORKSPACE/release.keystore src-tauri/gen/android/keystore.properties
 
-  # 第四步：发布 Release
+  # 第五步：发布 Release
   publish-release:
-    needs: [create-release, build-windows, build-android]
+    needs: [create-release, build-windows, build-macos, build-android]
     runs-on: ubuntu-latest
     steps:
       - name: Publish Release
