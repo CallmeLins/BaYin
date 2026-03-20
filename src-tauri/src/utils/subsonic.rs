@@ -146,46 +146,64 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
     }
 }
 
-/// 获取所有歌曲（通过搜索所有）
+/// 获取所有歌曲（通过搜索所有，分页拉取）
 pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
     let client = Client::new();
     let mut all_songs = Vec::new();
+    let page_size: u64 = 5000;
+    let mut offset: u64 = 0;
 
-    // 使用 search3 获取所有歌曲
-    let url = build_url(config, "search3");
-    let mut params = generate_auth_params(config);
-    params.push(("query", "".to_string())); // 空查询获取所有
-    params.push(("songCount", "10000".to_string()));
-    params.push(("albumCount", "0".to_string()));
-    params.push(("artistCount", "0".to_string()));
+    loop {
+        let url = build_url(config, "search3");
+        let mut params = generate_auth_params(config);
+        params.push(("query", "".to_string())); // 空查询获取所有
+        params.push(("songCount", page_size.to_string()));
+        params.push(("songOffset", offset.to_string()));
+        params.push(("albumCount", "0".to_string()));
+        params.push(("artistCount", "0".to_string()));
 
-    let response = client
-        .get(&url)
-        .query(&params)
-        .send()
-        .await
-        .map_err(|e| format!("请求失败: {}", e))?;
+        let response = client
+            .get(&url)
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| format!("请求失败: {}", e))?;
 
-    let data: SubsonicResponse<SearchResponse> = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
+        let data: SubsonicResponse<SearchResponse> = response
+            .json()
+            .await
+            .map_err(|e| format!("解析响应失败: {}", e))?;
 
-    let inner = data.subsonic_response;
-    if inner.status != "ok" {
-        if let Some(error) = inner.error {
-            return Err(format!("API 错误: {}", error.message));
-        }
-        return Err("未知错误".to_string());
-    }
-
-    if let Some(search_result) = inner.data {
-        if let Some(result) = search_result.search_result3 {
-            if let Some(songs) = result.song {
-                for song in &songs {
-                    all_songs.push(convert_song(song, config));
-                }
+        let inner = data.subsonic_response;
+        if inner.status != "ok" {
+            if let Some(error) = inner.error {
+                return Err(format!("API 错误: {}", error.message));
             }
+            return Err("未知错误".to_string());
+        }
+
+        let count = if let Some(search_result) = inner.data {
+            if let Some(result) = search_result.search_result3 {
+                if let Some(songs) = result.song {
+                    let n = songs.len();
+                    for song in &songs {
+                        all_songs.push(convert_song(song, config));
+                    }
+                    n
+                } else {
+                    0
+                }
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+
+        offset += count as u64;
+        // 返回数量小于页大小说明已经是最后一页
+        if (count as u64) < page_size {
+            break;
         }
     }
 

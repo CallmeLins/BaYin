@@ -283,34 +283,47 @@ pub async fn fetch_playlists(
     let client = Client::new();
     let url = format!("{}/Users/{}/Items", base_url(config), user_id);
 
-    let auth_headers = build_auth_header(config);
-    let mut req = client.get(&url).query(&[
-        ("IncludeItemTypes", "Playlist"),
-        ("Recursive", "true"),
-        ("SortBy", "SortName"),
-        ("SortOrder", "Ascending"),
-        ("Fields", "ChildCount"),
-        ("Limit", "10000"),
-    ]);
-    for (k, v) in &auth_headers {
-        req = req.header(k.as_str(), v.as_str());
+    let mut all_playlists = Vec::new();
+    let mut start_index: u64 = 0;
+    let page_size: u64 = 500;
+
+    loop {
+        let auth_headers = build_auth_header(config);
+        let mut req = client.get(&url).query(&[
+            ("IncludeItemTypes", "Playlist"),
+            ("Recursive", "true"),
+            ("SortBy", "SortName"),
+            ("SortOrder", "Ascending"),
+            ("Fields", "ChildCount"),
+        ])
+        .query(&[("StartIndex", &start_index.to_string())])
+        .query(&[("Limit", &page_size.to_string())]);
+        for (k, v) in &auth_headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+
+        let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
+        if !response.status().is_success() {
+            return Err(format!("请求失败: HTTP {}", response.status()));
+        }
+
+        let data: JellyfinItemsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("解析响应失败: {}", e))?;
+
+        let count = data.items.len() as u64;
+        for p in data.items {
+            all_playlists.push((p.id, p.name, p.child_count.unwrap_or(0)));
+        }
+
+        start_index += count;
+        if start_index >= data.total_record_count || count == 0 {
+            break;
+        }
     }
 
-    let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!("请求失败: HTTP {}", response.status()));
-    }
-
-    let data: JellyfinItemsResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-
-    Ok(data
-        .items
-        .into_iter()
-        .map(|p| (p.id, p.name, p.child_count.unwrap_or(0)))
-        .collect())
+    Ok(all_playlists)
 }
 
 /// Fetch playlist track ids from a Jellyfin/Emby server.
@@ -330,26 +343,43 @@ pub async fn fetch_playlist_song_ids(
     let client = Client::new();
     let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
 
-    let auth_headers = build_auth_header(config);
-    let mut req = client.get(&url).query(&[
-        ("UserId", user_id),
-        ("Limit", "10000"),
-    ]);
-    for (k, v) in &auth_headers {
-        req = req.header(k.as_str(), v.as_str());
+    let mut all_ids = Vec::new();
+    let mut start_index: u64 = 0;
+    let page_size: u64 = 500;
+
+    loop {
+        let auth_headers = build_auth_header(config);
+        let mut req = client.get(&url).query(&[
+            ("UserId", user_id),
+        ])
+        .query(&[("StartIndex", &start_index.to_string())])
+        .query(&[("Limit", &page_size.to_string())]);
+        for (k, v) in &auth_headers {
+            req = req.header(k.as_str(), v.as_str());
+        }
+
+        let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
+        if !response.status().is_success() {
+            return Err(format!("请求失败: HTTP {}", response.status()));
+        }
+
+        let data: JellyfinItemsResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("解析响应失败: {}", e))?;
+
+        let count = data.items.len() as u64;
+        for item in data.items {
+            all_ids.push(item.id);
+        }
+
+        start_index += count;
+        if start_index >= data.total_record_count || count == 0 {
+            break;
+        }
     }
 
-    let response = req.send().await.map_err(|e| format!("请求失败: {}", e))?;
-    if !response.status().is_success() {
-        return Err(format!("请求失败: HTTP {}", response.status()));
-    }
-
-    let data: JellyfinItemsResponse = response
-        .json()
-        .await
-        .map_err(|e| format!("解析响应失败: {}", e))?;
-
-    Ok(data.items.into_iter().map(|i| i.id).collect())
+    Ok(all_ids)
 }
 
 /// 获取流 URL
