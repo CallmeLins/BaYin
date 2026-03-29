@@ -61,6 +61,7 @@ bayin-system-media = { path = "plugins/system-media" }
 # 桌面端专用依赖（排除 Android 和 iOS）
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"
+tauri-plugin-updater = "2"
 notify = { version = "6", features = ["macos_fsevent"] }
 
 [target.'cfg(target_os = "android")'.dependencies]

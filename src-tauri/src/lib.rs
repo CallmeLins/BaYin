@@ -284,6 +284,18 @@ pub fn run() {
         })
         .setup(|app| {
             // 初始化数据库
+            // Desktop: register the updater plugin (latest.json + signature verification).
+            // If updater config is missing (pubkey/endpoints), skip without crashing.
+            #[cfg(desktop)]
+            {
+                if let Err(e) = app
+                    .handle()
+                    .plugin(tauri_plugin_updater::Builder::new().build())
+                {
+                    eprintln!("Updater plugin init failed (skipped): {e}");
+                }
+            }
+
             let app_data_dir = app
                 .path()
                 .app_data_dir()

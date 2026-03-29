@@ -1,4 +1,4 @@
-name: Release Tauri App (Windows + macOS + Android)
+name: Release
 
 on:
   push:
@@ -8,23 +8,20 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
-  # 第一步：创建草稿 Release
   create-release:
     runs-on: ubuntu-latest
     outputs:
       release_id: ${{ steps.create-release.outputs.id }}
       tag_name: ${{ steps.get-tag.outputs.tag }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
-
       - name: Get Tag Name
         id: get-tag
-        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
       - name: Create Draft Release
         id: create-release
@@ -42,48 +39,100 @@ jobs:
             });
             core.setOutput('id', data.id);
 
-  # 第二步：构建 Windows 版本
-  build-windows:
+  build-desktop:
     needs: create-release
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: x86_64-pc-windows-msvc
-            arch: x64
-          - target: aarch64-pc-windows-msvc
-            arch: arm64
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: windows-2022
+            target: aarch64-pc-windows-msvc
+          - os: macos-14
+            target: universal-apple-darwin
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src-ui/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      - name: Add extra macOS targets
+        if: runner.os == 'macOS'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          workspaces: ./src-tauri -> target
 
       - name: Install Frontend Dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./src-ui
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@latest
 
-      - name: Build & Upload Windows App
+      - name: Prepare Tauri signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is empty or not configured" >&2
+            exit 1
+          fi
+
+          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+
+          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$RAW" > "$KEY_PATH"
+          else
+            if DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
+              && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+              printf '%s\n' "$DECODED" > "$KEY_PATH"
+            elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+              ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+              printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+            else
+              echo "Unsupported TAURI_SIGNING_PRIVATE_KEY format" >&2
+              exit 1
+            fi
+          fi
+
+          KEY_B64=""
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          fi
+
+          if [ -z "$KEY_B64" ]; then
+            echo "Failed to convert signing key to base64" >&2
+            exit 1
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build & Upload Desktop App
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -92,51 +141,6 @@ jobs:
           args: --target ${{ matrix.target }}
           tauriScript: npx tauri
 
-  # 第三步：构建 MacOS 版本
-  build-macos:
-    needs: create-release
-    runs-on: macos-14
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Add macOS targets
-        run: |
-          rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
-      - name: Rust Cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: "./src-tauri -> target"
-
-      - name: Install Frontend Dependencies
-        run: npm install
-        working-directory: ./src-ui
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
-
-      - name: Build & Upload macOS App
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: --target universal-apple-darwin
-          tauriScript: npx tauri
-
-  # 第四步：构建 Android 版本
   build-android:
     needs: create-release
     runs-on: ubuntu-latest
@@ -149,12 +153,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Setup Android SDK
@@ -163,12 +167,14 @@ jobs:
       - name: Setup NDK
         run: |
           sdkmanager --install "ndk;26.3.11579264"
-          echo "NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> $GITHUB_ENV
+          echo "NDK_HOME=$ANDROID_HOME/ndk/26.3.11579264" >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: src-ui/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -178,10 +184,10 @@ jobs:
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          workspaces: ./src-tauri -> target
 
       - name: Install Frontend Dependencies
-        run: npm install
+        run: npm ci
         working-directory: ./src-ui
 
       - name: Install Tauri CLI
@@ -193,7 +199,7 @@ jobs:
       - name: Decode Android Keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > $GITHUB_WORKSPACE/release.keystore
+        run: echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$GITHUB_WORKSPACE/release.keystore"
 
       - name: Generate keystore.properties
         env:
@@ -213,7 +219,6 @@ jobs:
         run: |
           GRADLE_FILE="src-tauri/gen/android/app/build.gradle.kts"
 
-          # 添加 import（如果不存在）
           if ! grep -q "import java.io.FileInputStream" "$GRADLE_FILE"; then
             sed -i '1i import java.io.FileInputStream' "$GRADLE_FILE"
           fi
@@ -221,11 +226,9 @@ jobs:
             sed -i '1i import java.util.Properties' "$GRADLE_FILE"
           fi
 
-          # 添加签名配置（如果不存在）
           if ! grep -q "keystorePropsFile" "$GRADLE_FILE"; then
             cat >> "$GRADLE_FILE" << 'EOF'
 
-          // Auto-generated signing config
           val keystorePropsFile = rootProject.file("keystore.properties")
           if (keystorePropsFile.exists()) {
               val keystoreProps = Properties().apply {
@@ -267,7 +270,7 @@ jobs:
             let uploaded = false;
             for (const dir of apkPaths) {
               if (!fs.existsSync(dir)) continue;
-              const apks = fs.readdirSync(dir).filter(f => f.endsWith('.apk') && !f.includes('unsigned'));
+              const apks = fs.readdirSync(dir).filter((f) => f.endsWith('.apk') && !f.includes('unsigned'));
               for (const apk of apks) {
                 const apkPath = path.join(dir, apk);
                 const newName = `BaYin-${tagName}-android-${arch}.apk`;
@@ -278,19 +281,135 @@ jobs:
                   name: newName,
                   data: fs.readFileSync(apkPath)
                 });
-                console.log(`Uploaded: ${newName}`);
                 uploaded = true;
               }
             }
-            if (!uploaded) throw new Error(`No signed APK found for arch: ${arch}`);
+
+            if (!uploaded) {
+              throw new Error(`No signed APK found for arch: ${arch}`);
+            }
 
       - name: Cleanup Keystore
         if: always()
-        run: rm -f $GITHUB_WORKSPACE/release.keystore src-tauri/gen/android/keystore.properties
+        run: rm -f "$GITHUB_WORKSPACE/release.keystore" src-tauri/gen/android/keystore.properties
 
-  # 第五步：发布 Release
+  assemble-latest-json:
+    name: Assemble latest.json
+    runs-on: ubuntu-22.04
+    needs: build-desktop
+    steps:
+      - name: Prepare GH
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh --version || (sudo apt-get update && sudo apt-get install -y gh)
+
+      - name: Download all release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          mkdir -p dl
+          gh release download "$TAG" --dir dl --repo "$GITHUB_REPOSITORY"
+          ls -la dl || true
+
+      - name: Generate latest.json
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          PUB_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          BASE_URL="https://github.com/$REPO/releases/download/$TAG"
+
+          mac_url=""; mac_sig=""
+          win_x64_url=""; win_x64_sig=""
+          win_arm64_url=""; win_arm64_sig=""
+
+          shopt -s nullglob
+          for sig in dl/*.sig; do
+            artifact="${sig%.sig}"
+            fname=$(basename "$artifact")
+            lower=$(echo "$fname" | tr '[:upper:]' '[:lower:]')
+            url="$BASE_URL/$fname"
+            sig_content=$(tr -d '\r\n' < "$sig")
+
+            if [[ "$lower" == *darwin* ]] || [[ "$lower" == *.app.tar.gz ]] || [[ "$lower" == *.tar.gz ]]; then
+              mac_url="$url"
+              mac_sig="$sig_content"
+              continue
+            fi
+
+            is_windows_artifact=0
+            if [[ "$lower" == *windows* ]] || [[ "$lower" == *win* ]] || [[ "$lower" == *.msi* ]] || [[ "$lower" == *.exe* ]] || [[ "$lower" == *.zip* ]]; then
+              is_windows_artifact=1
+            fi
+
+            if [[ "$is_windows_artifact" -eq 1 ]]; then
+              if [[ "$lower" == *aarch64* ]] || [[ "$lower" == *arm64* ]]; then
+                win_arm64_url="$url"
+                win_arm64_sig="$sig_content"
+              elif [[ "$lower" == *x86_64* ]] || [[ "$lower" == *x64* ]]; then
+                win_x64_url="$url"
+                win_x64_sig="$sig_content"
+              elif [[ -z "$win_x64_url" ]]; then
+                win_x64_url="$url"
+                win_x64_sig="$sig_content"
+              fi
+            fi
+          done
+
+          if [[ -z "$mac_url" && -z "$win_x64_url" && -z "$win_arm64_url" ]]; then
+            echo "No updater signatures/artifacts found, cannot generate latest.json" >&2
+            exit 1
+          fi
+
+          tmp_json=$(mktemp)
+          {
+            echo '{'
+            echo "  \"version\": \"$VERSION\",";
+            echo "  \"notes\": \"Release $TAG\",";
+            echo "  \"pub_date\": \"$PUB_DATE\",";
+            echo '  "platforms": {'
+
+            first=1
+            add_platform() {
+              key="$1"
+              signature="$2"
+              url="$3"
+              if [[ -z "$signature" || -z "$url" ]]; then
+                return
+              fi
+              if [[ $first -eq 0 ]]; then
+                echo ','
+              fi
+              echo "    \"$key\": {\"signature\": \"$signature\", \"url\": \"$url\"}"
+              first=0
+            }
+
+            add_platform "darwin-aarch64" "$mac_sig" "$mac_url"
+            add_platform "darwin-x86_64" "$mac_sig" "$mac_url"
+            add_platform "windows-x86_64" "$win_x64_sig" "$win_x64_url"
+            add_platform "windows-aarch64" "$win_arm64_sig" "$win_arm64_url"
+
+            echo '  }'
+            echo '}'
+          } > "$tmp_json"
+
+          cat "$tmp_json"
+          mv "$tmp_json" latest.json
+
+      - name: Upload latest.json to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          gh release upload "$GITHUB_REF_NAME" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+
   publish-release:
-    needs: [create-release, build-windows, build-macos, build-android]
+    needs: [create-release, build-desktop, build-android, assemble-latest-json]
     runs-on: ubuntu-latest
     steps:
       - name: Publish Release
@@ -305,4 +424,3 @@ jobs:
               release_id: parseInt(process.env.RELEASE_ID, 10),
               draft: false
             });
-            console.log('Release published!');
