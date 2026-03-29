@@ -47,11 +47,14 @@ jobs:
       matrix:
         include:
           - os: windows-2022
-            target: x86_64-pc-windows-msvc
+            rust_targets: x86_64-pc-windows-msvc
+            build_target: x86_64-pc-windows-msvc
           - os: windows-2022
-            target: aarch64-pc-windows-msvc
+            rust_targets: aarch64-pc-windows-msvc
+            build_target: aarch64-pc-windows-msvc
           - os: macos-14
-            target: universal-apple-darwin
+            rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
+            build_target: universal-apple-darwin
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -69,11 +72,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Add extra macOS targets
-        if: runner.os == 'macOS'
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+          targets: ${{ matrix.rust_targets }}
 
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
@@ -138,7 +137,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.build_target }}
           tauriScript: npx tauri
 
   build-android:
@@ -192,6 +191,51 @@ jobs:
 
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli@latest
+
+      - name: Prepare Tauri signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is empty or not configured" >&2
+            exit 1
+          fi
+
+          RAW="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+          KEY_PATH="$RUNNER_TEMP/tauri_signing.key"
+
+          if echo "$RAW" | head -n1 | grep -q '^untrusted comment:'; then
+            printf '%s\n' "$RAW" > "$KEY_PATH"
+          else
+            if DECODED=$(printf '%s' "$RAW" | (base64 --decode 2>/dev/null || base64 -D 2>/dev/null)) \
+              && echo "$DECODED" | head -n1 | grep -q '^untrusted comment:'; then
+              printf '%s\n' "$DECODED" > "$KEY_PATH"
+            elif echo "$RAW" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+              ONE=$(printf '%s' "$RAW" | tr -d '\r\n')
+              printf '%s\n%s\n' "untrusted comment: tauri signing key" "$ONE" > "$KEY_PATH"
+            else
+              echo "Unsupported TAURI_SIGNING_PRIVATE_KEY format" >&2
+              exit 1
+            fi
+          fi
+
+          KEY_B64=""
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
+          fi
+
+          if [ -z "$KEY_B64" ]; then
+            echo "Failed to convert signing key to base64" >&2
+            exit 1
+          fi
+
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          fi
 
       - name: Initialize Android Project
         run: npx tauri android init
@@ -281,6 +325,16 @@ jobs:
                   name: newName,
                   data: fs.readFileSync(apkPath)
                 });
+                const sigPath = `${apkPath}.sig`;
+                if (fs.existsSync(sigPath)) {
+                  await github.rest.repos.uploadReleaseAsset({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    release_id: releaseId,
+                    name: `${newName}.sig`,
+                    data: fs.readFileSync(sigPath)
+                  });
+                }
                 uploaded = true;
               }
             }
@@ -296,7 +350,7 @@ jobs:
   assemble-latest-json:
     name: Assemble latest.json
     runs-on: ubuntu-22.04
-    needs: build-desktop
+    needs: [build-desktop, build-android]
     steps:
       - name: Prepare GH
         env:
@@ -327,6 +381,9 @@ jobs:
           mac_url=""; mac_sig=""
           win_x64_url=""; win_x64_sig=""
           win_arm64_url=""; win_arm64_sig=""
+          android_aarch64_url=""; android_aarch64_sig=""
+          android_armv7_url=""; android_armv7_sig=""
+          android_x64_url=""; android_x64_sig=""
 
           shopt -s nullglob
           for sig in dl/*.sig; do
@@ -358,10 +415,29 @@ jobs:
                 win_x64_url="$url"
                 win_x64_sig="$sig_content"
               fi
+              continue
+            fi
+
+            is_android_artifact=0
+            if [[ "$lower" == *android* ]] || [[ "$lower" == *.apk* ]]; then
+              is_android_artifact=1
+            fi
+
+            if [[ "$is_android_artifact" -eq 1 ]]; then
+              if [[ "$lower" == *aarch64* ]] || [[ "$lower" == *arm64* ]]; then
+                android_aarch64_url="$url"
+                android_aarch64_sig="$sig_content"
+              elif [[ "$lower" == *armv7* ]] || [[ "$lower" == *armeabi-v7a* ]]; then
+                android_armv7_url="$url"
+                android_armv7_sig="$sig_content"
+              elif [[ "$lower" == *x86_64* ]] || [[ "$lower" == *x64* ]]; then
+                android_x64_url="$url"
+                android_x64_sig="$sig_content"
+              fi
             fi
           done
 
-          if [[ -z "$mac_url" && -z "$win_x64_url" && -z "$win_arm64_url" ]]; then
+          if [[ -z "$mac_url" && -z "$win_x64_url" && -z "$win_arm64_url" && -z "$android_aarch64_url" && -z "$android_armv7_url" && -z "$android_x64_url" ]]; then
             echo "No updater signatures/artifacts found, cannot generate latest.json" >&2
             exit 1
           fi
@@ -393,6 +469,9 @@ jobs:
             add_platform "darwin-x86_64" "$mac_sig" "$mac_url"
             add_platform "windows-x86_64" "$win_x64_sig" "$win_x64_url"
             add_platform "windows-aarch64" "$win_arm64_sig" "$win_arm64_url"
+            add_platform "android-aarch64" "$android_aarch64_sig" "$android_aarch64_url"
+            add_platform "android-armv7" "$android_armv7_sig" "$android_armv7_url"
+            add_platform "android-x86_64" "$android_x64_sig" "$android_x64_url"
 
             echo '  }'
             echo '}'

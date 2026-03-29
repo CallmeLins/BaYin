@@ -284,9 +284,9 @@ pub fn run() {
         })
         .setup(|app| {
             // 初始化数据库
-            // Desktop: register the updater plugin (latest.json + signature verification).
+            // Desktop + Android: register the updater plugin (latest.json + signature verification).
             // If updater config is missing (pubkey/endpoints), skip without crashing.
-            #[cfg(desktop)]
+            #[cfg(any(desktop, target_os = "android"))]
             {
                 if let Err(e) = app
                     .handle()
