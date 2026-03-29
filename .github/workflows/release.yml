@@ -111,25 +111,14 @@ jobs:
             fi
           fi
 
-          KEY_B64=""
-          if command -v base64 >/dev/null 2>&1; then
-            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
-          elif command -v openssl >/dev/null 2>&1; then
-            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
-          fi
-
-          if [ -z "$KEY_B64" ]; then
-            echo "Failed to convert signing key to base64" >&2
-            exit 1
-          fi
-
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
             if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
               echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
               exit 1
             fi
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+            KEY_PASSWORD=$(printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" | tr -d '\r\n')
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
             echo "Unencrypted signing key detected; ignore TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
           fi
@@ -223,25 +212,14 @@ jobs:
             fi
           fi
 
-          KEY_B64=""
-          if command -v base64 >/dev/null 2>&1; then
-            KEY_B64=$(base64 < "$KEY_PATH" | tr -d '\r\n')
-          elif command -v openssl >/dev/null 2>&1; then
-            KEY_B64=$(openssl base64 -A -in "$KEY_PATH")
-          fi
-
-          if [ -z "$KEY_B64" ]; then
-            echo "Failed to convert signing key to base64" >&2
-            exit 1
-          fi
-
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
+          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$KEY_PATH" >> "$GITHUB_ENV"
           if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
             if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
               echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
               exit 1
             fi
-            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+            KEY_PASSWORD=$(printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" | tr -d '\r\n')
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
             echo "Unencrypted signing key detected; ignore TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
           fi
