@@ -49,9 +49,6 @@ jobs:
           - os: windows-2022
             rust_targets: x86_64-pc-windows-msvc
             build_target: x86_64-pc-windows-msvc
-          - os: windows-2022
-            rust_targets: aarch64-pc-windows-msvc
-            build_target: aarch64-pc-windows-msvc
           - os: macos-14
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
             build_target: universal-apple-darwin
@@ -84,7 +81,7 @@ jobs:
         working-directory: ./src-ui
 
       - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
+        run: npm install -g @tauri-apps/cli@^2
 
       - name: Prepare Tauri signing key
         shell: bash
@@ -127,8 +124,14 @@ jobs:
           fi
 
           echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+          if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
+            if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+              echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
+              exit 1
+            fi
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            echo "Unencrypted signing key detected; ignore TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
           fi
 
       - name: Build & Upload Desktop App
@@ -190,7 +193,7 @@ jobs:
         working-directory: ./src-ui
 
       - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli@latest
+        run: npm install -g @tauri-apps/cli@^2
 
       - name: Prepare Tauri signing key
         shell: bash
@@ -233,8 +236,14 @@ jobs:
           fi
 
           echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64" >> "$GITHUB_ENV"
-          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+          if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
+            if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
+              echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
+              exit 1
+            fi
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> "$GITHUB_ENV"
+          else
+            echo "Unencrypted signing key detected; ignore TAURI_SIGNING_PRIVATE_KEY_PASSWORD."
           fi
 
       - name: Initialize Android Project
@@ -380,7 +389,6 @@ jobs:
 
           mac_url=""; mac_sig=""
           win_x64_url=""; win_x64_sig=""
-          win_arm64_url=""; win_arm64_sig=""
           android_aarch64_url=""; android_aarch64_sig=""
           android_armv7_url=""; android_armv7_sig=""
           android_x64_url=""; android_x64_sig=""
@@ -405,10 +413,7 @@ jobs:
             fi
 
             if [[ "$is_windows_artifact" -eq 1 ]]; then
-              if [[ "$lower" == *aarch64* ]] || [[ "$lower" == *arm64* ]]; then
-                win_arm64_url="$url"
-                win_arm64_sig="$sig_content"
-              elif [[ "$lower" == *x86_64* ]] || [[ "$lower" == *x64* ]]; then
+              if [[ "$lower" == *x86_64* ]] || [[ "$lower" == *x64* ]]; then
                 win_x64_url="$url"
                 win_x64_sig="$sig_content"
               elif [[ -z "$win_x64_url" ]]; then
@@ -437,7 +442,7 @@ jobs:
             fi
           done
 
-          if [[ -z "$mac_url" && -z "$win_x64_url" && -z "$win_arm64_url" && -z "$android_aarch64_url" && -z "$android_armv7_url" && -z "$android_x64_url" ]]; then
+          if [[ -z "$mac_url" && -z "$win_x64_url" && -z "$android_aarch64_url" && -z "$android_armv7_url" && -z "$android_x64_url" ]]; then
             echo "No updater signatures/artifacts found, cannot generate latest.json" >&2
             exit 1
           fi
@@ -468,7 +473,6 @@ jobs:
             add_platform "darwin-aarch64" "$mac_sig" "$mac_url"
             add_platform "darwin-x86_64" "$mac_sig" "$mac_url"
             add_platform "windows-x86_64" "$win_x64_sig" "$win_x64_url"
-            add_platform "windows-aarch64" "$win_arm64_sig" "$win_arm64_url"
             add_platform "android-aarch64" "$android_aarch64_sig" "$android_aarch64_url"
             add_platform "android-armv7" "$android_armv7_sig" "$android_armv7_url"
             add_platform "android-x86_64" "$android_x64_sig" "$android_x64_url"
