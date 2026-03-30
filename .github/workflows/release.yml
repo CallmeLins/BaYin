@@ -130,20 +130,12 @@ jobs:
           fi
           echo "Signing key debug: file_base64_length=${#KEY_FILE_B64}"
           echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_FILE_B64" >> "$GITHUB_ENV"
-          if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
-            if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-              echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
-              exit 1
-            fi
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
             KEY_PASSWORD=$(printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" | tr -d '\r\n')
-            echo "Signing key debug: encrypted key detected, password_length=${#KEY_PASSWORD}"
+            echo "Signing key debug: password secret provided, password_length=${#KEY_PASSWORD}"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
-            if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-              echo "Signing key debug: unencrypted key detected; password secret is set but will be ignored."
-            else
-              echo "Signing key debug: unencrypted key detected; no password secret provided."
-            fi
+            echo "Signing key debug: no password secret provided."
           fi
 
       - name: Build & Upload Desktop App
@@ -254,20 +246,12 @@ jobs:
           fi
           echo "Signing key debug: file_base64_length=${#KEY_FILE_B64}"
           echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_FILE_B64" >> "$GITHUB_ENV"
-          if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
-            if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-              echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
-              exit 1
-            fi
+          if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
             KEY_PASSWORD=$(printf '%s' "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" | tr -d '\r\n')
-            echo "Signing key debug: encrypted key detected, password_length=${#KEY_PASSWORD}"
+            echo "Signing key debug: password secret provided, password_length=${#KEY_PASSWORD}"
             echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
           else
-            if [ -n "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
-              echo "Signing key debug: unencrypted key detected; password secret is set but will be ignored."
-            else
-              echo "Signing key debug: unencrypted key detected; no password secret provided."
-            fi
+            echo "Signing key debug: no password secret provided."
           fi
 
       - name: Initialize Android Project
