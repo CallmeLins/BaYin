@@ -43,7 +43,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhCNjJFQzcyNzE2MzA0MTcKUldRWEJHTnhjdXhpaTlqRG9HUmFXblhDcUoyT1QrM3AyQU93OEJaOTNPbmhxUnhlSUJXOXZMeXEK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwNTZEMERBODRFMzc3QTEKUldTaGQrT0UydEJXZ0w1WXExaEdVU3lqMWZndGN1SmUwMCtidDRMT3piUHZFQzRja2pDUmZwbVQK",
       "endpoints": [
         "https://github.com/CallmeLins/BaYin/releases/latest/download/latest.json"
       ]
