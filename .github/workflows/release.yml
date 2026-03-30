@@ -116,12 +116,20 @@ jobs:
           KEY_BYTE_COUNT="$(wc -c < "$KEY_PATH" | tr -d '[:space:]')"
           echo "Signing key debug: first_line='$KEY_FIRST_LINE', lines=$KEY_LINE_COUNT, bytes=$KEY_BYTE_COUNT"
 
-          KEY_B64_LINE="$(tail -n1 "$KEY_PATH" | tr -d '\r\n')"
-          if ! echo "$KEY_B64_LINE" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
-            echo "Invalid private key payload line (not base64)" >&2
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_FILE_B64="$(base64 < "$KEY_PATH" | tr -d '\r\n')"
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_FILE_B64="$(openssl base64 -A -in "$KEY_PATH")"
+          else
+            echo "No base64 encoder available for signing key" >&2
             exit 1
           fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64_LINE" >> "$GITHUB_ENV"
+          if ! echo "$KEY_FILE_B64" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+            echo "Invalid private key file base64 payload" >&2
+            exit 1
+          fi
+          echo "Signing key debug: file_base64_length=${#KEY_FILE_B64}"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_FILE_B64" >> "$GITHUB_ENV"
           if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
             if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
               echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
@@ -232,12 +240,20 @@ jobs:
           KEY_BYTE_COUNT="$(wc -c < "$KEY_PATH" | tr -d '[:space:]')"
           echo "Signing key debug: first_line='$KEY_FIRST_LINE', lines=$KEY_LINE_COUNT, bytes=$KEY_BYTE_COUNT"
 
-          KEY_B64_LINE="$(tail -n1 "$KEY_PATH" | tr -d '\r\n')"
-          if ! echo "$KEY_B64_LINE" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
-            echo "Invalid private key payload line (not base64)" >&2
+          if command -v base64 >/dev/null 2>&1; then
+            KEY_FILE_B64="$(base64 < "$KEY_PATH" | tr -d '\r\n')"
+          elif command -v openssl >/dev/null 2>&1; then
+            KEY_FILE_B64="$(openssl base64 -A -in "$KEY_PATH")"
+          else
+            echo "No base64 encoder available for signing key" >&2
             exit 1
           fi
-          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_B64_LINE" >> "$GITHUB_ENV"
+          if ! echo "$KEY_FILE_B64" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+            echo "Invalid private key file base64 payload" >&2
+            exit 1
+          fi
+          echo "Signing key debug: file_base64_length=${#KEY_FILE_B64}"
+          echo "TAURI_SIGNING_PRIVATE_KEY=$KEY_FILE_B64" >> "$GITHUB_ENV"
           if head -n1 "$KEY_PATH" | grep -qi 'encrypted secret key'; then
             if [ -z "${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" ]; then
               echo "Encrypted signing key detected but TAURI_SIGNING_PRIVATE_KEY_PASSWORD is empty" >&2
