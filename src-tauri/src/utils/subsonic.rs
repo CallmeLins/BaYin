@@ -40,6 +40,17 @@ fn build_url(config: &StreamServerConfig, endpoint: &str) -> String {
     format!("{}/rest/{}", base, endpoint)
 }
 
+fn build_cover_art_url(config: &StreamServerConfig, cover_id: &str) -> String {
+    let base = config.server_url.trim_end_matches('/');
+    let params = generate_auth_params(config);
+    let query: String = params
+        .iter()
+        .map(|(k, v)| format!("{}={}", k, v))
+        .collect::<Vec<_>>()
+        .join("&");
+    format!("{}/rest/getCoverArt?id={}&{}", base, cover_id, query)
+}
+
 /// 测试服务器连接
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
     let client = Client::new();
@@ -102,16 +113,10 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         || song.bit_depth.map(|d| d > 16).unwrap_or(false);
 
     // 构建封面 URL
-    let cover_url = song.cover_art.as_ref().map(|cover_id| {
-        let base = config.server_url.trim_end_matches('/');
-        let params = generate_auth_params(config);
-        let query: String = params
-            .iter()
-            .map(|(k, v)| format!("{}={}", k, v))
-            .collect::<Vec<_>>()
-            .join("&");
-        format!("{}/rest/getCoverArt?id={}&{}", base, cover_id, query)
-    });
+    let cover_url = song
+        .cover_art
+        .as_ref()
+        .map(|cover_id| build_cover_art_url(config, cover_id));
 
     // 标题：如果 title 为空，尝试从路径提取文件名
     let title = if song.title.is_empty() {
@@ -261,6 +266,17 @@ pub async fn fetch_playlist_song_ids(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<Vec<String>, String> {
+    Ok(fetch_playlist_tracks(config, playlist_id)
+        .await?
+        .into_iter()
+        .map(|(id, _, _, _, _)| id)
+        .collect())
+}
+
+pub async fn fetch_playlist_tracks(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>)>, String> {
     let client = Client::new();
     let url = build_url(config, "getPlaylist");
     let mut params = generate_auth_params(config);
@@ -298,7 +314,224 @@ pub async fn fetch_playlist_song_ids(
         .map(|e| e.into_vec())
         .unwrap_or_default();
 
-    Ok(entries.into_iter().map(|e| e.id).collect())
+    Ok(entries
+        .into_iter()
+        .map(|e| {
+            let cover_url = e
+                .cover_art
+                .as_deref()
+                .map(|cover_id| build_cover_art_url(config, cover_id));
+            (e.id, e.title, e.artist, e.album, cover_url)
+        })
+        .collect())
+}
+
+/// Append songs to a Subsonic-compatible playlist.
+pub async fn add_songs_to_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    song_ids: &[String],
+) -> Result<(), String> {
+    if song_ids.is_empty() {
+        return Ok(());
+    }
+
+    let client = Client::new();
+    let url = build_url(config, "updatePlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("playlistId", playlist_id.to_string()));
+    for song_id in song_ids {
+        params.push(("songIdToAdd", song_id.clone()));
+    }
+
+    let response = client
+        .post(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(msg);
+    }
+
+    Ok(())
+}
+
+pub async fn create_playlist(
+    config: &StreamServerConfig,
+    name: &str,
+    song_ids: &[String],
+) -> Result<(), String> {
+    let client = Client::new();
+    let url = build_url(config, "createPlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("name", name.to_string()));
+    for song_id in song_ids {
+        params.push(("songId", song_id.clone()));
+    }
+
+    let response = client
+        .post(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(msg);
+    }
+
+    Ok(())
+}
+
+pub async fn rename_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    name: &str,
+) -> Result<(), String> {
+    let client = Client::new();
+    let url = build_url(config, "updatePlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("playlistId", playlist_id.to_string()));
+    params.push(("name", name.to_string()));
+
+    let response = client
+        .post(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(msg);
+    }
+
+    Ok(())
+}
+
+pub async fn delete_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<(), String> {
+    let client = Client::new();
+    let url = build_url(config, "deletePlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("id", playlist_id.to_string()));
+
+    let response = client
+        .post(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(msg);
+    }
+
+    Ok(())
+}
+
+pub async fn remove_playlist_indexes(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    indexes: &[usize],
+) -> Result<(), String> {
+    if indexes.is_empty() {
+        return Ok(());
+    }
+
+    let client = Client::new();
+    let url = build_url(config, "updatePlaylist");
+    let mut params = generate_auth_params(config);
+    params.push(("playlistId", playlist_id.to_string()));
+    for index in indexes {
+        params.push(("songIndexToRemove", index.to_string()));
+    }
+
+    let response = client
+        .post(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: SubsonicResponse<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let inner = data.subsonic_response;
+    if inner.status != "ok" {
+        let msg = inner
+            .error
+            .map(|e| e.message)
+            .unwrap_or_else(|| "Unknown error".to_string());
+        return Err(msg);
+    }
+
+    Ok(())
 }
 
 /// 获取歌曲流 URL

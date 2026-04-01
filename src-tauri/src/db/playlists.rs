@@ -85,38 +85,6 @@ pub fn replace_stream_playlists(
     Ok(())
 }
 
-pub fn get_stream_playlist_items_last_sync(
-    conn: &Connection,
-    server_id: &str,
-    playlist_id: &str,
-) -> Result<Option<i64>> {
-    conn.query_row(
-        "SELECT MAX(synced_at) FROM stream_playlist_items
-         WHERE server_id = ?1 AND playlist_id = ?2",
-        params![server_id, playlist_id],
-        |row| row.get(0),
-    )
-}
-
-pub fn get_stream_playlist_items(
-    conn: &Connection,
-    server_id: &str,
-    playlist_id: &str,
-) -> Result<Vec<String>> {
-    let mut stmt = conn.prepare(
-        "SELECT song_id
-         FROM stream_playlist_items
-         WHERE server_id = ?1 AND playlist_id = ?2
-         ORDER BY position ASC",
-    )?;
-
-    let items = stmt
-        .query_map(params![server_id, playlist_id], |row| row.get(0))?
-        .collect::<Result<Vec<String>>>()?;
-
-    Ok(items)
-}
-
 pub fn replace_stream_playlist_items(
     conn: &mut Connection,
     server_id: &str,
@@ -145,4 +113,3 @@ pub fn replace_stream_playlist_items(
     tx.commit()?;
     Ok(())
 }
-

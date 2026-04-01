@@ -33,6 +33,16 @@ fn base_url(config: &StreamServerConfig) -> String {
     config.server_url.trim_end_matches('/').to_string()
 }
 
+fn build_cover_url(config: &StreamServerConfig, item_id: &str) -> Option<String> {
+    let token = config.access_token.as_deref()?;
+    Some(format!(
+        "{}/Items/{}/Images/Primary?api_key={}",
+        base_url(config),
+        item_id,
+        token
+    ))
+}
+
 /// 认证并获取 access_token 和 user_id
 pub async fn authenticate(config: &StreamServerConfig) -> Result<(String, String), String> {
     let client = Client::new();
@@ -141,19 +151,11 @@ fn convert_item(item: &JellyfinItem, config: &StreamServerConfig) -> ScannedSong
         .unwrap_or_else(|| "未知艺术家".to_string());
 
     // 构建封面 URL
-    let cover_url = item.image_tags.as_ref().and_then(|tags| {
-        if tags.contains_key("Primary") {
-            let token = config.access_token.as_deref().unwrap_or("");
-            Some(format!(
-                "{}/Items/{}/Images/Primary?api_key={}",
-                base_url(config),
-                item.id,
-                token
-            ))
-        } else {
-            None
-        }
-    });
+    let cover_url = item
+        .image_tags
+        .as_ref()
+        .and_then(|tags| tags.contains_key("Primary").then_some(()))
+        .and_then(|_| build_cover_url(config, &item.id));
 
     let file_size = item
         .size
@@ -331,6 +333,17 @@ pub async fn fetch_playlist_song_ids(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<Vec<String>, String> {
+    Ok(fetch_playlist_tracks(config, playlist_id)
+        .await?
+        .into_iter()
+        .map(|(id, _, _, _, _)| id)
+        .collect())
+}
+
+pub async fn fetch_playlist_tracks(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>)>, String> {
     let user_id = config
         .user_id
         .as_deref()
@@ -343,7 +356,7 @@ pub async fn fetch_playlist_song_ids(
     let client = Client::new();
     let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
 
-    let mut all_ids = Vec::new();
+    let mut all_tracks = Vec::new();
     let mut start_index: u64 = 0;
     let page_size: u64 = 500;
 
@@ -370,7 +383,22 @@ pub async fn fetch_playlist_song_ids(
 
         let count = data.items.len() as u64;
         for item in data.items {
-            all_ids.push(item.id);
+            let item_id = item.id.clone();
+            let cover_url = item
+                .image_tags
+                .as_ref()
+                .and_then(|tags| tags.contains_key("Primary").then_some(()))
+                .and_then(|_| build_cover_url(config, &item_id));
+            all_tracks.push((
+                item_id,
+                Some(item.name),
+                item.artists
+                    .as_ref()
+                    .and_then(|artists| artists.first().cloned())
+                    .or(item.album_artist),
+                item.album,
+                cover_url,
+            ));
         }
 
         start_index += count;
@@ -379,7 +407,225 @@ pub async fn fetch_playlist_song_ids(
         }
     }
 
-    Ok(all_ids)
+    Ok(all_tracks)
+}
+
+/// Append songs to a Jellyfin/Emby playlist.
+pub async fn add_songs_to_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    song_ids: &[String],
+) -> Result<(), String> {
+    if song_ids.is_empty() {
+        return Ok(());
+    }
+
+    let user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("Missing userId. Please test the connection again.")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("Missing accessToken. Please test the connection again.")?;
+
+    let client = Client::new();
+    let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
+    let auth_headers = build_auth_header(config);
+
+    let mut req = client.post(&url).query(&[
+        ("UserId", user_id),
+        ("Ids", &song_ids.join(",")),
+    ]);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn create_playlist(
+    config: &StreamServerConfig,
+    name: &str,
+    song_ids: &[String],
+) -> Result<(), String> {
+    let user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("Missing userId. Please test the connection again.")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("Missing accessToken. Please test the connection again.")?;
+
+    let client = Client::new();
+    let url = format!("{}/Playlists", base_url(config));
+    let auth_headers = build_auth_header(config);
+
+    let mut req = client.post(&url).query(&[
+        ("UserId", user_id),
+        ("Name", name),
+        ("MediaType", "Audio"),
+        ("Ids", &song_ids.join(",")),
+    ]);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn rename_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    name: &str,
+) -> Result<(), String> {
+    let _user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("Missing userId. Please test the connection again.")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("Missing accessToken. Please test the connection again.")?;
+
+    let client = Client::new();
+    let url = format!("{}/Items/{}", base_url(config), playlist_id);
+    let auth_headers = build_auth_header(config);
+    let body = serde_json::json!({ "Name": name });
+
+    let mut req = client.post(&url).json(&body);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn delete_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+) -> Result<(), String> {
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("Missing accessToken. Please test the connection again.")?;
+
+    let client = Client::new();
+    let url = format!("{}/Items/{}", base_url(config), playlist_id);
+    let auth_headers = build_auth_header(config);
+
+    let mut req = client.delete(&url);
+    for (k, v) in &auth_headers {
+        req = req.header(k.as_str(), v.as_str());
+    }
+
+    let response = req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    Ok(())
+}
+
+pub async fn remove_songs_from_playlist(
+    config: &StreamServerConfig,
+    playlist_id: &str,
+    song_ids: &[String],
+) -> Result<(), String> {
+    if song_ids.is_empty() {
+        return Ok(());
+    }
+
+    let user_id = config
+        .user_id
+        .as_deref()
+        .ok_or("Missing userId. Please test the connection again.")?;
+    let _token = config
+        .access_token
+        .as_deref()
+        .ok_or("Missing accessToken. Please test the connection again.")?;
+
+    let client = Client::new();
+    let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
+    let auth_headers = build_auth_header(config);
+
+    let mut fetch_req = client.get(&url).query(&[("UserId", user_id)]);
+    for (k, v) in &auth_headers {
+        fetch_req = fetch_req.header(k.as_str(), v.as_str());
+    }
+
+    let response = fetch_req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", response.status()));
+    }
+
+    let data: JellyfinItemsResponse = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+    let entry_ids: Vec<String> = data
+        .items
+        .into_iter()
+        .filter(|item| song_ids.iter().any(|song_id| song_id == &item.id))
+        .filter_map(|item| item.playlist_item_id.or(Some(item.id)))
+        .collect();
+
+    if entry_ids.is_empty() {
+        return Ok(());
+    }
+
+    let mut delete_req = client
+        .delete(&url)
+        .query(&[("EntryIds", &entry_ids.join(","))]);
+    for (k, v) in &auth_headers {
+        delete_req = delete_req.header(k.as_str(), v.as_str());
+    }
+
+    let delete_response = delete_req
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+    if !delete_response.status().is_success() {
+        return Err(format!("Request failed: HTTP {}", delete_response.status()));
+    }
+
+    Ok(())
 }
 
 /// 获取流 URL

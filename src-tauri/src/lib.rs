@@ -68,6 +68,11 @@ use commands::{
     scan_stream_to_db,
     stream_get_playlist_tracks,
     stream_get_playlists,
+    stream_add_songs_to_playlist,
+    stream_create_playlist,
+    stream_rename_playlist,
+    stream_delete_playlist,
+    stream_remove_songs_from_playlist,
     update_get_latest_release,
     // File watcher commands
     start_file_watcher,
@@ -272,6 +277,11 @@ pub fn run() {
             // Stream playlists (remote)
             stream_get_playlists,
             stream_get_playlist_tracks,
+            stream_add_songs_to_playlist,
+            stream_create_playlist,
+            stream_rename_playlist,
+            stream_delete_playlist,
+            stream_remove_songs_from_playlist,
             // Software update
             update_get_latest_release
         ])

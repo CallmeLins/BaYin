@@ -187,6 +187,14 @@ pub struct SubsonicPlaylist {
 #[serde(rename_all = "camelCase")]
 pub struct SubsonicPlaylistEntry {
     pub id: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub artist: Option<String>,
+    #[serde(default)]
+    pub album: Option<String>,
+    #[serde(default)]
+    pub cover_art: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -231,6 +239,8 @@ pub struct JellyfinItemsResponse {
 pub struct JellyfinItem {
     pub id: String,
     pub name: String,
+    #[serde(default)]
+    pub playlist_item_id: Option<String>,
     #[serde(default)]
     pub child_count: Option<u32>,
     #[serde(default)]
