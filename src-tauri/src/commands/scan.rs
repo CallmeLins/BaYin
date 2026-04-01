@@ -337,6 +337,7 @@ pub async fn scan_local_to_db(
         removed: removed_count,
         skipped: skipped_count,
         errors,
+        stream_failures: Vec::new(),
         duration_ms,
     })
 }
@@ -385,12 +386,14 @@ pub async fn scan_stream_to_db(
             removed: 0,
             skipped: 0,
             errors: 0,
+            stream_failures: Vec::new(),
             duration_ms: start_time.elapsed().as_millis() as u64,
         });
     }
 
     let mut total_added = 0;
     let mut total_errors = 0;
+    let mut stream_failures = Vec::new();
 
     for server in &servers {
         emit_progress(
@@ -428,7 +431,9 @@ pub async fn scan_stream_to_db(
             Ok(songs) => songs,
             Err(e) => {
                 total_errors += 1;
-                eprintln!("Failed to fetch songs from {}: {}", server.server_name, e);
+                let failure = format!("{}: {}", server.server_name, e);
+                eprintln!("Failed to fetch songs from {}", failure);
+                stream_failures.push(failure);
                 continue;
             }
         };
@@ -557,6 +562,7 @@ pub async fn scan_stream_to_db(
         removed: 0,
         skipped: 0,
         errors: total_errors,
+        stream_failures,
         duration_ms,
     })
 }

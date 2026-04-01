@@ -65,6 +65,9 @@ pub struct ScanResult {
     pub skipped: usize,
     /// Files that failed to scan
     pub errors: usize,
+    /// Detailed failures from stream server scans
+    #[serde(default)]
+    pub stream_failures: Vec<String>,
     /// Time taken in milliseconds
     pub duration_ms: u64,
 }
