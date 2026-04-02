@@ -9,6 +9,8 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.AudioAttributes
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaMetadata
@@ -28,6 +30,8 @@ class MediaPlaybackService : Service() {
     private lateinit var session: MediaSession
     private lateinit var audioManager: AudioManager
     private var focusRequest: AudioFocusRequest? = null
+    private var shouldResumeAfterTransientLoss = false
+    private var audioDeviceCallback: AudioDeviceCallback? = null
 
     private val scheduler = Executors.newSingleThreadScheduledExecutor()
     private var pollTask: ScheduledFuture<*>? = null
@@ -76,6 +80,8 @@ class MediaPlaybackService : Service() {
         })
         session.isActive = true
 
+        registerAudioDeviceCallback()
+
         ensureNotificationChannel()
         // Delay polling until the Rust side has finished managing app state.
         scheduler.schedule({ startPolling() }, 800, TimeUnit.MILLISECONDS)
@@ -98,6 +104,7 @@ class MediaPlaybackService : Service() {
     override fun onDestroy() {
         pollTask?.cancel(true)
         scheduler.shutdownNow()
+        unregisterAudioDeviceCallback()
         session.release()
         super.onDestroy()
     }
@@ -360,8 +367,23 @@ class MediaPlaybackService : Service() {
                             .build()
                     )
                     .setOnAudioFocusChangeListener { change ->
-                        if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                            safeNative { SystemMediaBridge.nativePause() }
+                        when (change) {
+                            AudioManager.AUDIOFOCUS_LOSS -> {
+                                shouldResumeAfterTransientLoss = false
+                                safeNative { SystemMediaBridge.nativePause() }
+                            }
+                            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                                shouldResumeAfterTransientLoss = isPlaybackActive()
+                                safeNative { SystemMediaBridge.nativePause() }
+                            }
+                            AudioManager.AUDIOFOCUS_GAIN -> {
+                                if (shouldResumeAfterTransientLoss) {
+                                    shouldResumeAfterTransientLoss = false
+                                    safeNative { SystemMediaBridge.nativeRefreshOutput() }
+                                    safeNative { SystemMediaBridge.nativeResume() }
+                                    updateFromRust()
+                                }
+                            }
                         }
                     }
                     .build()
@@ -371,14 +393,85 @@ class MediaPlaybackService : Service() {
             @Suppress("DEPRECATION")
             audioManager.requestAudioFocus(
                 { change ->
-                    if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                        safeNative { SystemMediaBridge.nativePause() }
+                    when (change) {
+                        AudioManager.AUDIOFOCUS_LOSS -> {
+                            shouldResumeAfterTransientLoss = false
+                            safeNative { SystemMediaBridge.nativePause() }
+                        }
+                        AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                            shouldResumeAfterTransientLoss = isPlaybackActive()
+                            safeNative { SystemMediaBridge.nativePause() }
+                        }
+                        AudioManager.AUDIOFOCUS_GAIN -> {
+                            if (shouldResumeAfterTransientLoss) {
+                                shouldResumeAfterTransientLoss = false
+                                safeNative { SystemMediaBridge.nativeRefreshOutput() }
+                                safeNative { SystemMediaBridge.nativeResume() }
+                                updateFromRust()
+                            }
+                        }
                     }
                 },
                 AudioManager.STREAM_MUSIC,
                 AudioManager.AUDIOFOCUS_GAIN
             )
         }
+    }
+
+    private fun registerAudioDeviceCallback() {
+        if (Build.VERSION.SDK_INT < 23 || audioDeviceCallback != null) return
+        audioDeviceCallback = object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+                handleAudioRouteChange(addedDevices)
+            }
+
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+                handleAudioRouteChange(removedDevices)
+            }
+        }
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+    }
+
+    private fun unregisterAudioDeviceCallback() {
+        if (Build.VERSION.SDK_INT < 23) return
+        audioDeviceCallback?.let { audioManager.unregisterAudioDeviceCallback(it) }
+        audioDeviceCallback = null
+    }
+
+    private fun handleAudioRouteChange(devices: Array<out AudioDeviceInfo>) {
+        if (!devices.any { it.isRelevantOutputRoute() }) return
+        if (!isPlaybackActive()) return
+
+        scheduler.execute {
+            tryRequestAudioFocus()
+            safeNative { SystemMediaBridge.nativeRefreshOutput() }
+            updateFromRust()
+        }
+    }
+
+    private fun AudioDeviceInfo.isRelevantOutputRoute(): Boolean =
+        isSink && when (type) {
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+            AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+            AudioDeviceInfo.TYPE_BLE_HEADSET,
+            AudioDeviceInfo.TYPE_BLE_SPEAKER,
+            AudioDeviceInfo.TYPE_BLE_BROADCAST,
+            AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+            AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_USB_DEVICE,
+            AudioDeviceInfo.TYPE_USB_ACCESSORY,
+            AudioDeviceInfo.TYPE_LINE_ANALOG,
+            AudioDeviceInfo.TYPE_LINE_DIGITAL,
+            AudioDeviceInfo.TYPE_HDMI,
+            AudioDeviceInfo.TYPE_HDMI_ARC,
+            AudioDeviceInfo.TYPE_HDMI_EARC -> true
+            else -> false
+        }
+
+    private fun isPlaybackActive(): Boolean {
+        val state = session.controller.playbackState?.state ?: PlaybackState.STATE_NONE
+        return state == PlaybackState.STATE_PLAYING || state == PlaybackState.STATE_BUFFERING
     }
 
     private fun safeNative(block: () -> Unit) {

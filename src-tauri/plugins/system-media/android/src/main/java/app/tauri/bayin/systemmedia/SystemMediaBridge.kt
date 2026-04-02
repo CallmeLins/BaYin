@@ -11,8 +11,10 @@ object SystemMediaBridge {
     @JvmStatic external fun nativeGetNowPlayingJson(): String
     @JvmStatic external fun nativePlay()
     @JvmStatic external fun nativePause()
+    @JvmStatic external fun nativeResume()
     @JvmStatic external fun nativeTogglePlayPause()
     @JvmStatic external fun nativeNext()
     @JvmStatic external fun nativePrevious()
     @JvmStatic external fun nativeSeekToMs(positionMs: Long)
+    @JvmStatic external fun nativeRefreshOutput()
 }

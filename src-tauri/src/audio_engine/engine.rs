@@ -42,6 +42,8 @@ pub enum AudioCommand {
     Resume,
     Stop,
     Seek { position_secs: f64 },
+    #[cfg(target_os = "android")]
+    RefreshOutput,
     SetVolume { volume: f32 },
     SetEqBands { gains: [f32; 10] },
     SetEqEnabled { enabled: bool },
@@ -446,6 +448,81 @@ fn audio_thread(
                             eq.reset();
                             pending_samples.clear();
                             update_state(&state, is_playing, position_secs, duration_secs, volume);
+                        }
+                    }
+                }
+                #[cfg(target_os = "android")]
+                AudioCommand::RefreshOutput => {
+                    pause_target_secs = None;
+                    end_pending = false;
+
+                    let Some(ref mut dec) = decoder else {
+                        continue;
+                    };
+
+                    let target_position = current_playback_position(position_secs, &output);
+                    let should_play = is_playing;
+                    let output_channels = source_channels.min(2) as u16;
+
+                    match AudioOutput::new(source_sample_rate, output_channels) {
+                        Ok(new_output) => {
+                            let out_rate = new_output.config.sample_rate.0;
+                            let actual_channels = new_output.config.channels as usize;
+
+                            if let Err(e) = dec.seek(target_position) {
+                                let _ = app_handle.emit("audio:error", ErrorPayload { message: format!("Failed to reinitialize playback after audio route change: {}", e) });
+                                continue;
+                            }
+
+                            output = Some(new_output);
+                            if !should_play {
+                                if let Some(ref out) = output {
+                                    out.pause();
+                                }
+                            }
+
+                            resampler = None;
+                            resample_buffer.clear();
+                            pending_samples.clear();
+
+                            if out_rate != source_sample_rate {
+                                match AudioResampler::new(source_sample_rate, out_rate, actual_channels) {
+                                    Ok(rs) => resampler = Some(rs),
+                                    Err(e) => {
+                                        eprintln!("Resampler reinit warning after route change: {}", e);
+                                    }
+                                }
+                            }
+
+                            let effective_rate = if resampler.is_some() { out_rate } else { source_sample_rate };
+                            let eq_enabled = eq.is_enabled();
+                            let eq_gains = eq.gains();
+                            let mut new_eq = Equalizer::new(effective_rate, actual_channels);
+                            new_eq.set_enabled(eq_enabled);
+                            new_eq.set_gains(&eq_gains);
+                            eq = new_eq;
+
+                            position_secs = target_position;
+                            last_emitted_pos = target_position;
+                            fade_state = if should_play {
+                                FadeState::FadingIn {
+                                    gain: 0.0,
+                                    step: fade_step(FADE_IN_MS, effective_rate, actual_channels),
+                                }
+                            } else {
+                                FadeState::None
+                            };
+
+                            update_state(&state, should_play, position_secs, duration_secs, volume);
+                            let _ = app_handle.emit(
+                                "audio:state_changed",
+                                StateChangedPayload {
+                                    is_playing: should_play,
+                                },
+                            );
+                        }
+                        Err(e) => {
+                            let _ = app_handle.emit("audio:error", ErrorPayload { message: format!("Failed to reinitialize audio output after route change: {}", e) });
                         }
                     }
                 }

@@ -309,6 +309,21 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
 }
 
 #[no_mangle]
+pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_nativeResume(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    with_app(|app| {
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
+        let engine = engine.lock().unwrap();
+        engine.send(AudioCommand::Resume);
+    });
+}
+
+#[no_mangle]
 pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_nativeTogglePlayPause(
     _env: JNIEnv,
     _class: JClass,
@@ -384,5 +399,20 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
         };
         let engine = engine.lock().unwrap();
         engine.send(AudioCommand::Seek { position_secs });
+    });
+}
+
+#[no_mangle]
+pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_nativeRefreshOutput(
+    _env: JNIEnv,
+    _class: JClass,
+) {
+    with_app(|app| {
+        let engine = match app.try_state::<AudioEngineState>() {
+            Some(s) => s,
+            None => return,
+        };
+        let engine = engine.lock().unwrap();
+        engine.send(AudioCommand::RefreshOutput);
     });
 }
