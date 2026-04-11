@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 .codex/
 .claude/
+.gemini/
 
 # Tauri
 src-tauri/target/
