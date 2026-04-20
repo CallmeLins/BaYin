@@ -14,13 +14,9 @@ impl AudioResampler {
         }
 
         let chunk_size = 1024;
-        let resampler = FftFixedInOut::<f32>::new(
-            from_rate as usize,
-            to_rate as usize,
-            chunk_size,
-            channels,
-        )
-        .map_err(|e| format!("Failed to create resampler: {}", e))?;
+        let resampler =
+            FftFixedInOut::<f32>::new(from_rate as usize, to_rate as usize, chunk_size, channels)
+                .map_err(|e| format!("Failed to create resampler: {}", e))?;
 
         let input_frames_needed = resampler.input_frames_next();
 

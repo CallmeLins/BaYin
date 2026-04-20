@@ -16,6 +16,8 @@ typedef _NativeBoolNoArg = ffi.Bool Function();
 typedef _DartBoolNoArg = bool Function();
 typedef _NativeBoolDoubleArg = ffi.Bool Function(ffi.Double);
 typedef _DartBoolDoubleArg = bool Function(double);
+typedef _NativeBoolBoolArg = ffi.Bool Function(ffi.Bool);
+typedef _DartBoolBoolArg = bool Function(bool);
 
 class RustApi {
   RustApi._();
@@ -68,6 +70,41 @@ class RustApi {
     return bindings.getScanConfig();
   }
 
+  void startFileWatcher(List<String> directories) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.startFileWatcher(directories);
+  }
+
+  void stopFileWatcher() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.stopFileWatcher();
+  }
+
+  List<RustFileWatchEvent> pollFileWatcherEvents() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.pollFileWatcherEvents();
+  }
+
+  RustFileWatcherStatus fileWatcherStatus() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.fileWatcherStatus();
+  }
+
+  void windowsTaskbarInit() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.windowsTaskbarInit();
+  }
+
+  void windowsTaskbarUpdate(RustWindowsTaskbarState state) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.windowsTaskbarUpdate(state);
+  }
+
+  List<RustWindowsTaskbarClickEvent> pollWindowsTaskbarEvents() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.pollWindowsTaskbarEvents();
+  }
+
   RustScannedSong? getMusicMetadata(String filePath) {
     final bindings = _bindings ??= _RustBindings(_openLibrary());
     return bindings.getMusicMetadata(filePath);
@@ -103,6 +140,39 @@ class RustApi {
     return bindings.getStreamPlaylists(serverId);
   }
 
+  String saveStreamServer(RustStreamServerInput input) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.saveStreamServer(input);
+  }
+
+  void deleteStreamServer(String serverId) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.deleteStreamServer(serverId);
+  }
+
+  RustStreamConnectionTestResult testStreamConnection(
+    RustStreamServerInput input,
+  ) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.testStreamConnection(input);
+  }
+
+  RustStreamPlaylistSyncResult syncStreamPlaylists(String serverId) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.syncStreamPlaylists(serverId);
+  }
+
+  List<RustDbSong> getStreamPlaylistSongs({
+    required String serverId,
+    required String playlistId,
+  }) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.getStreamPlaylistSongs(
+      serverId: serverId,
+      playlistId: playlistId,
+    );
+  }
+
   void audioPlay(String source) {
     final bindings = _bindings ??= _RustBindings(_openLibrary());
     bindings.audioPlay(source);
@@ -133,9 +203,29 @@ class RustApi {
     bindings.audioSetVolume(volume);
   }
 
+  void audioSetEqEnabled(bool enabled) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.audioSetEqEnabled(enabled);
+  }
+
+  void audioSetEqGains(List<double> gains) {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    bindings.audioSetEqGains(gains);
+  }
+
   RustPlaybackState getPlaybackState() {
     final bindings = _bindings ??= _RustBindings(_openLibrary());
     return bindings.getPlaybackState();
+  }
+
+  RustFftSnapshot getAudioFft() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.getAudioFft();
+  }
+
+  RustEqState getEqState() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.getEqState();
   }
 
   ffi.DynamicLibrary _openLibrary() {
@@ -185,6 +275,36 @@ class _RustBindings {
         >(
           'bayin_db_get_stream_playlists_json',
         ),
+        _saveStreamServerJson = library.lookupFunction<
+          _NativeStringStringArg,
+          _DartStringStringArg
+        >(
+          'bayin_db_save_stream_server_json',
+        ),
+        _deleteStreamServer = library.lookupFunction<
+          _NativeBoolStringArg,
+          _DartBoolStringArg
+        >(
+          'bayin_db_delete_stream_server',
+        ),
+        _testStreamConnectionJson = library.lookupFunction<
+          _NativeStringStringArg,
+          _DartStringStringArg
+        >(
+          'bayin_stream_test_connection_json',
+        ),
+        _syncStreamPlaylistsJson = library.lookupFunction<
+          _NativeStringStringArg,
+          _DartStringStringArg
+        >(
+          'bayin_stream_sync_playlists_json',
+        ),
+        _getStreamPlaylistSongsJson = library.lookupFunction<
+          _NativeStringStringArg,
+          _DartStringStringArg
+        >(
+          'bayin_stream_get_playlist_songs_json',
+        ),
         _getMusicMetadataJson = library.lookupFunction<
           _NativeStringStringArg,
           _DartStringStringArg
@@ -221,6 +341,33 @@ class _RustBindings {
         _getScanConfigJson = library.lookupFunction<_NativePing, _NativePing>(
           'bayin_db_get_scan_config_json',
         ),
+        _startFileWatcherJson = library.lookupFunction<
+          _NativeBoolStringArg,
+          _DartBoolStringArg
+        >(
+          'bayin_start_file_watcher_json',
+        ),
+        _stopFileWatcherNoArg = library.lookupFunction<_NativeBoolNoArg, _DartBoolNoArg>(
+          'bayin_stop_file_watcher',
+        ),
+        _pollFileWatcherEventsJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_poll_file_watcher_events_json',
+        ),
+        _fileWatcherStatusJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_file_watcher_status_json',
+        ),
+        _windowsTaskbarInitNoArg = library.lookupFunction<_NativeBoolNoArg, _DartBoolNoArg>(
+          'bayin_windows_taskbar_init',
+        ),
+        _windowsTaskbarUpdateJson = library.lookupFunction<
+          _NativeBoolStringArg,
+          _DartBoolStringArg
+        >(
+          'bayin_windows_taskbar_update_json',
+        ),
+        _windowsTaskbarPollEventsJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_windows_taskbar_poll_events_json',
+        ),
         _audioPlay = library.lookupFunction<_NativeBoolStringArg, _DartBoolStringArg>(
           'bayin_audio_play',
         ),
@@ -242,8 +389,26 @@ class _RustBindings {
         >(
           'bayin_audio_set_volume',
         ),
+        _audioSetEqEnabled = library.lookupFunction<
+          _NativeBoolBoolArg,
+          _DartBoolBoolArg
+        >(
+          'bayin_audio_set_eq_enabled',
+        ),
+        _audioSetEqGainsJson = library.lookupFunction<
+          _NativeBoolStringArg,
+          _DartBoolStringArg
+        >(
+          'bayin_audio_set_eq_gains_json',
+        ),
         _audioGetStateJson = library.lookupFunction<_NativePing, _NativePing>(
           'bayin_audio_get_state_json',
+        ),
+        _audioGetFftJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_audio_get_fft_json',
+        ),
+        _audioGetEqStateJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_audio_get_eq_state_json',
         );
 
   final _NativePing _ping;
@@ -255,6 +420,11 @@ class _RustBindings {
   final _NativePing _getAllArtistsJson;
   final _NativePing _getStreamServersJson;
   final _DartStringStringArg _getStreamPlaylistsJson;
+  final _DartStringStringArg _saveStreamServerJson;
+  final _DartBoolStringArg _deleteStreamServer;
+  final _DartStringStringArg _testStreamConnectionJson;
+  final _DartStringStringArg _syncStreamPlaylistsJson;
+  final _DartStringStringArg _getStreamPlaylistSongsJson;
   final _DartStringStringArg _getMusicMetadataJson;
   final _DartStringStringArg _getLyricsJson;
   final _DartStringStringArg _listDirectoriesJson;
@@ -263,13 +433,24 @@ class _RustBindings {
   final _DartBoolNoArg _clearAllSongsNoArg;
   final _DartBoolStringArg _saveScanConfigJson;
   final _NativePing _getScanConfigJson;
+  final _DartBoolStringArg _startFileWatcherJson;
+  final _DartBoolNoArg _stopFileWatcherNoArg;
+  final _NativePing _pollFileWatcherEventsJson;
+  final _NativePing _fileWatcherStatusJson;
+  final _DartBoolNoArg _windowsTaskbarInitNoArg;
+  final _DartBoolStringArg _windowsTaskbarUpdateJson;
+  final _NativePing _windowsTaskbarPollEventsJson;
   final _DartBoolStringArg _audioPlay;
   final _DartBoolNoArg _audioPause;
   final _DartBoolNoArg _audioResume;
   final _DartBoolNoArg _audioStop;
   final _DartBoolDoubleArg _audioSeek;
   final _DartBoolDoubleArg _audioSetVolume;
+  final _DartBoolBoolArg _audioSetEqEnabled;
+  final _DartBoolStringArg _audioSetEqGainsJson;
   final _NativePing _audioGetStateJson;
+  final _NativePing _audioGetFftJson;
+  final _NativePing _audioGetEqStateJson;
 
   String ping() {
     final pointer = _ping();
@@ -361,6 +542,70 @@ class _RustBindings {
     return RustScanConfig.fromJson(Map<String, dynamic>.from(decoded as Map));
   }
 
+  void startFileWatcher(List<String> directories) {
+    _callBoolStringArg(
+      _startFileWatcherJson,
+      jsonEncode(directories),
+      'Rust startFileWatcher() failed',
+    );
+  }
+
+  void stopFileWatcher() {
+    _callBoolNoArg(_stopFileWatcherNoArg, 'Rust stopFileWatcher() failed');
+  }
+
+  List<RustFileWatchEvent> pollFileWatcherEvents() {
+    final payload = _callNoArg(
+      _pollFileWatcherEventsJson,
+      'Rust pollFileWatcherEvents() failed',
+    );
+    final decoded = _decodeJsonList(payload);
+    return decoded
+        .map(
+          (item) => RustFileWatchEvent.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  RustFileWatcherStatus fileWatcherStatus() {
+    final payload = _callNoArg(
+      _fileWatcherStatusJson,
+      'Rust fileWatcherStatus() failed',
+    );
+    return RustFileWatcherStatus.fromJson(
+      Map<String, dynamic>.from(jsonDecode(payload) as Map),
+    );
+  }
+
+  void windowsTaskbarInit() {
+    _callBoolNoArg(_windowsTaskbarInitNoArg, 'Rust windowsTaskbarInit() failed');
+  }
+
+  void windowsTaskbarUpdate(RustWindowsTaskbarState state) {
+    _callBoolStringArg(
+      _windowsTaskbarUpdateJson,
+      jsonEncode(state.toJson()),
+      'Rust windowsTaskbarUpdate() failed',
+    );
+  }
+
+  List<RustWindowsTaskbarClickEvent> pollWindowsTaskbarEvents() {
+    final payload = _callNoArg(
+      _windowsTaskbarPollEventsJson,
+      'Rust pollWindowsTaskbarEvents() failed',
+    );
+    final decoded = _decodeJsonList(payload);
+    return decoded
+        .map(
+          (item) => RustWindowsTaskbarClickEvent.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList(growable: false);
+  }
+
   RustScannedSong? getMusicMetadata(String filePath) {
     final decoded = _decodeJsonValue(
       _callStringArg(_getMusicMetadataJson, filePath, 'Rust getMusicMetadata() failed'),
@@ -441,6 +686,68 @@ class _RustBindings {
         .toList();
   }
 
+  String saveStreamServer(RustStreamServerInput input) {
+    return _callStringArg(
+      _saveStreamServerJson,
+      jsonEncode(input.toJson()),
+      'Rust saveStreamServer() failed',
+    );
+  }
+
+  void deleteStreamServer(String serverId) {
+    _callBoolStringArg(
+      _deleteStreamServer,
+      serverId,
+      'Rust deleteStreamServer() failed',
+    );
+  }
+
+  RustStreamConnectionTestResult testStreamConnection(
+    RustStreamServerInput input,
+  ) {
+    final payload = _callStringArg(
+      _testStreamConnectionJson,
+      jsonEncode(input.toJson()),
+      'Rust testStreamConnection() failed',
+    );
+    return RustStreamConnectionTestResult.fromJson(
+      Map<String, dynamic>.from(jsonDecode(payload) as Map),
+    );
+  }
+
+  RustStreamPlaylistSyncResult syncStreamPlaylists(String serverId) {
+    final payload = _callStringArg(
+      _syncStreamPlaylistsJson,
+      serverId,
+      'Rust syncStreamPlaylists() failed',
+    );
+    return RustStreamPlaylistSyncResult.fromJson(
+      Map<String, dynamic>.from(jsonDecode(payload) as Map),
+    );
+  }
+
+  List<RustDbSong> getStreamPlaylistSongs({
+    required String serverId,
+    required String playlistId,
+  }) {
+    final payload = _callStringArg(
+      _getStreamPlaylistSongsJson,
+      jsonEncode(<String, dynamic>{
+        'serverId': serverId,
+        'playlistId': playlistId,
+      }),
+      'Rust getStreamPlaylistSongs() failed',
+    );
+    final decoded = _decodeJsonList(payload);
+    return decoded
+        .map(
+          (item) => RustDbSong.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          ),
+        )
+        .toList();
+  }
+
   void audioPlay(String source) {
     _callBoolStringArg(_audioPlay, source, 'Rust audioPlay() failed');
   }
@@ -469,9 +776,42 @@ class _RustBindings {
     );
   }
 
+  void audioSetEqEnabled(bool enabled) {
+    _callBoolBoolArg(
+      _audioSetEqEnabled,
+      enabled,
+      'Rust audioSetEqEnabled() failed',
+    );
+  }
+
+  void audioSetEqGains(List<double> gains) {
+    if (gains.length != 10) {
+      throw ArgumentError.value(gains.length, 'gains.length', 'Expected 10 gains');
+    }
+    _callBoolStringArg(
+      _audioSetEqGainsJson,
+      jsonEncode(gains),
+      'Rust audioSetEqGains() failed',
+    );
+  }
+
   RustPlaybackState getPlaybackState() {
     final payload = _callNoArg(_audioGetStateJson, 'Rust getPlaybackState() failed');
     return RustPlaybackState.fromJson(
+      Map<String, dynamic>.from(jsonDecode(payload) as Map),
+    );
+  }
+
+  RustFftSnapshot getAudioFft() {
+    final payload = _callNoArg(_audioGetFftJson, 'Rust getAudioFft() failed');
+    return RustFftSnapshot.fromJson(
+      Map<String, dynamic>.from(jsonDecode(payload) as Map),
+    );
+  }
+
+  RustEqState getEqState() {
+    final payload = _callNoArg(_audioGetEqStateJson, 'Rust getEqState() failed');
+    return RustEqState.fromJson(
       Map<String, dynamic>.from(jsonDecode(payload) as Map),
     );
   }
@@ -535,6 +875,17 @@ class _RustBindings {
   void _callBoolDoubleArg(
     _DartBoolDoubleArg fn,
     double argument,
+    String errorMessage,
+  ) {
+    final ok = fn(argument);
+    if (!ok) {
+      throw StateError(_takeLastError() ?? errorMessage);
+    }
+  }
+
+  void _callBoolBoolArg(
+    _DartBoolBoolArg fn,
+    bool argument,
     String errorMessage,
   ) {
     final ok = fn(argument);
@@ -796,6 +1147,85 @@ class RustDbArtist {
   final int songCount;
 }
 
+class RustStreamServerInput {
+  const RustStreamServerInput({
+    required this.serverType,
+    required this.serverName,
+    required this.serverUrl,
+    required this.username,
+    required this.password,
+    this.accessToken,
+    this.userId,
+  });
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'serverType': serverType,
+        'serverName': serverName,
+        'serverUrl': serverUrl,
+        'username': username,
+        'password': password,
+        'accessToken': accessToken,
+        'userId': userId,
+      };
+
+  final String serverType;
+  final String serverName;
+  final String serverUrl;
+  final String username;
+  final String password;
+  final String? accessToken;
+  final String? userId;
+}
+
+class RustStreamConnectionTestResult {
+  const RustStreamConnectionTestResult({
+    required this.success,
+    required this.message,
+    this.serverVersion,
+    this.accessToken,
+    this.userId,
+  });
+
+  factory RustStreamConnectionTestResult.fromJson(Map<String, dynamic> json) {
+    return RustStreamConnectionTestResult(
+      success: json['success'] as bool? ?? false,
+      message: json['message'] as String? ?? 'Unknown error',
+      serverVersion: json['serverVersion'] as String?,
+      accessToken: json['accessToken'] as String?,
+      userId: json['userId'] as String?,
+    );
+  }
+
+  final bool success;
+  final String message;
+  final String? serverVersion;
+  final String? accessToken;
+  final String? userId;
+}
+
+class RustStreamPlaylistSyncResult {
+  const RustStreamPlaylistSyncResult({
+    required this.serverId,
+    required this.serverName,
+    required this.playlistCount,
+    required this.syncedAt,
+  });
+
+  factory RustStreamPlaylistSyncResult.fromJson(Map<String, dynamic> json) {
+    return RustStreamPlaylistSyncResult(
+      serverId: json['serverId'] as String,
+      serverName: json['serverName'] as String,
+      playlistCount: (json['playlistCount'] as num).toInt(),
+      syncedAt: (json['syncedAt'] as num).toInt(),
+    );
+  }
+
+  final String serverId;
+  final String serverName;
+  final int playlistCount;
+  final int syncedAt;
+}
+
 class RustDbStreamServer {
   const RustDbStreamServer({
     required this.id,
@@ -926,6 +1356,87 @@ class RustScanConfig {
   final int? lastScanAt;
 }
 
+class RustFileWatchEvent {
+  const RustFileWatchEvent({
+    required this.path,
+    required this.kind,
+    required this.timestampMs,
+  });
+
+  factory RustFileWatchEvent.fromJson(Map<String, dynamic> json) {
+    return RustFileWatchEvent(
+      path: json['path'] as String? ?? '',
+      kind: json['kind'] as String? ?? 'unknown',
+      timestampMs: (json['timestampMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String path;
+  final String kind;
+  final int timestampMs;
+}
+
+class RustFileWatcherStatus {
+  const RustFileWatcherStatus({
+    required this.running,
+    required this.watchedDirs,
+    required this.pendingEvents,
+  });
+
+  factory RustFileWatcherStatus.fromJson(Map<String, dynamic> json) {
+    final dirs = (json['watchedDirs'] as List<dynamic>? ?? const <dynamic>[])
+        .map((value) => value as String)
+        .toList(growable: false);
+    return RustFileWatcherStatus(
+      running: json['running'] as bool? ?? false,
+      watchedDirs: dirs,
+      pendingEvents: (json['pendingEvents'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final bool running;
+  final List<String> watchedDirs;
+  final int pendingEvents;
+}
+
+class RustWindowsTaskbarState {
+  const RustWindowsTaskbarState({
+    required this.isPlaying,
+    required this.canPrevious,
+    required this.canNext,
+    this.tooltip,
+  });
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'isPlaying': isPlaying,
+        'canPrevious': canPrevious,
+        'canNext': canNext,
+        'tooltip': tooltip,
+      };
+
+  final bool isPlaying;
+  final bool canPrevious;
+  final bool canNext;
+  final String? tooltip;
+}
+
+class RustWindowsTaskbarClickEvent {
+  const RustWindowsTaskbarClickEvent({
+    required this.action,
+    required this.timestampMs,
+  });
+
+  factory RustWindowsTaskbarClickEvent.fromJson(Map<String, dynamic> json) {
+    return RustWindowsTaskbarClickEvent(
+      action: json['action'] as String? ?? '',
+      timestampMs: (json['timestampMs'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  final String action;
+  final int timestampMs;
+}
+
 class RustPlaybackState {
   const RustPlaybackState({
     required this.isPlaying,
@@ -953,4 +1464,47 @@ class RustPlaybackState {
   final double volume;
   final String? currentSource;
   final bool hasEnded;
+}
+
+class RustEqState {
+  const RustEqState({
+    required this.enabled,
+    required this.gains,
+  });
+
+  factory RustEqState.fromJson(Map<String, dynamic> json) {
+    final gains = (json['gains'] as List<dynamic>? ?? const <dynamic>[])
+        .map((value) => (value as num).toDouble())
+        .toList(growable: false);
+    return RustEqState(
+      enabled: json['enabled'] as bool? ?? false,
+      gains: gains.length == 10 ? gains : List<double>.filled(10, 0.0),
+    );
+  }
+
+  final bool enabled;
+  final List<double> gains;
+}
+
+class RustFftSnapshot {
+  const RustFftSnapshot({
+    required this.frequency,
+    required this.waveform,
+  });
+
+  factory RustFftSnapshot.fromJson(Map<String, dynamic> json) {
+    final frequency = (json['frequency'] as List<dynamic>? ?? const <dynamic>[])
+        .map((value) => (value as num).toInt())
+        .toList(growable: false);
+    final waveform = (json['waveform'] as List<dynamic>? ?? const <dynamic>[])
+        .map((value) => (value as num).toInt())
+        .toList(growable: false);
+    return RustFftSnapshot(
+      frequency: frequency,
+      waveform: waveform,
+    );
+  }
+
+  final List<int> frequency;
+  final List<int> waveform;
 }

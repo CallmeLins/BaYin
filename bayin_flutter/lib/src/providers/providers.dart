@@ -15,8 +15,12 @@
 library;
 
 export 'library_provider.dart';
+export 'lyrics_provider.dart';
 export 'player_provider.dart';
+export 'app_settings_provider.dart';
+export 'file_watcher_provider.dart';
 export 'platform_provider.dart';
 export 'responsive_provider.dart';
 export 'scanner_provider.dart';
 export 'settings_provider.dart';
+export 'spectrum_provider.dart';

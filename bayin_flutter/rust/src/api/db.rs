@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+use crate::db::playlists::{get_stream_playlists, DbStreamPlaylist};
 use crate::db::{
     self, DbAlbum, DbArtist, DbSong, DbStreamServer, ScanConfig, SongInput, StreamServerInput,
 };
-use crate::db::playlists::{get_stream_playlists, DbStreamPlaylist};
 use crate::state::{init_database, with_db, with_db_mut};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

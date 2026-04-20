@@ -46,6 +46,79 @@ class LibraryService {
     return playlists.map(Playlist.fromStreamRust).toList();
   }
 
+  Future<String> saveStreamServer({
+    required String serverType,
+    required String serverName,
+    required String serverUrl,
+    required String username,
+    required String password,
+    String? accessToken,
+    String? userId,
+  }) async {
+    await ensureDatabaseInitialized();
+    final input = RustStreamServerInput(
+      serverType: serverType,
+      serverName: serverName,
+      serverUrl: serverUrl,
+      username: username,
+      password: password,
+      accessToken: accessToken,
+      userId: userId,
+    );
+    return RustApi.instance.saveStreamServer(input);
+  }
+
+  Future<void> deleteStreamServer(String serverId) async {
+    await ensureDatabaseInitialized();
+    RustApi.instance.deleteStreamServer(serverId);
+  }
+
+  Future<StreamConnectionTestResult> testStreamConnection({
+    required String serverType,
+    required String serverName,
+    required String serverUrl,
+    required String username,
+    required String password,
+    String? accessToken,
+    String? userId,
+  }) async {
+    await ensureDatabaseInitialized();
+    final input = RustStreamServerInput(
+      serverType: serverType,
+      serverName: serverName,
+      serverUrl: serverUrl,
+      username: username,
+      password: password,
+      accessToken: accessToken,
+      userId: userId,
+    );
+    final result = RustApi.instance.testStreamConnection(input);
+    return StreamConnectionTestResult(
+      success: result.success,
+      message: result.message,
+      serverVersion: result.serverVersion,
+      accessToken: result.accessToken,
+      userId: result.userId,
+    );
+  }
+
+  Future<RustStreamPlaylistSyncResult> syncStreamPlaylists(String serverId) async {
+    await ensureDatabaseInitialized();
+    return RustApi.instance.syncStreamPlaylists(serverId);
+  }
+
+  Future<List<Song>> loadStreamPlaylistSongs(
+    String serverId,
+    String playlistId,
+  ) async {
+    await ensureDatabaseInitialized();
+    final songs = RustApi.instance.getStreamPlaylistSongs(
+      serverId: serverId,
+      playlistId: playlistId,
+    );
+    return songs.map(Song.fromRust).toList();
+  }
+
   String _defaultDatabasePath() {
     final separator = Platform.pathSeparator;
     late final String baseDir;
@@ -69,4 +142,20 @@ class LibraryService {
 
     return '$baseDir${separator}BaYin${separator}bayin.db';
   }
+}
+
+class StreamConnectionTestResult {
+  const StreamConnectionTestResult({
+    required this.success,
+    required this.message,
+    this.serverVersion,
+    this.accessToken,
+    this.userId,
+  });
+
+  final bool success;
+  final String message;
+  final String? serverVersion;
+  final String? accessToken;
+  final String? userId;
 }

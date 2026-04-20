@@ -7,10 +7,10 @@ const WAVEFORM_POINTS: usize = 128;
 /// FFT processor that maintains a mono sample ring buffer,
 /// computes frequency spectrum and waveform data.
 pub struct FftProcessor {
-    buffer: Vec<f32>,     // mono sample ring buffer
+    buffer: Vec<f32>, // mono sample ring buffer
     write_pos: usize,
     planner: FftPlanner<f32>,
-    window: Vec<f32>,     // Hann window
+    window: Vec<f32>, // Hann window
     enabled: bool,
 }
 

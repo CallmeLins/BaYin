@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
@@ -16,6 +18,12 @@ final playerControllerProvider =
 class PlayerController extends Notifier<PlayerControllerState> {
   Timer? _pollTimer;
   bool _handlingEnded = false;
+  bool _windowsTaskbarInitialized = false;
+  bool _isHandlingWindowsTaskbarEvents = false;
+  bool? _lastTaskbarIsPlaying;
+  bool? _lastTaskbarCanPrevious;
+  bool? _lastTaskbarCanNext;
+  String? _lastTaskbarTooltip;
   final Random _random = Random();
 
   @override
@@ -34,6 +42,7 @@ class PlayerController extends Notifier<PlayerControllerState> {
       ),
     );
     MediaSessionService.instance.syncPlayerState(initial);
+    _tryInitWindowsTaskbar();
     _pollTimer ??= Timer.periodic(
       const Duration(milliseconds: 400),
       (_) => unawaited(_refresh()),
@@ -211,6 +220,7 @@ class PlayerController extends Notifier<PlayerControllerState> {
         error: null,
       );
       _setState(nextState);
+      await _pollWindowsTaskbarEvents();
 
       if (rustState.hasEnded && !_handlingEnded && state.currentIndex != null) {
         _handlingEnded = true;
@@ -236,6 +246,7 @@ class PlayerController extends Notifier<PlayerControllerState> {
   void _setState(PlayerControllerState nextState) {
     state = nextState;
     MediaSessionService.instance.syncPlayerState(nextState);
+    _syncWindowsTaskbar(nextState);
   }
 
   int? _nextIndexForAdvance({required bool manual}) {
@@ -345,5 +356,133 @@ class PlayerController extends Notifier<PlayerControllerState> {
     }
 
     return null;
+  }
+
+  bool get _isWindowsDesktop => !kIsWeb && Platform.isWindows;
+
+  void _tryInitWindowsTaskbar() {
+    if (!_isWindowsDesktop || _windowsTaskbarInitialized) {
+      return;
+    }
+    try {
+      RustApi.instance.windowsTaskbarInit();
+      _windowsTaskbarInitialized = true;
+    } catch (_) {
+      _windowsTaskbarInitialized = false;
+    }
+  }
+
+  void _syncWindowsTaskbar(PlayerControllerState snapshot) {
+    if (!_isWindowsDesktop) {
+      return;
+    }
+    if (!_windowsTaskbarInitialized) {
+      _tryInitWindowsTaskbar();
+      if (!_windowsTaskbarInitialized) {
+        return;
+      }
+    }
+
+    final canPrevious = _canGoPrevious(snapshot);
+    final canNext = _canGoNext(snapshot);
+    final tooltip = _taskbarTooltip(snapshot);
+
+    if (_lastTaskbarIsPlaying == snapshot.isPlaying &&
+        _lastTaskbarCanPrevious == canPrevious &&
+        _lastTaskbarCanNext == canNext &&
+        _lastTaskbarTooltip == tooltip) {
+      return;
+    }
+
+    try {
+      RustApi.instance.windowsTaskbarUpdate(
+        RustWindowsTaskbarState(
+          isPlaying: snapshot.isPlaying,
+          canPrevious: canPrevious,
+          canNext: canNext,
+          tooltip: tooltip,
+        ),
+      );
+      _lastTaskbarIsPlaying = snapshot.isPlaying;
+      _lastTaskbarCanPrevious = canPrevious;
+      _lastTaskbarCanNext = canNext;
+      _lastTaskbarTooltip = tooltip;
+    } catch (_) {
+      _windowsTaskbarInitialized = false;
+    }
+  }
+
+  Future<void> _pollWindowsTaskbarEvents() async {
+    if (!_isWindowsDesktop || _isHandlingWindowsTaskbarEvents) {
+      return;
+    }
+    if (!_windowsTaskbarInitialized) {
+      _tryInitWindowsTaskbar();
+      if (!_windowsTaskbarInitialized) {
+        return;
+      }
+    }
+
+    _isHandlingWindowsTaskbarEvents = true;
+    try {
+      final events = RustApi.instance.pollWindowsTaskbarEvents();
+      for (final event in events) {
+        switch (event.action) {
+          case 'previous':
+            await previous();
+            break;
+          case 'next':
+            await next();
+            break;
+          case 'playPause':
+            await togglePlayPause();
+            break;
+          default:
+            break;
+        }
+      }
+    } catch (_) {
+      _windowsTaskbarInitialized = false;
+    } finally {
+      _isHandlingWindowsTaskbarEvents = false;
+    }
+  }
+
+  bool _canGoPrevious(PlayerControllerState snapshot) {
+    final index = snapshot.currentIndex;
+    if (index == null) {
+      return false;
+    }
+    return snapshot.positionSecs > 3 || index > 0;
+  }
+
+  bool _canGoNext(PlayerControllerState snapshot) {
+    final index = snapshot.currentIndex;
+    if (index == null) {
+      return false;
+    }
+    if (snapshot.mode == PlayMode.shuffle) {
+      return snapshot.queue.length > 1;
+    }
+    return index + 1 < snapshot.queue.length;
+  }
+
+  String? _taskbarTooltip(PlayerControllerState snapshot) {
+    final song = snapshot.currentSong;
+    if (song == null) {
+      return null;
+    }
+    final title = song.title.trim();
+    final artist = song.artist.trim();
+    if (title.isEmpty && artist.isEmpty) {
+      return null;
+    }
+    if (artist.isEmpty) {
+      return title;
+    }
+    if (title.isEmpty) {
+      return artist;
+    }
+    return '$title - $artist';
   }
 }

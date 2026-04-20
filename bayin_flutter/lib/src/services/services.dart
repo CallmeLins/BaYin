@@ -11,6 +11,7 @@ library;
 
 export 'library_service.dart';
 export 'media_session_service.dart';
+export 'file_watcher_service.dart';
 export 'scan_service.dart';
 export 'settings_service.dart';
 export 'window_service.dart';

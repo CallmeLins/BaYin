@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../providers/providers.dart';
+import '../rust/rust_api.dart';
 import '../theme/bayin_tokens.dart';
 import 'player_bar.dart';
 import 'sidebar.dart';
@@ -41,9 +42,35 @@ class RootScaffold extends ConsumerStatefulWidget {
 class _RootScaffoldState extends ConsumerState<RootScaffold>
     with SingleTickerProviderStateMixin {
   bool _overlayOpen = false;
+  ProviderSubscription<AsyncValue<List<RustFileWatchEvent>>>?
+      _watchEventsSubscription;
 
   bool get _isDesktop =>
       !kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS);
+
+  @override
+  void initState() {
+    super.initState();
+    _watchEventsSubscription = ref.listenManual(
+      fileWatcherEventsProvider,
+      (previous, next) {
+        next.whenData((events) {
+          if (events.isEmpty) {
+            return;
+          }
+          ref.invalidate(librarySongsProvider);
+          ref.invalidate(libraryAlbumsProvider);
+          ref.invalidate(libraryArtistsProvider);
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _watchEventsSubscription?.close();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

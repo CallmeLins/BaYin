@@ -3,9 +3,11 @@ use ringbuf::traits::{Observer, Producer};
 use ringbuf::HeapProd;
 use serde::Serialize;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::decoder::AudioDecoder;
+use super::dsp::Equalizer;
+use super::fft::FftProcessor;
 use super::output::AudioOutput;
 use super::resampler::AudioResampler;
 
@@ -33,6 +35,14 @@ pub enum AudioCommand {
         volume: f32,
         reply: CommandReply,
     },
+    SetEqEnabled {
+        enabled: bool,
+        reply: CommandReply,
+    },
+    SetEqGains {
+        gains: [f32; 10],
+        reply: CommandReply,
+    },
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -46,9 +56,25 @@ pub struct PlaybackState {
     pub has_ended: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FftSnapshot {
+    pub frequency: Vec<u8>,
+    pub waveform: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EqState {
+    pub enabled: bool,
+    pub gains: [f32; 10],
+}
+
 pub struct AudioEngine {
     cmd_tx: Sender<AudioCommand>,
     state: Arc<Mutex<PlaybackState>>,
+    fft: Arc<Mutex<FftSnapshot>>,
+    eq: Arc<Mutex<EqState>>,
 }
 
 impl AudioEngine {
@@ -63,15 +89,30 @@ impl AudioEngine {
             has_ended: false,
         }));
         let state_clone = Arc::clone(&state);
+        let fft = Arc::new(Mutex::new(FftSnapshot {
+            frequency: vec![0; 64],
+            waveform: vec![128; 128],
+        }));
+        let fft_clone = Arc::clone(&fft);
+        let eq = Arc::new(Mutex::new(EqState {
+            enabled: false,
+            gains: [0.0; 10],
+        }));
+        let eq_clone = Arc::clone(&eq);
 
         std::thread::Builder::new()
             .name("audio-engine".to_string())
             .spawn(move || {
-                audio_thread(cmd_rx, state_clone);
+                audio_thread(cmd_rx, state_clone, fft_clone, eq_clone);
             })
             .map_err(|err| format!("Failed to spawn audio engine thread: {err}"))?;
 
-        Ok(Self { cmd_tx, state })
+        Ok(Self {
+            cmd_tx,
+            state,
+            fft,
+            eq,
+        })
     }
 
     pub fn play(&self, source: String) -> Result<(), String> {
@@ -98,10 +139,15 @@ impl AudioEngine {
     }
 
     pub fn set_volume(&self, volume: f32) -> Result<(), String> {
-        self.send_wait(|reply| AudioCommand::SetVolume {
-            volume,
-            reply,
-        })
+        self.send_wait(|reply| AudioCommand::SetVolume { volume, reply })
+    }
+
+    pub fn set_eq_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.send_wait(|reply| AudioCommand::SetEqEnabled { enabled, reply })
+    }
+
+    pub fn set_eq_gains(&self, gains: [f32; 10]) -> Result<(), String> {
+        self.send_wait(|reply| AudioCommand::SetEqGains { gains, reply })
     }
 
     pub fn playback_state(&self) -> Result<PlaybackState, String> {
@@ -111,10 +157,21 @@ impl AudioEngine {
             .map_err(|err| err.to_string())
     }
 
-    fn send_wait(
-        &self,
-        build: impl FnOnce(CommandReply) -> AudioCommand,
-    ) -> Result<(), String> {
+    pub fn fft_snapshot(&self) -> Result<FftSnapshot, String> {
+        self.fft
+            .lock()
+            .map(|fft| fft.clone())
+            .map_err(|err| err.to_string())
+    }
+
+    pub fn eq_state(&self) -> Result<EqState, String> {
+        self.eq
+            .lock()
+            .map(|eq| eq.clone())
+            .map_err(|err| err.to_string())
+    }
+
+    fn send_wait(&self, build: impl FnOnce(CommandReply) -> AudioCommand) -> Result<(), String> {
         let (reply_tx, reply_rx) = bounded(1);
         let command = build(reply_tx);
 
@@ -132,12 +189,18 @@ struct PreparedPlayback {
     decoder: AudioDecoder,
     output: AudioOutput,
     resampler: Option<AudioResampler>,
+    equalizer: Equalizer,
     source_sample_rate: u32,
     source_channels: usize,
     duration_secs: f64,
 }
 
-fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>) {
+fn audio_thread(
+    cmd_rx: Receiver<AudioCommand>,
+    state: Arc<Mutex<PlaybackState>>,
+    fft_state: Arc<Mutex<FftSnapshot>>,
+    eq_state: Arc<Mutex<EqState>>,
+) {
     let mut decoder: Option<AudioDecoder> = None;
     let mut output: Option<AudioOutput> = None;
     let mut resampler: Option<AudioResampler> = None;
@@ -145,12 +208,18 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
     let mut pending_samples: Vec<f32> = Vec::new();
     let mut source_sample_rate = 44_100u32;
     let mut source_channels = 2usize;
+    let mut equalizer: Option<Equalizer> = None;
+    let mut eq_enabled = false;
+    let mut eq_gains = [0.0f32; 10];
     let mut decoded_position_secs = 0.0f64;
     let mut duration_secs = 0.0f64;
     let mut is_playing = false;
     let mut volume = 1.0f32;
     let mut current_source: Option<String> = None;
     let mut end_pending = false;
+    let mut fft_processor = FftProcessor::new();
+    fft_processor.set_enabled(true);
+    let mut last_fft_emit = Instant::now();
 
     loop {
         while let Ok(command) = cmd_rx.try_recv() {
@@ -160,6 +229,12 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                         decoder = Some(prepared.decoder);
                         output = Some(prepared.output);
                         resampler = prepared.resampler;
+                        equalizer = Some(prepared.equalizer);
+                        if let Some(eq) = equalizer.as_mut() {
+                            eq.set_enabled(eq_enabled);
+                            eq.set_gains(&eq_gains);
+                            eq.reset();
+                        }
                         resample_buffer.clear();
                         pending_samples.clear();
                         source_sample_rate = prepared.source_sample_rate;
@@ -186,6 +261,7 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                         &mut decoder,
                         output.as_ref(),
                         &mut resampler,
+                        &mut equalizer,
                         &mut resample_buffer,
                         &mut pending_samples,
                         &mut decoded_position_secs,
@@ -233,6 +309,7 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                         &mut decoder,
                         &mut output,
                         &mut resampler,
+                        &mut equalizer,
                         &mut resample_buffer,
                         &mut pending_samples,
                         &mut decoded_position_secs,
@@ -252,6 +329,7 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                         decoder.as_mut(),
                         output.as_ref(),
                         &mut resampler,
+                        &mut equalizer,
                         &mut resample_buffer,
                         &mut pending_samples,
                         &mut decoded_position_secs,
@@ -288,6 +366,23 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                     );
                     let _ = reply.send(Ok(()));
                 }
+                AudioCommand::SetEqEnabled { enabled, reply } => {
+                    eq_enabled = enabled;
+                    if let Some(eq) = equalizer.as_mut() {
+                        eq.set_enabled(enabled);
+                    }
+                    update_eq_state(&eq_state, eq_enabled, eq_gains);
+                    let _ = reply.send(Ok(()));
+                }
+                AudioCommand::SetEqGains { gains, reply } => {
+                    eq_gains = gains.map(|value| value.clamp(-12.0, 12.0));
+                    if let Some(eq) = equalizer.as_mut() {
+                        eq.set_gains(&eq_gains);
+                        eq.reset();
+                    }
+                    update_eq_state(&eq_state, eq_enabled, eq_gains);
+                    let _ = reply.send(Ok(()));
+                }
             }
         }
 
@@ -322,8 +417,16 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                                     let chunk: Vec<f32> = resample_buffer.drain(..needed).collect();
                                     match rs.process(&chunk) {
                                         Ok(mut resampled) => {
+                                            if let Some(eq) = equalizer.as_mut() {
+                                                eq.process(&mut resampled);
+                                            }
                                             apply_volume(&mut resampled, volume);
-                                            push_or_pend(&mut out.producer, &resampled, &mut pending_samples);
+                                            fft_processor.push_samples(&resampled, out_channels);
+                                            push_or_pend(
+                                                &mut out.producer,
+                                                &resampled,
+                                                &mut pending_samples,
+                                            );
                                         }
                                         Err(err) => {
                                             eprintln!("Resample error: {err}");
@@ -337,17 +440,24 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
                                 }
                             } else {
                                 let mut samples = samples;
+                                if let Some(eq) = equalizer.as_mut() {
+                                    eq.process(&mut samples);
+                                }
                                 apply_volume(&mut samples, volume);
+                                fft_processor.push_samples(&samples, out_channels);
                                 push_or_pend(&mut out.producer, &samples, &mut pending_samples);
                             }
 
-                            decoded_position_secs += decoded_frames as f64 / source_sample_rate as f64;
+                            decoded_position_secs +=
+                                decoded_frames as f64 / source_sample_rate as f64;
                             if duration_secs > 0.0 {
                                 decoded_position_secs = decoded_position_secs.min(duration_secs);
                             }
                         }
                         Ok(None) => {
-                            if duration_secs <= 0.0 || (decoded_position_secs - duration_secs).abs() > 1.0 {
+                            if duration_secs <= 0.0
+                                || (decoded_position_secs - duration_secs).abs() > 1.0
+                            {
                                 duration_secs = decoded_position_secs;
                             }
                             end_pending = true;
@@ -410,6 +520,12 @@ fn audio_thread(cmd_rx: Receiver<AudioCommand>, state: Arc<Mutex<PlaybackState>>
             );
         }
 
+        if is_playing && last_fft_emit.elapsed() >= Duration::from_millis(33) {
+            let (frequency, waveform) = fft_processor.compute();
+            update_fft_state(&fft_state, frequency, waveform);
+            last_fft_emit = Instant::now();
+        }
+
         std::thread::sleep(if is_playing {
             Duration::from_millis(2)
         } else {
@@ -428,6 +544,7 @@ fn prepare_playback(source: &str) -> Result<PreparedPlayback, String> {
     let output = AudioOutput::new(source_sample_rate, requested_channels)?;
     let output_sample_rate = output.config.sample_rate.0;
     let output_channels = output.config.channels as usize;
+    let equalizer = Equalizer::new(output_sample_rate, output_channels);
 
     let resampler = if output_sample_rate != source_sample_rate {
         Some(AudioResampler::new(
@@ -443,6 +560,7 @@ fn prepare_playback(source: &str) -> Result<PreparedPlayback, String> {
         decoder,
         output,
         resampler,
+        equalizer,
         source_sample_rate,
         source_channels,
         duration_secs,
@@ -453,6 +571,7 @@ fn pause_playback(
     decoder: &mut Option<AudioDecoder>,
     output: Option<&AudioOutput>,
     resampler: &mut Option<AudioResampler>,
+    equalizer: &mut Option<Equalizer>,
     resample_buffer: &mut Vec<f32>,
     pending_samples: &mut Vec<f32>,
     decoded_position_secs: &mut f64,
@@ -475,6 +594,9 @@ fn pause_playback(
     *decoded_position_secs = paused_at;
     *is_playing = false;
     *resampler = None;
+    if let Some(eq) = equalizer.as_mut() {
+        eq.reset();
+    }
     resample_buffer.clear();
     pending_samples.clear();
     Ok(paused_at)
@@ -484,6 +606,7 @@ fn seek_playback(
     decoder: Option<&mut AudioDecoder>,
     output: Option<&AudioOutput>,
     resampler: &mut Option<AudioResampler>,
+    equalizer: &mut Option<Equalizer>,
     resample_buffer: &mut Vec<f32>,
     pending_samples: &mut Vec<f32>,
     decoded_position_secs: &mut f64,
@@ -503,6 +626,9 @@ fn seek_playback(
     }
 
     *resampler = None;
+    if let Some(eq) = equalizer.as_mut() {
+        eq.reset();
+    }
     resample_buffer.clear();
     pending_samples.clear();
     *decoded_position_secs = target;
@@ -513,6 +639,7 @@ fn stop_playback(
     decoder: &mut Option<AudioDecoder>,
     output: &mut Option<AudioOutput>,
     resampler: &mut Option<AudioResampler>,
+    equalizer: &mut Option<Equalizer>,
     resample_buffer: &mut Vec<f32>,
     pending_samples: &mut Vec<f32>,
     decoded_position_secs: &mut f64,
@@ -524,6 +651,7 @@ fn stop_playback(
     *decoder = None;
     *output = None;
     *resampler = None;
+    *equalizer = None;
     resample_buffer.clear();
     pending_samples.clear();
     *decoded_position_secs = 0.0;
@@ -549,6 +677,20 @@ fn update_state(
         value.volume = volume.clamp(0.0, 1.0);
         value.current_source = current_source;
         value.has_ended = has_ended;
+    }
+}
+
+fn update_fft_state(fft_state: &Arc<Mutex<FftSnapshot>>, frequency: Vec<u8>, waveform: Vec<u8>) {
+    if let Ok(mut value) = fft_state.lock() {
+        value.frequency = frequency;
+        value.waveform = waveform;
+    }
+}
+
+fn update_eq_state(eq_state: &Arc<Mutex<EqState>>, enabled: bool, gains: [f32; 10]) {
+    if let Ok(mut value) = eq_state.lock() {
+        value.enabled = enabled;
+        value.gains = gains;
     }
 }
 

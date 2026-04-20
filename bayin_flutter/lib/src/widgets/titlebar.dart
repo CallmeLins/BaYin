@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
 
@@ -71,14 +72,29 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
     if (!AppTitlebar.supportsCustomChrome) {
       return const SizedBox.shrink();
     }
+    final t = context.t;
     final platform = ref.watch(platformProvider);
     final tokens = Theme.of(context).extension<BayinTokens>()!;
 
     if (platform.isMacOS) {
       return SizedBox(
         height: _macTitlebarHeight,
-        child: DragToMoveArea(
-          child: Container(color: tokens.titlebarBg),
+        child: GestureDetector(
+          onDoubleTap: _toggleMaximize,
+          child: DragToMoveArea(
+            child: Container(
+              color: tokens.titlebarBg,
+              padding: const EdgeInsets.only(left: 72, right: 12),
+              alignment: Alignment.center,
+              child: Text(
+                'BaYin',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+          ),
         ),
       );
     }
@@ -90,16 +106,19 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
         child: Row(
           children: [
             Expanded(
-              child: DragToMoveArea(
-                child: Align(
-                  alignment: AlignmentDirectional.centerStart,
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 12),
-                    child: Text(
-                      'BaYin',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+              child: GestureDetector(
+                onDoubleTap: _toggleMaximize,
+                child: DragToMoveArea(
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 12),
+                      child: Text(
+                        'BaYin',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
                       ),
                     ),
                   ),
@@ -108,25 +127,19 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
             ),
             _WindowButton(
               icon: PhosphorIcons.minus(),
-              tooltip: 'Minimize',
+              tooltip: t.common.minimize,
               onTap: windowManager.minimize,
             ),
             _WindowButton(
               icon: _isMaximized
                   ? PhosphorIcons.copy()
                   : PhosphorIcons.square(),
-              tooltip: _isMaximized ? 'Restore' : 'Maximize',
-              onTap: () async {
-                if (await windowManager.isMaximized()) {
-                  await windowManager.unmaximize();
-                } else {
-                  await windowManager.maximize();
-                }
-              },
+              tooltip: _isMaximized ? t.common.restore : t.common.maximize,
+              onTap: _toggleMaximize,
             ),
             _WindowButton(
               icon: PhosphorIcons.x(),
-              tooltip: 'Close',
+              tooltip: t.common.closeWindow,
               isDanger: true,
               onTap: windowManager.close,
             ),
@@ -134,6 +147,14 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
         ),
       ),
     );
+  }
+
+  Future<void> _toggleMaximize() async {
+    if (await windowManager.isMaximized()) {
+      await windowManager.unmaximize();
+    } else {
+      await windowManager.maximize();
+    }
   }
 }
 

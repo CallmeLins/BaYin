@@ -61,7 +61,8 @@ impl AudioOutput {
         let flushing = Arc::new(AtomicBool::new(false));
         let flushing_clone = flushing.clone();
 
-        let stream = build_output_stream(&device, &config, consumer, playing_clone, flushing_clone)?;
+        let stream =
+            build_output_stream(&device, &config, consumer, playing_clone, flushing_clone)?;
         stream
             .play()
             .map_err(|e| format!("Failed to start audio stream: {}", e))?;

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +10,8 @@ import 'src/router/app_router.dart';
 import 'src/rust/rust_api.dart';
 import 'src/services/library_service.dart';
 import 'src/services/media_session_service.dart';
+import 'src/services/file_watcher_service.dart';
+import 'src/services/scan_service.dart';
 import 'src/services/settings_service.dart';
 import 'src/services/window_service.dart';
 import 'src/theme/app_theme.dart';
@@ -18,7 +22,9 @@ Future<void> main() async {
   await WindowService.init();
   await _restoreLocale();
   await RustApi.instance.ensureInitialized();
+  _restoreAudioEngineSettings();
   await LibraryService.instance.ensureDatabaseInitialized();
+  await _restoreFileWatcher();
   try {
     await MediaSessionService.instance.init();
   } catch (_) {
@@ -35,6 +41,46 @@ Future<void> _restoreLocale() async {
   }
   final locale = AppLocaleUtils.parse(stored);
   await LocaleSettings.setLocale(locale);
+}
+
+void _restoreAudioEngineSettings() {
+  final service = SettingsService.instance;
+  final eqEnabled = service.readBool(SettingsService.keyEqEnabled) ?? false;
+  final rawGains = service.readString(SettingsService.keyEqGains);
+  var gains = List<double>.filled(10, 0.0);
+  if (rawGains != null && rawGains.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(rawGains);
+      if (decoded is List<dynamic> && decoded.length == 10) {
+        gains = decoded
+            .map(
+              (value) => (value as num).toDouble().clamp(-12.0, 12.0).toDouble(),
+            )
+            .toList(growable: false);
+      }
+    } catch (_) {
+      gains = List<double>.filled(10, 0.0);
+    }
+  }
+
+  try {
+    RustApi.instance.audioSetEqEnabled(eqEnabled);
+    RustApi.instance.audioSetEqGains(gains);
+  } catch (_) {
+    // If audio engine is unavailable during startup, keep app boot resilient.
+  }
+}
+
+Future<void> _restoreFileWatcher() async {
+  try {
+    final config = await ScanService.instance.loadScanConfig();
+    final directories = config?.directories ?? const <String>[];
+    if (directories.isNotEmpty) {
+      await FileWatcherService.instance.start(directories);
+    }
+  } catch (_) {
+    // Watcher is optional and should not block startup.
+  }
 }
 
 class BaYinApp extends ConsumerWidget {

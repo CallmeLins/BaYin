@@ -32,8 +32,8 @@ impl AudioDecoder {
             MediaSourceStream::new(Box::new(http_source), Default::default())
         } else {
             // Local file
-            let file =
-                File::open(source).map_err(|e| format!("Failed to open file '{}': {}", source, e))?;
+            let file = File::open(source)
+                .map_err(|e| format!("Failed to open file '{}': {}", source, e))?;
             MediaSourceStream::new(Box::new(file), Default::default())
         };
 
@@ -70,10 +70,7 @@ impl AudioDecoder {
         let codec_params = &track.codec_params;
 
         let sample_rate = codec_params.sample_rate.unwrap_or(44100);
-        let channels = codec_params
-            .channels
-            .map(|c| c.count())
-            .unwrap_or(2);
+        let channels = codec_params.channels.map(|c| c.count()).unwrap_or(2);
 
         // Calculate duration
         let duration_secs = codec_params

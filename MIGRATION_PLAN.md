@@ -167,23 +167,23 @@ slang_build_runner: ^4.x
 
 ### Phase 5 — 播放页进阶（3-4 周）
 
-- `PlayerPage` 三视图：封面 / 歌词 / 分屏
-- 三种端布局：手机竖屏 / 手机横屏 / 桌面
-- LRC 解析 + 居中滚动
-- `KaraokeLine` 逐字高亮（复用原逻辑）
-- 8 种频谱 `CustomPainter`：
-  - wave / god_ring / diffusion_ring / trippy_ripple / attachment_ring / rotating_cover / bessel / columnar
-- FFT 数据通过 FFI (`NativeCallable` / `SendPort`) 从 Rust 推送到 Dart
-- `PlayerStage` 统一组件
-- 低音冲击动画（封面脉冲）
+- [x] `PlayerPage` 三视图：封面 / 歌词 / 分屏
+- [x] 三种端布局：手机竖屏 / 手机横屏 / 桌面
+- [x] LRC 解析 + 居中滚动
+- [x] `KaraokeLine` 逐字高亮（复用原逻辑）
+- [x] 8 种频谱 `CustomPainter`：
+- [x] wave / god_ring / diffusion_ring / trippy_ripple / attachment_ring / rotating_cover / bessel / columnar
+- [x] FFT 数据通过 FFI (`NativeCallable` / `SendPort`) 从 Rust 推送到 Dart
+- [x] `PlayerStage` 统一组件
+- [x] 低音冲击动画（封面脉冲）
 
 ### Phase 6 — 流媒体（1-2 周）
 
-- Subsonic/Navidrome 客户端（复用 Rust utils/subsonic.rs）
-- Jellyfin/Emby 客户端（复用 Rust utils/jellyfin.rs）
-- `StreamServerConfigPage`
-- `StreamPlaylistDetailPage`
-- 流式 URL 解析 + 播放链路
+- [x] Subsonic/Navidrome 客户端（复用 Rust utils/subsonic.rs）
+- [x] Jellyfin/Emby 客户端（复用 Rust utils/jellyfin.rs）
+- [x] `StreamServerConfigPage`
+- [x] `StreamPlaylistDetailPage`
+- [x] 流式 URL 解析 + 播放链路
 
 ### Phase 7 — 设置 + 次要页（2 周）
 

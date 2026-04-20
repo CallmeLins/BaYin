@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
@@ -143,10 +146,22 @@ class _TopActions extends ConsumerWidget {
           IconButton(
             tooltip: t.common.exit,
             icon: Icon(PhosphorIcons.signOut()),
-            onPressed: () {
-              // Phase 2 stub: real exit lands in Phase 7 (process.exit +
-              // window close fallback). For now do nothing visible.
+            onPressed: () async {
               onNavigate?.call();
+              if (kIsWeb) {
+                return;
+              }
+              final isDesktop = switch (defaultTargetPlatform) {
+                TargetPlatform.windows => true,
+                TargetPlatform.linux => true,
+                TargetPlatform.macOS => true,
+                _ => false,
+              };
+              if (isDesktop) {
+                await windowManager.close();
+                return;
+              }
+              await SystemNavigator.pop();
             },
           ),
         ],
