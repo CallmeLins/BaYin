@@ -1,0 +1,12 @@
+base_locale: en
+fallback_strategy: base_locale
+input_directory: lib/src/i18n
+input_file_pattern: .i18n.json
+output_directory: lib/src/i18n
+output_file_name: strings.g.dart
+locale_handling: true
+translation_class_visibility: public
+key_case: camel
+key_map_case: camel
+param_case: camel
+flat_map: false

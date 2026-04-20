@@ -1,0 +1,349 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../models/models.dart';
+import '../rust/rust_api.dart';
+import '../services/media_session_service.dart';
+
+final playerControllerProvider =
+    NotifierProvider<PlayerController, PlayerControllerState>(
+      PlayerController.new,
+    );
+
+class PlayerController extends Notifier<PlayerControllerState> {
+  Timer? _pollTimer;
+  bool _handlingEnded = false;
+  final Random _random = Random();
+
+  @override
+  PlayerControllerState build() {
+    final initial = PlayerControllerState.initial();
+    MediaSessionService.instance.bindCallbacks(
+      MediaSessionCallbacks(
+        onPlay: resume,
+        onPause: pause,
+        onStop: stop,
+        onSeek: (position) async {
+          await seek(position.inMilliseconds / 1000);
+        },
+        onSkipToNext: next,
+        onSkipToPrevious: previous,
+      ),
+    );
+    MediaSessionService.instance.syncPlayerState(initial);
+    _pollTimer ??= Timer.periodic(
+      const Duration(milliseconds: 400),
+      (_) => unawaited(_refresh()),
+    );
+    ref.onDispose(() {
+      _pollTimer?.cancel();
+      _pollTimer = null;
+    });
+    Future<void>.microtask(_refresh);
+    return initial;
+  }
+
+  Future<void> playQueue(List<Song> queue, {required int startIndex}) async {
+    if (queue.isEmpty || startIndex < 0 || startIndex >= queue.length) {
+      return;
+    }
+
+    final song = queue[startIndex];
+    final source = _resolveSource(song);
+    _setState(state.copyWith(
+      queue: List<Song>.unmodifiable(queue),
+      currentIndex: startIndex,
+      durationSecs: song.duration,
+      positionSecs: 0,
+      isBusy: true,
+      error: null,
+    ));
+
+    try {
+      RustApi.instance.audioPlay(source);
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(isBusy: false, error: '$error'));
+    }
+  }
+
+  Future<void> playSong(Song song) {
+    return playQueue(<Song>[song], startIndex: 0);
+  }
+
+  Future<void> jumpTo(int index) async {
+    if (index < 0 || index >= state.queue.length) {
+      return;
+    }
+    await playQueue(state.queue, startIndex: index);
+  }
+
+  Future<void> togglePlayPause() async {
+    try {
+      if (state.isPlaying) {
+        RustApi.instance.audioPause();
+      } else if (state.currentSong != null) {
+        RustApi.instance.audioResume();
+      } else if (state.queue.isNotEmpty) {
+        await playQueue(state.queue, startIndex: state.currentIndex ?? 0);
+        return;
+      } else {
+        return;
+      }
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> pause() async {
+    try {
+      RustApi.instance.audioPause();
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> resume() async {
+    try {
+      RustApi.instance.audioResume();
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> stop() async {
+    try {
+      RustApi.instance.audioStop();
+      _setState(state.copyWith(
+        isPlaying: false,
+        positionSecs: 0,
+        durationSecs: state.currentSong?.duration ?? 0,
+        error: null,
+      ));
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> seek(double positionSecs) async {
+    try {
+      RustApi.instance.audioSeek(positionSecs);
+      _setState(state.copyWith(
+        positionSecs: positionSecs.clamp(0.0, state.durationSecs),
+      ));
+      await _refresh();
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> setVolume(double volume) async {
+    final clamped = volume.clamp(0.0, 1.0).toDouble();
+    _setState(state.copyWith(volume: clamped));
+    try {
+      RustApi.instance.audioSetVolume(clamped);
+    } catch (error) {
+      _setState(state.copyWith(error: '$error'));
+    }
+  }
+
+  Future<void> next() async {
+    final nextIndex = _nextIndexForAdvance(manual: true);
+    if (nextIndex == null) {
+      return;
+    }
+    await jumpTo(nextIndex);
+  }
+
+  Future<void> previous() async {
+    if (state.positionSecs > 3) {
+      await seek(0);
+      return;
+    }
+
+    final index = state.currentIndex;
+    if (index == null) {
+      return;
+    }
+    final previousIndex = index > 0 ? index - 1 : 0;
+    await jumpTo(previousIndex);
+  }
+
+  void setPlayMode(PlayMode mode) {
+    _setState(state.copyWith(mode: mode));
+  }
+
+  void enqueueNext(Song song) {
+    if (!state.hasSong && state.queue.isEmpty) {
+      unawaited(playSong(song));
+      return;
+    }
+
+    final queue = state.queue.toList();
+    final currentIndex = state.currentIndex;
+    if (currentIndex == null) {
+      queue.add(song);
+    } else {
+      final insertIndex = min(currentIndex + 1, queue.length);
+      queue.insert(insertIndex, song);
+    }
+    _setState(state.copyWith(queue: List<Song>.unmodifiable(queue), error: null));
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final rustState = RustApi.instance.getPlaybackState();
+      final nextState = state.copyWith(
+        isPlaying: rustState.isPlaying,
+        positionSecs: rustState.positionSecs,
+        durationSecs: rustState.durationSecs > 0
+            ? rustState.durationSecs
+            : (state.currentSong?.duration ?? state.durationSecs),
+        volume: rustState.volume.clamp(0.0, 1.0).toDouble(),
+        isBusy: false,
+        error: null,
+      );
+      _setState(nextState);
+
+      if (rustState.hasEnded && !_handlingEnded && state.currentIndex != null) {
+        _handlingEnded = true;
+        try {
+          final nextIndex = _nextIndexForAdvance(manual: false);
+          if (nextIndex != null) {
+            await jumpTo(nextIndex);
+          } else {
+            _setState(state.copyWith(
+              isPlaying: false,
+              positionSecs: state.durationSecs,
+            ));
+          }
+        } finally {
+          _handlingEnded = false;
+        }
+      }
+    } catch (error) {
+      _setState(state.copyWith(isBusy: false, error: '$error'));
+    }
+  }
+
+  void _setState(PlayerControllerState nextState) {
+    state = nextState;
+    MediaSessionService.instance.syncPlayerState(nextState);
+  }
+
+  int? _nextIndexForAdvance({required bool manual}) {
+    final currentIndex = state.currentIndex;
+    final queueLength = state.queue.length;
+    if (currentIndex == null || queueLength == 0) {
+      return null;
+    }
+
+    if (!manual && state.mode == PlayMode.repeatOne) {
+      return currentIndex;
+    }
+
+    if (state.mode == PlayMode.shuffle && queueLength > 1) {
+      var nextIndex = currentIndex;
+      while (nextIndex == currentIndex) {
+        nextIndex = _random.nextInt(queueLength);
+      }
+      return nextIndex;
+    }
+
+    final nextIndex = currentIndex + 1;
+    if (nextIndex < queueLength) {
+      return nextIndex;
+    }
+    return null;
+  }
+
+  String _resolveSource(Song song) {
+    final direct = _extractPlayableSource(song.filePath);
+    if (direct != null) {
+      return direct;
+    }
+
+    final stream = _extractPlayableSource(song.streamInfo);
+    if (stream != null) {
+      return stream;
+    }
+
+    throw StateError('Song does not have a playable source: ${song.title}');
+  }
+
+  String? _extractPlayableSource(String? raw) {
+    if (raw == null) {
+      return null;
+    }
+
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    if (!trimmed.startsWith('{')) {
+      return trimmed;
+    }
+
+    try {
+      final decoded = jsonDecode(trimmed);
+      return _findSourceInJson(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _findSourceInJson(dynamic value) {
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isNotEmpty &&
+          !trimmed.startsWith('{') &&
+          (trimmed.startsWith('http://') ||
+              trimmed.startsWith('https://') ||
+              trimmed.contains(':\\') ||
+              trimmed.startsWith('/'))) {
+        return trimmed;
+      }
+      return null;
+    }
+
+    if (value is List<dynamic>) {
+      for (final item in value) {
+        final result = _findSourceInJson(item);
+        if (result != null) {
+          return result;
+        }
+      }
+      return null;
+    }
+
+    if (value is Map) {
+      for (final key in <String>[
+        'url',
+        'streamUrl',
+        'source',
+        'path',
+        'filePath',
+      ]) {
+        final candidate = _findSourceInJson(value[key]);
+        if (candidate != null) {
+          return candidate;
+        }
+      }
+      for (final entry in value.values) {
+        final result = _findSourceInJson(entry);
+        if (result != null) {
+          return result;
+        }
+      }
+    }
+
+    return null;
+  }
+}

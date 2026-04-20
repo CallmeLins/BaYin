@@ -1,0 +1,71 @@
+name: Flutter Smoke
+
+on:
+  push:
+    branches:
+      - flutter_dev
+    paths:
+      - '.github/workflows/flutter-smoke.yml'
+      - 'bayin_flutter/**'
+      - 'MIGRATION_PLAN.md'
+  pull_request:
+    branches:
+      - flutter_dev
+    paths:
+      - '.github/workflows/flutter-smoke.yml'
+      - 'bayin_flutter/**'
+      - 'MIGRATION_PLAN.md'
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bayin_flutter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Widget smoke test
+        run: flutter test test/widget_test.dart
+
+  build-windows:
+    runs-on: windows-2022
+    defaults:
+      run:
+        working-directory: bayin_flutter
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Get Flutter dependencies
+        run: flutter pub get
+
+      - name: Build Windows app
+        run: flutter build windows

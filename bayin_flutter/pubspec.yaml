@@ -1,0 +1,47 @@
+name: bayin_flutter
+description: "BaYin - a cross-platform music player (Flutter + Rust edition)."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.11.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Routing
+  go_router: ^14.6.2
+
+  cupertino_icons: ^1.0.8
+  ffi: ^2.1.4
+  shared_preferences: ^2.3.5
+  slang: ^4.0.0
+  slang_flutter: ^4.0.0
+  window_manager: ^0.4.3
+  macos_ui: ^2.2.2
+  phosphor_flutter: ^2.1.0
+  lpinyin: ^2.0.3
+  audio_service: ^0.18.18
+  rust_lib_bayin_flutter:
+    path: rust_builder
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  slang_build_runner: ^4.0.0
+
+# NOTE: additional deps (freezed, go_router, audio_service, window_manager, macos_ui,
+# slang, pinyin, etc.) are added on-demand at the start of each phase. Keeping the
+# initial pubspec minimal avoids version-resolution failures during `integrate`.
+
+flutter:
+  uses-material-design: true

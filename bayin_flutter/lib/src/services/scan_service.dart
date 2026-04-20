@@ -1,0 +1,102 @@
+import '../models/models.dart';
+import '../rust/rust_api.dart';
+
+class ScanAndSaveResult {
+  const ScanAndSaveResult({
+    required this.scanned,
+    required this.saved,
+    required this.skipped,
+  });
+
+  factory ScanAndSaveResult.fromRust(RustScanAndSaveResult value) =>
+      ScanAndSaveResult(
+        scanned: value.scanned,
+        saved: value.saved,
+        skipped: value.skipped,
+      );
+
+  final int scanned;
+  final int saved;
+  final int skipped;
+}
+
+class ScanConfig {
+  const ScanConfig({
+    required this.directories,
+    required this.skipShort,
+    required this.minDuration,
+    this.lastScanAt,
+  });
+
+  factory ScanConfig.fromRust(RustScanConfig value) => ScanConfig(
+        directories: List<String>.unmodifiable(value.directories),
+        skipShort: value.skipShort,
+        minDuration: value.minDuration,
+        lastScanAt: value.lastScanAt,
+      );
+
+  final List<String> directories;
+  final bool skipShort;
+  final double minDuration;
+  final int? lastScanAt;
+}
+
+class ScanService {
+  ScanService._();
+
+  static final ScanService instance = ScanService._();
+
+  /// Scan only — returns results without touching the DB. Kept for the debug
+  /// smoke test surface.
+  Future<List<ScannedSong>> scanDirectories(
+    List<String> directories, {
+    bool skipShortAudio = false,
+    double? minDuration,
+  }) async {
+    final results = RustApi.instance.scanMusicFiles(
+      RustScanOptions(
+        directories: directories,
+        skipShortAudio: skipShortAudio,
+        minDuration: minDuration,
+      ),
+    );
+    return results.map(ScannedSong.fromRust).toList();
+  }
+
+  /// Scan + persist to the local DB as source_type=local.
+  Future<ScanAndSaveResult> scanAndSave(
+    List<String> directories, {
+    bool skipShortAudio = false,
+    double? minDuration,
+  }) async {
+    final result = RustApi.instance.scanAndSaveMusicFiles(
+      RustScanOptions(
+        directories: directories,
+        skipShortAudio: skipShortAudio,
+        minDuration: minDuration,
+      ),
+    );
+    return ScanAndSaveResult.fromRust(result);
+  }
+
+  Future<void> clearLocalLibrary() async {
+    RustApi.instance.clearAllSongs();
+  }
+
+  Future<void> saveScanConfig(ScanConfig config) async {
+    RustApi.instance.saveScanConfig(
+      RustScanConfig(
+        directories: config.directories,
+        skipShort: config.skipShort,
+        minDuration: config.minDuration,
+        lastScanAt: config.lastScanAt,
+      ),
+    );
+  }
+
+  Future<ScanConfig?> loadScanConfig() async {
+    final raw = RustApi.instance.getScanConfig();
+    if (raw == null) return null;
+    return ScanConfig.fromRust(raw);
+  }
+}

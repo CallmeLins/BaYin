@@ -1,0 +1,31 @@
+[package]
+name = "rust_lib_bayin_flutter"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+cpal = "0.16"
+crossbeam-channel = "0.5"
+flate2 = "1"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+lofty = "0.21"
+md5 = "0.7"
+rand = "0.8"
+rayon = "1.11.0"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+ringbuf = "0.4"
+rubato = "0.16"
+rusqlite = { version = "0.31", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+symphonia = { version = "0.5", features = ["aac", "mp3", "flac", "vorbis", "isomp4", "ogg", "wav", "pcm"] }
+walkdir = "2"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
