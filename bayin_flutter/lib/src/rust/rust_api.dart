@@ -55,6 +55,11 @@ class RustApi {
     return bindings.scanAndSaveMusicFiles(options);
   }
 
+  RustBackfillCoversResult backfillSongCovers() {
+    final bindings = _bindings ??= _RustBindings(_openLibrary());
+    return bindings.backfillSongCovers();
+  }
+
   void clearAllSongs() {
     final bindings = _bindings ??= _RustBindings(_openLibrary());
     bindings.clearAllSongs();
@@ -332,6 +337,9 @@ class _RustBindings {
         >(
           'bayin_scan_and_save_music_files_json',
         ),
+        _backfillSongCoversJson = library.lookupFunction<_NativePing, _NativePing>(
+          'bayin_backfill_song_covers_json',
+        ),
         _clearAllSongsNoArg = library.lookupFunction<_NativeBoolNoArg, _DartBoolNoArg>(
           'bayin_db_clear_all_songs',
         ),
@@ -430,6 +438,7 @@ class _RustBindings {
   final _DartStringStringArg _listDirectoriesJson;
   final _DartStringStringArg _scanMusicFilesJson;
   final _DartStringStringArg _scanAndSaveMusicFilesJson;
+  final _NativePing _backfillSongCoversJson;
   final _DartBoolNoArg _clearAllSongsNoArg;
   final _DartBoolStringArg _saveScanConfigJson;
   final _NativePing _getScanConfigJson;
@@ -514,6 +523,15 @@ class _RustBindings {
     );
     final decoded = jsonDecode(payload) as Map<String, dynamic>;
     return RustScanAndSaveResult.fromJson(decoded);
+  }
+
+  RustBackfillCoversResult backfillSongCovers() {
+    final payload = _callNoArg(
+      _backfillSongCoversJson,
+      'Rust backfillSongCovers() failed',
+    );
+    final decoded = jsonDecode(payload) as Map<String, dynamic>;
+    return RustBackfillCoversResult.fromJson(decoded);
   }
 
   void clearAllSongs() {
@@ -1317,6 +1335,29 @@ class RustScanAndSaveResult {
   final int scanned;
   final int saved;
   final int skipped;
+}
+
+class RustBackfillCoversResult {
+  const RustBackfillCoversResult({
+    required this.totalCandidates,
+    required this.updated,
+    required this.skipped,
+    required this.failed,
+  });
+
+  factory RustBackfillCoversResult.fromJson(Map<String, dynamic> json) {
+    return RustBackfillCoversResult(
+      totalCandidates: (json['totalCandidates'] as num).toInt(),
+      updated: (json['updated'] as num).toInt(),
+      skipped: (json['skipped'] as num).toInt(),
+      failed: (json['failed'] as num).toInt(),
+    );
+  }
+
+  final int totalCandidates;
+  final int updated;
+  final int skipped;
+  final int failed;
 }
 
 class RustScanConfig {

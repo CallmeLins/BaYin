@@ -86,10 +86,12 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
         ),
         const SizedBox(height: 10),
         _ActionCard(
-          disabled: scanner.isLoading || _directories.isEmpty,
+          scanDisabled: scanner.isLoading || _directories.isEmpty,
+          backfillDisabled: scanner.isLoading,
           onSaveConfig: _saveConfig,
           onPreviewScan: _previewScan,
           onScanAndSave: _scanAndSave,
+          onBackfillCovers: _backfillCovers,
         ),
         if (scanner.isLoading) ...[
           const SizedBox(height: 10),
@@ -236,6 +238,29 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
           minDuration: _minDuration,
         );
   }
+
+  Future<void> _backfillCovers() async {
+    try {
+      await ref.read(libraryServiceProvider).ensureDatabaseInitialized();
+      final result = await ref.read(scanServiceProvider).backfillLocalCovers();
+      ref.invalidate(librarySongsProvider);
+      ref.invalidate(libraryAlbumsProvider);
+      ref.invalidate(libraryArtistsProvider);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Cover backfill finished. Updated ${result.updated}/${result.totalCandidates}, skipped ${result.skipped}, failed ${result.failed}.',
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cover backfill failed: $error')),
+      );
+    }
+  }
 }
 
 class _DirectoriesCard extends StatelessWidget {
@@ -377,16 +402,20 @@ class _ScanOptionsCard extends StatelessWidget {
 
 class _ActionCard extends StatelessWidget {
   const _ActionCard({
-    required this.disabled,
+    required this.scanDisabled,
+    required this.backfillDisabled,
     required this.onSaveConfig,
     required this.onPreviewScan,
     required this.onScanAndSave,
+    required this.onBackfillCovers,
   });
 
-  final bool disabled;
+  final bool scanDisabled;
+  final bool backfillDisabled;
   final Future<void> Function() onSaveConfig;
   final Future<void> Function() onPreviewScan;
   final Future<void> Function() onScanAndSave;
+  final Future<void> Function() onBackfillCovers;
 
   @override
   Widget build(BuildContext context) {
@@ -401,7 +430,7 @@ class _ActionCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: disabled ? null : onSaveConfig,
+              onPressed: scanDisabled ? null : onSaveConfig,
               icon: const Icon(Icons.save_alt),
               label: const Text('Save scan config'),
             ),
@@ -411,7 +440,7 @@ class _ActionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
-                  onPressed: disabled ? null : onPreviewScan,
+                  onPressed: scanDisabled ? null : onPreviewScan,
                   icon: Icon(PhosphorIcons.magnifyingGlass()),
                   label: const Text('Preview scan'),
                 ),
@@ -419,12 +448,21 @@ class _ActionCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: disabled ? null : onScanAndSave,
+                  onPressed: scanDisabled ? null : onScanAndSave,
                   icon: Icon(PhosphorIcons.database()),
                   label: const Text('Scan & save'),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: backfillDisabled ? null : onBackfillCovers,
+              icon: Icon(PhosphorIcons.imageSquare()),
+              label: const Text('Backfill covers'),
+            ),
           ),
         ],
       ),

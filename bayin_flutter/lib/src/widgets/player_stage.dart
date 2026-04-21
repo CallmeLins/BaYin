@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/models.dart';
 import '../rust/rust_api.dart';
+import 'cover_art.dart';
 import 'spectrum/spectrum_painter.dart';
 
 class PlayerStage extends StatelessWidget {
@@ -54,25 +57,50 @@ class PlayerStage extends StatelessWidget {
                 height: 148,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: scheme.surface.withValues(alpha: 0.86),
                   border: Border.all(
                     color: scheme.outlineVariant.withValues(alpha: 0.5),
                   ),
                 ),
-                alignment: Alignment.center,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Text(
-                    song.title,
-                    textAlign: TextAlign.center,
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CoverArt(
+                      width: 148,
+                      height: 148,
+                      coverHash: song.coverHash,
+                      streamInfo: song.streamInfo,
+                      size: CoverArtSize.mid,
+                      shape: BoxShape.circle,
+                      placeholderIcon: PhosphorIcons.musicNote(),
+                      placeholderIconSize: 34,
+                    ).animate().fadeIn(duration: 350.ms),
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          borderRadius: const BorderRadius.vertical(
+                            bottom: Radius.circular(999),
+                          ),
+                        ),
+                        child: Text(
+                          song.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
             ),

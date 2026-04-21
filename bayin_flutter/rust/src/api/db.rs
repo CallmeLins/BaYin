@@ -5,7 +5,7 @@ use crate::db::playlists::{get_stream_playlists, DbStreamPlaylist};
 use crate::db::{
     self, DbAlbum, DbArtist, DbSong, DbStreamServer, ScanConfig, SongInput, StreamServerInput,
 };
-use crate::state::{init_database, with_db, with_db_mut};
+use crate::state::{init_cover_cache, init_database, with_db, with_db_mut};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,7 +59,16 @@ pub struct LibraryStats {
 }
 
 pub fn init_db(db_path: String) -> Result<(), String> {
-    init_database(Path::new(&db_path))
+    let db_path = Path::new(&db_path);
+    init_database(db_path)?;
+
+    let cache_dir = db_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("covers");
+    init_cover_cache(cache_dir)?;
+
+    Ok(())
 }
 
 pub fn db_get_all_songs() -> Result<Vec<DbSong>, String> {

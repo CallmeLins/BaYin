@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class UpdateSoftwarePage extends StatefulWidget {
   const UpdateSoftwarePage({super.key});
@@ -10,8 +12,17 @@ class UpdateSoftwarePage extends StatefulWidget {
 }
 
 class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
+  static final Uri _releasePage = Uri.parse('https://bayin.app');
+
   bool _checking = false;
   String? _status;
+  String _versionLabel = '--';
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadPackageInfo());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,12 +40,12 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
             color: Theme.of(context).colorScheme.surfaceContainerHigh,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Current channel: stable'),
-              SizedBox(height: 6),
-              Text('Current app version: 0.1.0'),
+              const Text('Current channel: stable'),
+              const SizedBox(height: 6),
+              Text('Current app version: $_versionLabel'),
             ],
           ),
         ),
@@ -69,11 +80,33 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
       _checking = true;
       _status = null;
     });
-    await Future<void>.delayed(const Duration(seconds: 1));
+
+    final opened = await launchUrl(
+      _releasePage,
+      mode: LaunchMode.externalApplication,
+    );
+
     if (!mounted) return;
     setState(() {
       _checking = false;
-      _status = 'No updates available right now.';
+      _status = opened
+          ? 'Opened release page in your browser.'
+          : 'Unable to open release page. Please visit https://bayin.app manually.';
     });
+  }
+
+  Future<void> _loadPackageInfo() async {
+    try {
+      final info = await PackageInfo.fromPlatform();
+      if (!mounted) return;
+      setState(() {
+        _versionLabel = '${info.version} (${info.buildNumber})';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _versionLabel = 'Unknown';
+      });
+    }
   }
 }

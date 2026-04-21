@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
+import 'cover_art.dart';
 
 const double kPlayerBarWideHeight = 88;
 const double kPlayerBarCompactHeight = 96;
@@ -94,17 +95,19 @@ class _SongSlot extends StatelessWidget {
             Container(
               width: 48,
               height: 48,
-              decoration: BoxDecoration(
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
+              child: CoverArt(
+                width: 48,
+                height: 48,
+                coverHash: song?.coverHash,
+                streamInfo: song?.streamInfo,
+                size: CoverArtSize.small,
                 borderRadius: BorderRadius.circular(8),
-                color: scheme.surfaceContainerHighest,
-              ),
-              alignment: Alignment.center,
-              child: Icon(
-                isPlaying
+                placeholderIcon: isPlaying
                     ? PhosphorIcons.musicNotes(PhosphorIconsStyle.fill)
                     : PhosphorIcons.musicNote(),
-                size: 20,
-                color: scheme.onSurfaceVariant,
+                placeholderIconSize: 20,
               ),
             ),
             const SizedBox(width: 10),

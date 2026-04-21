@@ -91,19 +91,15 @@ class _AlbumHeader extends StatelessWidget {
             tooltip: 'Back',
           ),
           const SizedBox(width: 4),
-          Container(
+          CoverArt(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              PhosphorIcons.vinylRecord(),
-              size: 30,
-              color: scheme.onSurfaceVariant,
-            ),
+            coverHash: album.coverHash,
+            streamCoverUrl: album.streamCoverUrl,
+            size: CoverArtSize.mid,
+            borderRadius: BorderRadius.circular(8),
+            placeholderIcon: PhosphorIcons.vinylRecord(),
+            placeholderIconSize: 30,
           ),
           const SizedBox(width: 14),
           Expanded(

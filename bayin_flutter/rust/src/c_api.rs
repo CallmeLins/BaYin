@@ -247,6 +247,14 @@ pub extern "C" fn bayin_scan_and_save_music_files_json(options_json: *const c_ch
 }
 
 #[no_mangle]
+pub extern "C" fn bayin_backfill_song_covers_json() -> *mut c_char {
+    ok_string(
+        api::scanner::backfill_song_covers()
+            .and_then(|summary| serde_json::to_string(&summary).map_err(|e| e.to_string())),
+    )
+}
+
+#[no_mangle]
 pub extern "C" fn bayin_db_clear_all_songs() -> bool {
     match api::db::db_clear_all_songs() {
         Ok(_) => {

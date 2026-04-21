@@ -20,6 +20,29 @@ class ScanAndSaveResult {
   final int skipped;
 }
 
+class BackfillCoversResult {
+  const BackfillCoversResult({
+    required this.totalCandidates,
+    required this.updated,
+    required this.skipped,
+    required this.failed,
+  });
+
+  factory BackfillCoversResult.fromRust(RustBackfillCoversResult value) {
+    return BackfillCoversResult(
+      totalCandidates: value.totalCandidates,
+      updated: value.updated,
+      skipped: value.skipped,
+      failed: value.failed,
+    );
+  }
+
+  final int totalCandidates;
+  final int updated;
+  final int skipped;
+  final int failed;
+}
+
 class ScanConfig {
   const ScanConfig({
     required this.directories,
@@ -81,6 +104,11 @@ class ScanService {
 
   Future<void> clearLocalLibrary() async {
     RustApi.instance.clearAllSongs();
+  }
+
+  Future<BackfillCoversResult> backfillLocalCovers() async {
+    final result = RustApi.instance.backfillSongCovers();
+    return BackfillCoversResult.fromRust(result);
   }
 
   Future<void> saveScanConfig(ScanConfig config) async {

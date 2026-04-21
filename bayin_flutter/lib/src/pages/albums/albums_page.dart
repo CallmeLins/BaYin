@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../widgets/cover_art.dart';
 
 /// Phase 3 — local album grid.
 class AlbumsPage extends ConsumerWidget {
@@ -89,17 +90,15 @@ class _AlbumCard extends StatelessWidget {
           children: [
             AspectRatio(
               aspectRatio: 1,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  PhosphorIcons.vinylRecord(),
-                  size: 40,
-                  color: scheme.onSurfaceVariant,
-                ),
+              child: CoverArt(
+                width: double.infinity,
+                height: double.infinity,
+                coverHash: album.coverHash,
+                streamCoverUrl: album.streamCoverUrl,
+                size: CoverArtSize.mid,
+                borderRadius: BorderRadius.circular(8),
+                placeholderIcon: PhosphorIcons.vinylRecord(),
+                placeholderIconSize: 40,
               ),
             ),
             const SizedBox(height: 8),

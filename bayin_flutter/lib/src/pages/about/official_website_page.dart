@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class OfficialWebsitePage extends StatelessWidget {
   const OfficialWebsitePage({super.key});
@@ -62,18 +63,44 @@ class _LinkCard extends StatelessWidget {
             style: TextStyle(color: scheme.onSurfaceVariant),
           ),
           const SizedBox(height: 10),
-          FilledButton.tonal(
-            onPressed: () async {
-              await Clipboard.setData(ClipboardData(text: value));
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Link copied to clipboard.')),
-              );
-            },
-            child: const Text('Copy link'),
+          Row(
+            children: [
+              FilledButton(
+                onPressed: () => _openLink(context, value),
+                child: const Text('Open'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonal(
+                onPressed: () async {
+                  await Clipboard.setData(ClipboardData(text: value));
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Link copied to clipboard.')),
+                  );
+                },
+                child: const Text('Copy link'),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _openLink(BuildContext context, String raw) async {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid URL')),
+      );
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (opened || !context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Failed to open URL.')),
     );
   }
 }

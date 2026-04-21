@@ -187,26 +187,26 @@ slang_build_runner: ^4.x
 
 ### Phase 7 — 设置 + 次要页（2 周）
 
-- Settings 主页（含 section 跳转）
-- `BayinProPage`（Pro 功能开关）
-- `UserInterfacePage`（界面偏好）
-- `LyricSettingsPage`（歌词样式）
-- `EqualizerSettingsPage` + `EqualizerPanel`（10 段 EQ UI + Rust hookup）
-- `HelpFeedbackPage`
-- `UpdateSoftwarePage`
-- About 全家桶（Creators / Terms / Privacy / Licenses / Donate / Website）
-- `ScanMusicPage` + `FolderBrowser`
+- [x] Settings 主页（含 section 跳转）
+- [x] `BayinProPage`（Pro 功能开关）
+- [x] `UserInterfacePage`（界面偏好）
+- [x] `LyricSettingsPage`（歌词样式）
+- [x] `EqualizerSettingsPage` + `EqualizerPanel`（10 段 EQ UI + Rust hookup）
+- [x] `HelpFeedbackPage`
+- [x] `UpdateSoftwarePage`
+- [x] About 全家桶（Creators / Terms / Privacy / Licenses / Donate / Website）
+- [x] `ScanMusicPage` + `FolderBrowser`
 
 ### Phase 8 — 平台原生（2 周）
 
-- macOS：`macos_ui` 红绿灯 + 圆角 + overlay titlebar（Phase 2 已搭框架，此时精修）
-- Windows：
+- [x] macOS：`macos_ui` 红绿灯 + 圆角 + overlay titlebar（Phase 2 已搭框架，此时精修）
+- [x] Windows：
   - 缩略图工具栏（保留 Rust plugin，通过 FFI 暴露）
   - 自定义 titlebar（Phase 2 已搭，精修）
-- Android：MediaSession（`audio_service` 默认支持）、通知栏、横竖屏切换
-- iOS：Now Playing / 锁屏、横竖屏切换
-- 文件监听：复用 Rust `watcher.rs`，通过 Stream 推送变更
-- 窗口状态持久化：`window_manager` + 自己存 JSON
+- [x] Android：MediaSession（`audio_service` 默认支持）、通知栏、横竖屏切换
+- [x] iOS：Now Playing / 锁屏、横竖屏切换
+- [x] 文件监听：复用 Rust `watcher.rs`，通过 Stream 推送变更
+- [x] 窗口状态持久化：`window_manager` + 自己存 JSON
 
 ### Phase 9 — 打磨与发布（2-3 周）
 

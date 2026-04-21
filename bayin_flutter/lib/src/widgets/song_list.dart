@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/models.dart';
-import '../theme/bayin_tokens.dart';
+import 'cover_art.dart';
 
 String _formatDuration(double seconds) {
   if (seconds.isNaN || seconds < 0) return '--:--';
@@ -72,7 +71,6 @@ class _SongRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final tokens = Theme.of(context).extension<BayinTokens>();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -98,20 +96,14 @@ class _SongRow extends StatelessWidget {
                     ),
                   ),
                 ),
-              Container(
+              CoverArt(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(4),
-                  color: tokens?.separatorSoftColor ??
-                      scheme.surfaceContainerHighest,
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  PhosphorIcons.musicNote(),
-                  size: 16,
-                  color: scheme.onSurfaceVariant,
-                ),
+                coverHash: song.coverHash,
+                streamInfo: song.streamInfo,
+                size: CoverArtSize.small,
+                borderRadius: BorderRadius.circular(4),
+                placeholderIconSize: 16,
               ),
               const SizedBox(width: 10),
               Expanded(

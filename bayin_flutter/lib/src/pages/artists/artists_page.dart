@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../widgets/cover_art.dart';
 
 /// Phase 3 — artists list.
 class ArtistsPage extends ConsumerWidget {
@@ -110,19 +111,15 @@ class _ArtistRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           child: Row(
             children: [
-              Container(
+              CoverArt(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  PhosphorIcons.microphone(),
-                  size: 20,
-                  color: scheme.onSurfaceVariant,
-                ),
+                coverHash: artist.coverHash,
+                streamCoverUrl: artist.streamCoverUrl,
+                size: CoverArtSize.small,
+                shape: BoxShape.circle,
+                placeholderIcon: PhosphorIcons.microphone(),
+                placeholderIconSize: 20,
               ),
               const SizedBox(width: 12),
               Expanded(

@@ -20,8 +20,9 @@ pub struct FileWatcherStatus {
 mod platform_impl {
     use super::{FileWatchEvent, FileWatcherStatus};
     use crate::db::{self, SongInput};
-    use crate::state::with_db_mut;
+    use crate::state::{with_cover_cache, with_db_mut};
     use crate::utils::audio;
+    use crate::utils::cover::extract_and_cache_cover;
     use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
     use rusqlite::params;
     use std::collections::HashMap;
@@ -244,6 +245,9 @@ mod platform_impl {
             let Ok(song) = audio::read_metadata_with_mtime(path) else {
                 continue;
             };
+            let cover_hash = with_cover_cache(|cache| extract_and_cache_cover(path, cache))
+                .ok()
+                .flatten();
             to_upsert.push(SongInput {
                 id: song.id,
                 title: song.title,
@@ -254,7 +258,7 @@ mod platform_impl {
                 file_size: song.file_size as i64,
                 is_hr: song.is_hr,
                 is_sq: song.is_sq,
-                cover_hash: None,
+                cover_hash,
                 server_song_id: None,
                 stream_info: None,
                 file_modified: Some(song.file_modified),

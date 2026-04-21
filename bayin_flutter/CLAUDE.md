@@ -5,7 +5,7 @@
 ## Architecture (keep it straight)
 
 - **Dart/Flutter** drives the UI, routing, state (Riverpod), theme, i18n, and Dart-side platform integrations (window, file picker, media session).
-- **Rust** (in `rust/`, via `flutter_rust_bridge`) owns the audio engine, DB, scanner, metadata, streaming clients, and DSP. The Rust code is **ported from `../src-tauri/src/`** — that directory stays as the reference source until migration completes, then gets deleted.
+- **Rust** (in `rust/`, via pure `dart:ffi` + C ABI) owns the audio engine, DB, scanner, metadata, streaming clients, and DSP. The Rust code is **ported from `../src-tauri/src/`** — that directory stays as the reference source until migration completes, then gets deleted.
 - **React code** lives at `../src-ui/` as UI reference only. DO NOT execute or edit it. Port behavior, don't port code.
 
 ## Directory layout
@@ -15,24 +15,23 @@ bayin_flutter/
 ├── lib/
 │   ├── main.dart                 # ProviderScope + MaterialApp.router
 │   └── src/
-│       ├── rust/                 # FRB-generated Dart bindings (DO NOT edit by hand)
+│       ├── rust/                 # handwritten FFI bindings (`rust_api.dart`)
 │       ├── router/app_router.dart
 │       ├── theme/app_theme.dart
 │       ├── pages/                # Route-level screens (mirror src-ui/components/*Page.tsx)
 │       ├── widgets/              # Reusable components (Sidebar, PlayerBar, SongList, etc.)
 │       ├── providers/            # Riverpod (one file per domain)
-│       ├── models/               # freezed data classes
+│       ├── models/               # handwritten immutable data classes
 │       ├── services/             # Dart-side adapters (audio_service, window_manager, etc.)
 │       └── i18n/                 # slang-generated strings + source JSON
-├── rust/                         # Rust crate exposed via FRB
+├── rust/                         # Rust crate exposed via C ABI
 │   ├── Cargo.toml
 │   ├── src/
-│   │   ├── api/                  # FRB-exposed functions (replace `#[tauri::command]`)
+│   │   ├── api/                  # business APIs called from `c_api.rs`
 │   │   ├── audio_engine/         # ← ported from ../src-tauri/src/audio_engine
 │   │   ├── db/                   # ← ported
 │   │   ├── utils/                # ← ported
 │   │   └── models/               # ← ported
-├── flutter_rust_bridge.yaml      # FRB codegen config
 └── pubspec.yaml
 ```
 
@@ -55,9 +54,9 @@ When translating a React component from `../src-ui/`:
 | `react-router` `<Outlet />` | `ShellRoute` + nested `GoRoute` |
 | `i18next` `t('key')` | `t.key` via slang (generated) |
 
-## Rust porting rules (Tauri → FRB)
+## Rust porting rules (Tauri → pure FFI)
 
-| Tauri | FRB |
+| Tauri | pure FFI |
 |-------|-----|
 | `#[tauri::command] pub fn foo(...)` | Plain `pub fn foo(...)` in `rust/src/api/*.rs` |
 | `State<'_, X>` parameter | Global `OnceCell<Arc<X>>` / `Lazy<Mutex<X>>` initialized at startup |
@@ -84,10 +83,8 @@ When translating a React component from `../src-ui/`:
 # Dev run
 flutter run -d windows           # or macos / linux / chrome / <device-id>
 
-# Codegen (run after changing Rust FRB API or Dart models/providers)
-flutter_rust_bridge_codegen generate
-dart run build_runner build --delete-conflicting-outputs
-dart run slang                    # i18n codegen
+# i18n codegen
+dart run slang
 
 # Build
 flutter build windows
@@ -109,8 +106,8 @@ cd rust && cargo clean && cd ..
 
 - **File names**: snake_case. Widget/class names: PascalCase. Provider names: camelCase + `Provider` suffix.
 - **Imports**: relative within `lib/src/`, package imports for external.
-- **Riverpod**: use `riverpod_generator` with `@riverpod` annotation — don't hand-roll `StateNotifierProvider` unless the generator can't express it.
-- **Freezed**: all data models use `freezed` + `json_serializable`. Don't write mutable data classes by hand.
+- **Riverpod**: keep providers explicit and readable. `NotifierProvider` is acceptable.
+- **Models**: keep handwritten immutable data classes aligned with Rust JSON fields.
 - **i18n**: no hardcoded UI strings. Everything goes through slang `t.xxx`. Source JSON in `lib/src/i18n/`.
 - **Async**: prefer Riverpod `AsyncValue` over `FutureBuilder`. Stream from Rust → `StreamProvider`.
 - **No `setState` in production code**. Everything through Riverpod. (Counter-demo widgets OK during initial bring-up.)
@@ -127,7 +124,7 @@ See `../MIGRATION_PLAN.md` checkboxes. When finishing a phase:
 ## Things to NEVER do (without discussion)
 
 - Touch `../src-tauri/` or `../src-ui/` — they are frozen reference sources
-- Introduce a new audio backend (`just_audio`, `flutter_soloud`, etc.) — **audio is Rust-only**, via FRB. Spectrum data, playback, EQ all come from the Rust engine
+- Introduce a new audio backend (`just_audio`, `flutter_soloud`, etc.) — **audio is Rust-only**, via pure FFI. Spectrum data, playback, EQ all come from the Rust engine
 - Replace Riverpod with Bloc / Provider / GetX
 - Add Material 3 color scheme as the primary look — we're matching the existing macOS-glass design; use the `bayin-*` color tokens migrated from `src-ui/src/index.css`
 
@@ -135,4 +132,4 @@ See `../MIGRATION_PLAN.md` checkboxes. When finishing a phase:
 
 - The React reference is authoritative for UI behavior. When in doubt, read `../src-ui/src/components/<ComponentName>.tsx`.
 - The Rust reference is authoritative for backend behavior. Read `../src-tauri/src/<module>/mod.rs`.
-- For FRB specifics: https://cjycode.com/flutter_rust_bridge/
+- For FFI specifics: https://dart.dev/interop/c-interop

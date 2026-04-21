@@ -5,7 +5,9 @@ use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use crate::models::{ScanOptions, ScannedSong};
+use crate::state::{with_cover_cache, with_db_mut};
 use crate::utils::audio::{is_audio_file, read_lyrics, read_metadata};
+use crate::utils::cover::extract_and_cache_cover;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,12 +130,20 @@ pub struct ScanAndSaveResult {
     pub skipped: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackfillCoversResult {
+    pub total_candidates: u64,
+    pub updated: u64,
+    pub skipped: u64,
+    pub failed: u64,
+}
+
 /// Scan the configured directories and upsert everything found as local songs.
 ///
 /// Returns counts so the UI can surface progress / success toasts.
 pub fn scan_and_save_music_files(options: ScanOptions) -> Result<ScanAndSaveResult, String> {
     use crate::db::{self, SongInput};
-    use crate::state::with_db_mut;
 
     let scanned = scan_music_files(options)?;
     let scanned_count = scanned.len() as u64;
@@ -141,6 +151,11 @@ pub fn scan_and_save_music_files(options: ScanOptions) -> Result<ScanAndSaveResu
     let inputs: Vec<SongInput> = scanned
         .into_iter()
         .map(|s| SongInput {
+            cover_hash: with_cover_cache(|cache| {
+                extract_and_cache_cover(Path::new(&s.file_path), cache)
+            })
+            .ok()
+            .flatten(),
             id: s.id,
             title: s.title,
             artist: s.artist,
@@ -150,7 +165,6 @@ pub fn scan_and_save_music_files(options: ScanOptions) -> Result<ScanAndSaveResu
             file_size: s.file_size as i64,
             is_hr: s.is_hr,
             is_sq: s.is_sq,
-            cover_hash: None,
             server_song_id: None,
             stream_info: None,
             file_modified: None,
@@ -173,5 +187,75 @@ pub fn scan_and_save_music_files(options: ScanOptions) -> Result<ScanAndSaveResu
         scanned: scanned_count,
         saved,
         skipped: scanned_count.saturating_sub(saved),
+    })
+}
+
+pub fn backfill_song_covers() -> Result<BackfillCoversResult, String> {
+    use rusqlite::params;
+
+    with_db_mut(|conn| {
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, file_path
+                 FROM songs
+                 WHERE source_type = 'local' AND (cover_hash IS NULL OR cover_hash = '')",
+            )
+            .map_err(|e| e.to_string())?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let id: String = row.get(0)?;
+                let file_path: String = row.get(1)?;
+                Ok((id, file_path))
+            })
+            .map_err(|e| e.to_string())?;
+
+        let mut candidates = Vec::<(String, String)>::new();
+        for row in rows {
+            candidates.push(row.map_err(|e| e.to_string())?);
+        }
+        drop(stmt);
+
+        let total_candidates = candidates.len() as u64;
+        let mut updated = 0u64;
+        let mut skipped = 0u64;
+        let mut failed = 0u64;
+
+        for (song_id, file_path) in candidates {
+            let path = Path::new(&file_path);
+            if !path.exists() || !path.is_file() {
+                failed += 1;
+                continue;
+            }
+
+            let cover_hash = match with_cover_cache(|cache| extract_and_cache_cover(path, cache)) {
+                Ok(value) => value,
+                Err(_) => {
+                    failed += 1;
+                    continue;
+                }
+            };
+
+            let Some(hash) = cover_hash else {
+                skipped += 1;
+                continue;
+            };
+
+            conn.execute(
+                "UPDATE songs
+                 SET cover_hash = ?1, updated_at = strftime('%s','now')
+                 WHERE id = ?2",
+                params![hash, song_id],
+            )
+            .map_err(|e| e.to_string())?;
+            updated += 1;
+        }
+
+        Ok(BackfillCoversResult {
+            total_candidates,
+            updated,
+            skipped,
+            failed,
+        })
     })
 }

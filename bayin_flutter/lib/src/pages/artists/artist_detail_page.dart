@@ -114,19 +114,15 @@ class _ArtistHeader extends StatelessWidget {
             tooltip: 'Back',
           ),
           const SizedBox(width: 4),
-          Container(
+          CoverArt(
             width: 64,
             height: 64,
-            decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Icon(
-              PhosphorIcons.microphone(),
-              size: 30,
-              color: scheme.onSurfaceVariant,
-            ),
+            coverHash: artist.coverHash,
+            streamCoverUrl: artist.streamCoverUrl,
+            size: CoverArtSize.mid,
+            shape: BoxShape.circle,
+            placeholderIcon: PhosphorIcons.microphone(),
+            placeholderIconSize: 30,
           ),
           const SizedBox(width: 14),
           Expanded(
