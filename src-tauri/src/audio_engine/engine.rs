@@ -208,6 +208,88 @@ fn execute_play(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
+fn reinitialize_output_for_route_change(
+    dec: &mut AudioDecoder,
+    output: &mut Option<AudioOutput>,
+    resampler: &mut Option<AudioResampler>,
+    resample_buffer: &mut Vec<f32>,
+    pending_samples: &mut Vec<f32>,
+    eq: &mut Equalizer,
+    fade_state: &mut FadeState,
+    source_sample_rate: u32,
+    source_channels: usize,
+    position_secs: &mut f64,
+    last_emitted_pos: &mut f64,
+    should_play: bool,
+    duration_secs: f64,
+    volume: f32,
+    state: &Arc<Mutex<PlaybackState>>,
+    app_handle: &AppHandle,
+) -> Result<(), String> {
+    let target_position = current_playback_position(*position_secs, output);
+    let output_channels = source_channels.min(2) as u16;
+
+    let new_output = AudioOutput::new(source_sample_rate, output_channels)?;
+    let out_rate = new_output.config.sample_rate.0;
+    let actual_channels = new_output.config.channels as usize;
+
+    dec.seek(target_position)
+        .map_err(|e| format!("Failed to seek during output reinit: {e}"))?;
+
+    *output = Some(new_output);
+    if !should_play {
+        if let Some(ref out) = output {
+            out.pause();
+        }
+    }
+
+    *resampler = None;
+    resample_buffer.clear();
+    pending_samples.clear();
+
+    if out_rate != source_sample_rate {
+        match AudioResampler::new(source_sample_rate, out_rate, actual_channels) {
+            Ok(rs) => *resampler = Some(rs),
+            Err(e) => {
+                eprintln!("Resampler reinit warning after route change: {}", e);
+            }
+        }
+    }
+
+    let effective_rate = if resampler.is_some() {
+        out_rate
+    } else {
+        source_sample_rate
+    };
+    let eq_enabled = eq.is_enabled();
+    let eq_gains = eq.gains();
+    let mut new_eq = Equalizer::new(effective_rate, actual_channels);
+    new_eq.set_enabled(eq_enabled);
+    new_eq.set_gains(&eq_gains);
+    *eq = new_eq;
+
+    *position_secs = target_position;
+    *last_emitted_pos = target_position;
+    *fade_state = if should_play {
+        FadeState::FadingIn {
+            gain: 0.0,
+            step: fade_step(FADE_IN_MS, effective_rate, actual_channels),
+        }
+    } else {
+        FadeState::None
+    };
+
+    update_state(state, should_play, *position_secs, duration_secs, volume);
+    let _ = app_handle.emit(
+        "audio:state_changed",
+        StateChangedPayload {
+            is_playing: should_play,
+        },
+    );
+    Ok(())
+}
+
 fn audio_thread(
     cmd_rx: Receiver<AudioCommand>,
     state: Arc<Mutex<PlaybackState>>,
@@ -239,6 +321,72 @@ fn audio_thread(
     let mut last_emitted_pos: f64 = 0.0;
 
     loop {
+        // 0. Auto-recover when the underlying output stream fails (e.g. route
+        // switch / spatial effect toggle while playing).
+        let output_failed = output
+            .as_ref()
+            .map(|out| out.has_stream_error())
+            .unwrap_or(false);
+        if output_failed {
+            pause_target_secs = None;
+            end_pending = false;
+
+            if let Some(ref mut dec) = decoder {
+                let should_play = is_playing;
+                if let Err(e) = reinitialize_output_for_route_change(
+                    dec,
+                    &mut output,
+                    &mut resampler,
+                    &mut resample_buffer,
+                    &mut pending_samples,
+                    &mut eq,
+                    &mut fade_state,
+                    source_sample_rate,
+                    source_channels,
+                    &mut position_secs,
+                    &mut last_emitted_pos,
+                    should_play,
+                    duration_secs,
+                    volume,
+                    &state,
+                    &app_handle,
+                ) {
+                    is_playing = false;
+                    output = None;
+                    resampler = None;
+                    resample_buffer.clear();
+                    pending_samples.clear();
+                    fade_state = FadeState::None;
+                    update_state(&state, false, position_secs, duration_secs, volume);
+                    let _ = app_handle.emit(
+                        "audio:error",
+                        ErrorPayload {
+                            message: format!(
+                                "Audio output stream failed and recovery failed: {}",
+                                e
+                            ),
+                        },
+                    );
+                    let _ = app_handle.emit(
+                        "audio:state_changed",
+                        StateChangedPayload { is_playing: false },
+                    );
+                }
+            } else {
+                is_playing = false;
+                output = None;
+                resampler = None;
+                resample_buffer.clear();
+                pending_samples.clear();
+                fade_state = FadeState::None;
+                update_state(&state, false, position_secs, duration_secs, volume);
+                let _ = app_handle.emit(
+                    "audio:state_changed",
+                    StateChangedPayload { is_playing: false },
+                );
+            }
+        }
+
         // 1. Process all pending commands
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
@@ -460,70 +608,34 @@ fn audio_thread(
                         continue;
                     };
 
-                    let target_position = current_playback_position(position_secs, &output);
                     let should_play = is_playing;
-                    let output_channels = source_channels.min(2) as u16;
-
-                    match AudioOutput::new(source_sample_rate, output_channels) {
-                        Ok(new_output) => {
-                            let out_rate = new_output.config.sample_rate.0;
-                            let actual_channels = new_output.config.channels as usize;
-
-                            if let Err(e) = dec.seek(target_position) {
-                                let _ = app_handle.emit("audio:error", ErrorPayload { message: format!("Failed to reinitialize playback after audio route change: {}", e) });
-                                continue;
-                            }
-
-                            output = Some(new_output);
-                            if !should_play {
-                                if let Some(ref out) = output {
-                                    out.pause();
-                                }
-                            }
-
-                            resampler = None;
-                            resample_buffer.clear();
-                            pending_samples.clear();
-
-                            if out_rate != source_sample_rate {
-                                match AudioResampler::new(source_sample_rate, out_rate, actual_channels) {
-                                    Ok(rs) => resampler = Some(rs),
-                                    Err(e) => {
-                                        eprintln!("Resampler reinit warning after route change: {}", e);
-                                    }
-                                }
-                            }
-
-                            let effective_rate = if resampler.is_some() { out_rate } else { source_sample_rate };
-                            let eq_enabled = eq.is_enabled();
-                            let eq_gains = eq.gains();
-                            let mut new_eq = Equalizer::new(effective_rate, actual_channels);
-                            new_eq.set_enabled(eq_enabled);
-                            new_eq.set_gains(&eq_gains);
-                            eq = new_eq;
-
-                            position_secs = target_position;
-                            last_emitted_pos = target_position;
-                            fade_state = if should_play {
-                                FadeState::FadingIn {
-                                    gain: 0.0,
-                                    step: fade_step(FADE_IN_MS, effective_rate, actual_channels),
-                                }
-                            } else {
-                                FadeState::None
-                            };
-
-                            update_state(&state, should_play, position_secs, duration_secs, volume);
-                            let _ = app_handle.emit(
-                                "audio:state_changed",
-                                StateChangedPayload {
-                                    is_playing: should_play,
-                                },
-                            );
-                        }
-                        Err(e) => {
-                            let _ = app_handle.emit("audio:error", ErrorPayload { message: format!("Failed to reinitialize audio output after route change: {}", e) });
-                        }
+                    if let Err(e) = reinitialize_output_for_route_change(
+                        dec,
+                        &mut output,
+                        &mut resampler,
+                        &mut resample_buffer,
+                        &mut pending_samples,
+                        &mut eq,
+                        &mut fade_state,
+                        source_sample_rate,
+                        source_channels,
+                        &mut position_secs,
+                        &mut last_emitted_pos,
+                        should_play,
+                        duration_secs,
+                        volume,
+                        &state,
+                        &app_handle,
+                    ) {
+                        let _ = app_handle.emit(
+                            "audio:error",
+                            ErrorPayload {
+                                message: format!(
+                                    "Failed to reinitialize audio output after route change: {}",
+                                    e
+                                ),
+                            },
+                        );
                     }
                 }
                 AudioCommand::SetVolume { volume: vol } => {

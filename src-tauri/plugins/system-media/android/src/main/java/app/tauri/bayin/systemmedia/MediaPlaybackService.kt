@@ -451,6 +451,8 @@ class MediaPlaybackService : Service() {
 
     private fun AudioDeviceInfo.isRelevantOutputRoute(): Boolean =
         isSink && when (type) {
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
             AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
             AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
             AudioDeviceInfo.TYPE_BLE_HEADSET,
@@ -461,6 +463,9 @@ class MediaPlaybackService : Service() {
             AudioDeviceInfo.TYPE_USB_HEADSET,
             AudioDeviceInfo.TYPE_USB_DEVICE,
             AudioDeviceInfo.TYPE_USB_ACCESSORY,
+            AudioDeviceInfo.TYPE_DOCK,
+            AudioDeviceInfo.TYPE_HEARING_AID,
+            AudioDeviceInfo.TYPE_REMOTE_SUBMIX,
             AudioDeviceInfo.TYPE_LINE_ANALOG,
             AudioDeviceInfo.TYPE_LINE_DIGITAL,
             AudioDeviceInfo.TYPE_HDMI,

@@ -11,6 +11,7 @@ pub struct AudioOutput {
     pub config: StreamConfig,
     playing: Arc<AtomicBool>,
     flushing: Arc<AtomicBool>,
+    stream_error: Arc<AtomicBool>,
 }
 
 impl AudioOutput {
@@ -60,8 +61,17 @@ impl AudioOutput {
         let playing_clone = playing.clone();
         let flushing = Arc::new(AtomicBool::new(false));
         let flushing_clone = flushing.clone();
+        let stream_error = Arc::new(AtomicBool::new(false));
+        let stream_error_clone = stream_error.clone();
 
-        let stream = build_output_stream(&device, &config, consumer, playing_clone, flushing_clone)?;
+        let stream = build_output_stream(
+            &device,
+            &config,
+            consumer,
+            playing_clone,
+            flushing_clone,
+            stream_error_clone,
+        )?;
         stream
             .play()
             .map_err(|e| format!("Failed to start audio stream: {}", e))?;
@@ -72,6 +82,7 @@ impl AudioOutput {
             config,
             playing,
             flushing,
+            stream_error,
         })
     }
 
@@ -87,6 +98,10 @@ impl AudioOutput {
     pub fn flush(&self) {
         self.flushing.store(true, Ordering::Relaxed);
     }
+
+    pub fn has_stream_error(&self) -> bool {
+        self.stream_error.load(Ordering::Relaxed)
+    }
 }
 
 fn build_output_stream(
@@ -95,6 +110,7 @@ fn build_output_stream(
     mut consumer: HeapCons<f32>,
     playing: Arc<AtomicBool>,
     flushing: Arc<AtomicBool>,
+    stream_error: Arc<AtomicBool>,
 ) -> Result<Stream, String> {
     let mut flush_buf = vec![0.0f32; 4096];
     let stream = device
@@ -126,8 +142,9 @@ fn build_output_stream(
                     data[read + fade_len..].fill(0.0);
                 }
             },
-            |err| {
+            move |err| {
                 eprintln!("Audio output error: {}", err);
+                stream_error.store(true, Ordering::Relaxed);
             },
             None,
         )

@@ -157,7 +157,6 @@ impl Equalizer {
         self.enabled
     }
 
-    #[cfg(target_os = "android")]
     pub fn gains(&self) -> [f32; 10] {
         self.gains
     }
