@@ -1033,7 +1033,12 @@ fn push_or_pend(producer: &mut HeapProd<f32>, samples: &[f32], pending: &mut Vec
     }
 }
 
-/// Convert between channel counts (mono<->stereo).
+/// Convert between channel counts.
+///
+/// For multichannel -> stereo we use a conservative Lo/Ro downmix matrix
+/// instead of just truncating to the first two channels. This preserves center
+/// dialogue / vocals and surround ambience much better for desktop stereo
+/// playback while keeping the implementation deterministic.
 fn convert_channels(samples: &[f32], from_ch: usize, to_ch: usize) -> Vec<f32> {
     if from_ch == to_ch {
         return samples.to_vec();
@@ -1056,11 +1061,28 @@ fn convert_channels(samples: &[f32], from_ch: usize, to_ch: usize) -> Vec<f32> {
             let r = samples[frame * 2 + 1];
             out.push((l + r) * 0.5);
         }
-    } else if from_ch > to_ch {
-        // Downmix: average first to_ch channels
+    } else if from_ch > 2 && to_ch == 2 {
         for frame in 0..frames {
+            let base = frame * from_ch;
+            let channels = &samples[base..base + from_ch];
+            let (l, r) = downmix_to_stereo(channels);
+            out.push(l);
+            out.push(r);
+        }
+    } else if from_ch > to_ch {
+        // Generic downmix fallback: average grouped source channels.
+        for frame in 0..frames {
+            let base = frame * from_ch;
             for ch in 0..to_ch {
-                out.push(samples[frame * from_ch + ch]);
+                let start = ch * from_ch / to_ch;
+                let end = ((ch + 1) * from_ch / to_ch).max(start + 1);
+                let mut sum = 0.0f32;
+                let mut count = 0usize;
+                for idx in start..end.min(from_ch) {
+                    sum += samples[base + idx];
+                    count += 1;
+                }
+                out.push(if count > 0 { sum / count as f32 } else { 0.0 });
             }
         }
     } else {
@@ -1074,4 +1096,79 @@ fn convert_channels(samples: &[f32], from_ch: usize, to_ch: usize) -> Vec<f32> {
     }
 
     out
+}
+
+fn downmix_to_stereo(channels: &[f32]) -> (f32, f32) {
+    const CENTER: f32 = 0.70710677; // -3 dB
+    const SURROUND: f32 = 0.70710677; // -3 dB
+    const BACK: f32 = 0.5; // slightly lower than side surrounds
+
+    let get = |idx: usize| -> f32 { channels.get(idx).copied().unwrap_or(0.0) };
+
+    match channels.len() {
+        0 => (0.0, 0.0),
+        1 => {
+            let m = get(0);
+            (m, m)
+        }
+        2 => (get(0), get(1)),
+        3 => {
+            let l = get(0) + get(2) * CENTER;
+            let r = get(1) + get(2) * CENTER;
+            (l, r)
+        }
+        4 => {
+            let l = get(0) + get(2) * SURROUND;
+            let r = get(1) + get(3) * SURROUND;
+            (l, r)
+        }
+        5 => {
+            let l = get(0) + get(2) * CENTER + get(3) * SURROUND;
+            let r = get(1) + get(2) * CENTER + get(4) * SURROUND;
+            (l, r)
+        }
+        6 => {
+            // Assumed order: FL, FR, FC, LFE, SL, SR.
+            // LFE is intentionally omitted here to avoid muddy stereo fold-down.
+            let l = get(0) + get(2) * CENTER + get(4) * SURROUND;
+            let r = get(1) + get(2) * CENTER + get(5) * SURROUND;
+            (l, r)
+        }
+        7 => {
+            // Assumed order: FL, FR, FC, LFE, BC, SL, SR.
+            let l = get(0) + get(2) * CENTER + get(4) * BACK + get(5) * SURROUND;
+            let r = get(1) + get(2) * CENTER + get(4) * BACK + get(6) * SURROUND;
+            (l, r)
+        }
+        _ => {
+            // Assumed order: FL, FR, FC, LFE, BL, BR, SL, SR, ...
+            let l = get(0) + get(2) * CENTER + get(4) * BACK + get(6) * SURROUND;
+            let r = get(1) + get(2) * CENTER + get(5) * BACK + get(7) * SURROUND;
+            (l, r)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{convert_channels, downmix_to_stereo};
+
+    fn approx_eq(a: f32, b: f32) {
+        assert!((a - b).abs() < 1e-5, "left={a}, right={b}");
+    }
+
+    #[test]
+    fn downmixes_three_channel_center_into_both_sides() {
+        let (l, r) = downmix_to_stereo(&[1.0, 2.0, 3.0]);
+        approx_eq(l, 1.0 + 3.0 * 0.70710677);
+        approx_eq(r, 2.0 + 3.0 * 0.70710677);
+    }
+
+    #[test]
+    fn convert_channels_uses_multichannel_stereo_matrix_for_51() {
+        let out = convert_channels(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 6, 2);
+        assert_eq!(out.len(), 2);
+        approx_eq(out[0], 1.0 + 3.0 * 0.70710677 + 5.0 * 0.70710677);
+        approx_eq(out[1], 2.0 + 3.0 * 0.70710677 + 6.0 * 0.70710677);
+    }
 }
