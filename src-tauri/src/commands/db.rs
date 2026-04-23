@@ -225,6 +225,7 @@ pub fn db_migrate_from_localstorage(
             password: config.password,
             access_token: config.access_token,
             user_id: config.user_id,
+            enabled: None,
         };
         Some(
             db::servers::save_stream_server(&conn, &input).map_err(|e| e.to_string())?,

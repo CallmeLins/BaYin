@@ -35,6 +35,8 @@ pub struct StreamServerInput {
     pub access_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
 }
 
 /// Scan configuration
@@ -66,7 +68,8 @@ pub fn save_stream_server(conn: &Connection, input: &StreamServerInput) -> Resul
         "INSERT OR REPLACE INTO stream_servers
          (id, server_type, server_name, server_url, username, password,
           access_token, user_id, enabled, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 1,
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
+                 COALESCE(?9, (SELECT enabled FROM stream_servers WHERE id = ?1), 1),
                  COALESCE((SELECT created_at FROM stream_servers WHERE id = ?1), strftime('%s','now')))",
         params![
             id,
@@ -77,6 +80,7 @@ pub fn save_stream_server(conn: &Connection, input: &StreamServerInput) -> Resul
             input.password,
             input.access_token,
             input.user_id,
+            input.enabled.map(|enabled| if enabled { 1 } else { 0 }),
         ],
     )?;
 
