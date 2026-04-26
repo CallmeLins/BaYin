@@ -14,6 +14,7 @@ pub struct DbStreamServer {
     pub server_url: String,
     pub username: String,
     pub password: String,
+    pub legacy_auth: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,6 +32,8 @@ pub struct StreamServerInput {
     pub server_url: String,
     pub username: String,
     pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_auth: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -67,9 +70,10 @@ pub fn save_stream_server(conn: &Connection, input: &StreamServerInput) -> Resul
     conn.execute(
         "INSERT OR REPLACE INTO stream_servers
          (id, server_type, server_name, server_url, username, password,
-          access_token, user_id, enabled, created_at)
+          access_token, user_id, legacy_auth, enabled, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
-                 COALESCE(?9, (SELECT enabled FROM stream_servers WHERE id = ?1), 1),
+                 COALESCE(?9, (SELECT legacy_auth FROM stream_servers WHERE id = ?1), 0),
+                 COALESCE(?10, (SELECT enabled FROM stream_servers WHERE id = ?1), 1),
                  COALESCE((SELECT created_at FROM stream_servers WHERE id = ?1), strftime('%s','now')))",
         params![
             id,
@@ -80,6 +84,7 @@ pub fn save_stream_server(conn: &Connection, input: &StreamServerInput) -> Resul
             input.password,
             input.access_token,
             input.user_id,
+            input.legacy_auth.map(|legacy_auth| if legacy_auth { 1 } else { 0 }),
             input.enabled.map(|enabled| if enabled { 1 } else { 0 }),
         ],
     )?;
@@ -91,7 +96,7 @@ pub fn save_stream_server(conn: &Connection, input: &StreamServerInput) -> Resul
 pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
     let mut stmt = conn.prepare(
         "SELECT id, server_type, server_name, server_url, username, password,
-                access_token, user_id, enabled, created_at
+                access_token, user_id, legacy_auth, enabled, created_at
          FROM stream_servers
          ORDER BY created_at",
     )?;
@@ -107,8 +112,9 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
                 password: row.get(5)?,
                 access_token: row.get(6)?,
                 user_id: row.get(7)?,
-                enabled: row.get::<_, i32>(8)? != 0,
-                created_at: row.get(9)?,
+                legacy_auth: row.get::<_, i32>(8)? != 0,
+                enabled: row.get::<_, i32>(9)? != 0,
+                created_at: row.get(10)?,
             })
         })?
         .collect::<Result<Vec<_>>>()?;
@@ -120,7 +126,7 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
 pub fn get_stream_server_by_id(conn: &Connection, server_id: &str) -> Result<Option<DbStreamServer>> {
     let mut stmt = conn.prepare(
         "SELECT id, server_type, server_name, server_url, username, password,
-                access_token, user_id, enabled, created_at
+                access_token, user_id, legacy_auth, enabled, created_at
          FROM stream_servers
          WHERE id = ?1
          LIMIT 1",
@@ -136,8 +142,9 @@ pub fn get_stream_server_by_id(conn: &Connection, server_id: &str) -> Result<Opt
             password: row.get(5)?,
             access_token: row.get(6)?,
             user_id: row.get(7)?,
-            enabled: row.get::<_, i32>(8)? != 0,
-            created_at: row.get(9)?,
+            legacy_auth: row.get::<_, i32>(8)? != 0,
+            enabled: row.get::<_, i32>(9)? != 0,
+            created_at: row.get(10)?,
         })
     });
 

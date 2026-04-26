@@ -38,6 +38,8 @@ pub struct StreamServerConfig {
     pub server_url: String,
     pub username: String,
     pub password: String,
+    #[serde(default)]
+    pub legacy_auth: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

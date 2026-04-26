@@ -422,6 +422,7 @@ pub async fn scan_stream_to_db(
             server_url: server.server_url.clone(),
             username: server.username.clone(),
             password: server.password.clone(),
+            legacy_auth: server.legacy_auth,
             access_token: server.access_token.clone(),
             user_id: server.user_id.clone(),
         };
@@ -492,6 +493,7 @@ pub async fn scan_stream_to_db(
                                 "serverUrl": server.server_url,
                                 "username": server.username,
                                 "password": server.password,
+                                "legacyAuth": server.legacy_auth,
                                 "accessToken": server.access_token,
                                 "userId": server.user_id
                             }

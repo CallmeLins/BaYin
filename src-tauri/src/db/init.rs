@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 4;
+const CURRENT_SCHEMA_VERSION: i32 = 5;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -42,6 +42,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 4 {
         migrate_v4(conn)?;
+    }
+    if from_version < 5 {
+        migrate_v5(conn)?;
     }
 
     Ok(())
@@ -211,6 +214,25 @@ fn migrate_v4(conn: &Connection) -> Result<()> {
     )?;
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [4])?;
+    Ok(())
+}
+
+/// Version 5: Add legacy auth toggle for Subsonic-compatible servers.
+fn migrate_v5(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(stream_servers)")?;
+    let has_legacy_auth = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|row| row.ok())
+        .any(|name| name == "legacy_auth");
+
+    if !has_legacy_auth {
+        conn.execute(
+            "ALTER TABLE stream_servers ADD COLUMN legacy_auth INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [5])?;
     Ok(())
 }
 

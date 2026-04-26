@@ -43,6 +43,8 @@ pub struct MigrationStreamConfig {
     pub server_url: String,
     pub username: String,
     pub password: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_auth: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -223,6 +225,7 @@ pub fn db_migrate_from_localstorage(
             server_url: config.server_url,
             username: config.username,
             password: config.password,
+            legacy_auth: config.legacy_auth,
             access_token: config.access_token,
             user_id: config.user_id,
             enabled: None,

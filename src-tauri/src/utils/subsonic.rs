@@ -13,9 +13,30 @@ use crate::utils::datetime::parse_datetime_to_epoch_seconds;
 
 /// 无损音频格式
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
+const SUBSONIC_API_VERSION: &str = "1.16.1";
+const SUBSONIC_LEGACY_API_VERSION: &str = "1.12.0";
 
 /// 生成 Subsonic API 认证参数
-fn generate_auth_params(config: &StreamServerConfig) -> Vec<(&str, String)> {
+fn generate_auth_params(config: &StreamServerConfig, include_format: bool) -> Vec<(&str, String)> {
+    let version = if config.legacy_auth {
+        SUBSONIC_LEGACY_API_VERSION
+    } else {
+        SUBSONIC_API_VERSION
+    };
+
+    if config.legacy_auth {
+        let mut params = vec![
+            ("u", config.username.clone()),
+            ("p", config.password.clone()),
+            ("v", version.to_string()),
+            ("c", "BaYin".to_string()),
+        ];
+        if include_format {
+            params.push(("f", "json".to_string()));
+        }
+        return params;
+    }
+
     let salt: String = rand::thread_rng()
         .sample_iter(&rand::distributions::Alphanumeric)
         .take(12)
@@ -24,14 +45,17 @@ fn generate_auth_params(config: &StreamServerConfig) -> Vec<(&str, String)> {
 
     let token = format!("{:x}", md5::compute(format!("{}{}", config.password, salt)));
 
-    vec![
+    let mut params = vec![
         ("u", config.username.clone()),
         ("t", token),
         ("s", salt),
-        ("v", "1.16.1".to_string()),
+        ("v", version.to_string()),
         ("c", "BaYin".to_string()),
-        ("f", "json".to_string()),
-    ]
+    ];
+    if include_format {
+        params.push(("f", "json".to_string()));
+    }
+    params
 }
 
 /// 构建 API URL
@@ -42,7 +66,7 @@ fn build_url(config: &StreamServerConfig, endpoint: &str) -> String {
 
 fn build_cover_art_url(config: &StreamServerConfig, cover_id: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
-    let params = generate_auth_params(config);
+    let params = generate_auth_params(config, false);
     let query: String = params
         .iter()
         .map(|(k, v)| format!("{}={}", k, v))
@@ -55,7 +79,7 @@ fn build_cover_art_url(config: &StreamServerConfig, cover_id: &str) -> String {
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
     let client = Client::new();
     let url = build_url(config, "ping");
-    let params = generate_auth_params(config);
+    let params = generate_auth_params(config, true);
 
     match client.get(&url).query(&params).send().await {
         Ok(response) => {
@@ -160,7 +184,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
 
     loop {
         let url = build_url(config, "search3");
-        let mut params = generate_auth_params(config);
+        let mut params = generate_auth_params(config, true);
         params.push(("query", "".to_string())); // 空查询获取所有
         params.push(("songCount", page_size.to_string()));
         params.push(("songOffset", offset.to_string()));
@@ -221,7 +245,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
 pub async fn fetch_playlists(config: &StreamServerConfig) -> Result<Vec<(String, String, u32, Option<String>)>, String> {
     let client = Client::new();
     let url = build_url(config, "getPlaylists");
-    let params = generate_auth_params(config);
+    let params = generate_auth_params(config, true);
 
     let response = client
         .get(&url)
@@ -279,7 +303,7 @@ pub async fn fetch_playlist_tracks(
 ) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>)>, String> {
     let client = Client::new();
     let url = build_url(config, "getPlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
 
     let response = client
@@ -338,7 +362,7 @@ pub async fn add_songs_to_playlist(
 
     let client = Client::new();
     let url = build_url(config, "updatePlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
     for song_id in song_ids {
         params.push(("songIdToAdd", song_id.clone()));
@@ -379,7 +403,7 @@ pub async fn create_playlist(
 ) -> Result<(), String> {
     let client = Client::new();
     let url = build_url(config, "createPlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("name", name.to_string()));
     for song_id in song_ids {
         params.push(("songId", song_id.clone()));
@@ -420,7 +444,7 @@ pub async fn rename_playlist(
 ) -> Result<(), String> {
     let client = Client::new();
     let url = build_url(config, "updatePlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
     params.push(("name", name.to_string()));
 
@@ -458,7 +482,7 @@ pub async fn delete_playlist(
 ) -> Result<(), String> {
     let client = Client::new();
     let url = build_url(config, "deletePlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
 
     let response = client
@@ -500,7 +524,7 @@ pub async fn remove_playlist_indexes(
 
     let client = Client::new();
     let url = build_url(config, "updatePlaylist");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
     for index in indexes {
         params.push(("songIndexToRemove", index.to_string()));
@@ -538,19 +562,7 @@ pub async fn remove_playlist_indexes(
 pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
     // 流媒体请求不需要 f=json 参数
-    let salt: String = rand::thread_rng()
-        .sample_iter(&rand::distributions::Alphanumeric)
-        .take(12)
-        .map(char::from)
-        .collect();
-    let token = format!("{:x}", md5::compute(format!("{}{}", config.password, salt)));
-    let params = vec![
-        ("u", config.username.clone()),
-        ("t", token),
-        ("s", salt),
-        ("v", "1.16.1".to_string()),
-        ("c", "BaYin".to_string()),
-    ];
+    let params = generate_auth_params(config, false);
     let query: String = params
         .iter()
         .map(|(k, v)| format!("{}={}", k, v))
@@ -592,7 +604,7 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
 
     // 首先尝试 getLyricsBySongId (OpenSubsonic 扩展，支持同步歌词)
     let url = build_url(config, "getLyricsBySongId");
-    let mut params = generate_auth_params(config);
+    let mut params = generate_auth_params(config, true);
     params.push(("id", song_id.to_string()));
 
     if let Ok(response) = client.get(&url).query(&params).send().await {

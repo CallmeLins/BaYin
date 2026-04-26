@@ -36,6 +36,7 @@ fn build_config(server: &db::servers::DbStreamServer) -> StreamServerConfig {
         server_url: server.server_url.clone(),
         username: server.username.clone(),
         password: server.password.clone(),
+        legacy_auth: server.legacy_auth,
         access_token: server.access_token.clone(),
         user_id: server.user_id.clone(),
     }
