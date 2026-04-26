@@ -76,9 +76,9 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
   Widget build(BuildContext context) {
     final layout = ref.watch(responsiveLayoutProvider);
     final tokens = Theme.of(context).extension<BayinTokens>()!;
-    final location = GoRouterState.of(context).matchedLocation;
+    final location = GoRouterState.of(context).uri.path;
 
-    final isPlayer = location == '/player';
+    final isPlayer = location == '/player' || location.startsWith('/player/');
     final docked = !isPlayer && layout.sidebarMode == SidebarMode.docked;
     final showOverlaySidebar = !isPlayer && !docked && _overlayOpen;
 

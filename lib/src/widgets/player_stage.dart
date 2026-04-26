@@ -13,99 +13,78 @@ class PlayerStage extends StatelessWidget {
     required this.song,
     required this.mode,
     required this.fft,
+    this.showSpectrum = true,
+    this.circularCover = false,
+    this.coverFraction = 0.84,
   });
 
   final Song song;
   final SpectrumMode mode;
   final RustFftSnapshot fft;
+  final bool showSpectrum;
+  final bool circularCover;
+  final double coverFraction;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return AspectRatio(
       aspectRatio: 1,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              scheme.primary.withValues(alpha: 0.2),
-              scheme.secondary.withValues(alpha: 0.16),
-              scheme.surfaceContainerHighest.withValues(alpha: 0.6),
-            ],
-          ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: CustomPaint(
-                painter: SpectrumPainter(
-                  frequency: fft.frequency,
-                  waveform: fft.waveform,
-                  mode: mode,
-                  color: scheme.primary,
-                ),
-              ),
-            ),
-            Center(
-              child: Container(
-                width: 148,
-                height: 148,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: scheme.outlineVariant.withValues(alpha: 0.5),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final shortest = constraints.biggest.shortestSide;
+          final coverSize = shortest * coverFraction.clamp(0.5, 0.98);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              if (showSpectrum)
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: CustomPaint(
+                    painter: SpectrumPainter(
+                      frequency: fft.frequency,
+                      waveform: fft.waveform,
+                      mode: mode,
+                      color: Colors.white.withValues(alpha: 0.78),
+                    ),
                   ),
                 ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    CoverArt(
-                      width: 148,
-                      height: 148,
-                      coverHash: song.coverHash,
-                      streamInfo: song.streamInfo,
-                      size: CoverArtSize.mid,
-                      shape: BoxShape.circle,
-                      placeholderIcon: PhosphorIcons.musicNote(),
-                      placeholderIconSize: 34,
-                    ).animate().fadeIn(duration: 350.ms),
-                    Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.35),
-                          borderRadius: const BorderRadius.vertical(
-                            bottom: Radius.circular(999),
-                          ),
-                        ),
-                        child: Text(
-                          song.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+              Center(
+                child: Container(
+                  width: coverSize,
+                  height: coverSize,
+                  decoration: BoxDecoration(
+                    shape: circularCover ? BoxShape.circle : BoxShape.rectangle,
+                    borderRadius:
+                        circularCover ? null : BorderRadius.circular(26),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        blurRadius: 28,
+                        offset: const Offset(0, 16),
                       ),
+                    ],
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.14),
                     ),
-                  ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: CoverArt(
+                    width: coverSize,
+                    height: coverSize,
+                    coverHash: song.coverHash,
+                    streamInfo: song.streamInfo,
+                    size: CoverArtSize.mid,
+                    shape: circularCover ? BoxShape.circle : BoxShape.rectangle,
+                    borderRadius:
+                        circularCover ? null : BorderRadius.circular(26),
+                    placeholderIcon: PhosphorIcons.musicNote(),
+                    placeholderIconSize: 34,
+                  ).animate().fadeIn(duration: 280.ms),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          );
+        },
       ),
     );
   }

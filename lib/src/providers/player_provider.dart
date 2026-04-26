@@ -206,6 +206,77 @@ class PlayerController extends Notifier<PlayerControllerState> {
     _setState(state.copyWith(queue: List<Song>.unmodifiable(queue), error: null));
   }
 
+  Future<void> removeFromQueue(int index) async {
+    final currentQueue = state.queue;
+    if (index < 0 || index >= currentQueue.length) {
+      return;
+    }
+
+    final nextQueue = currentQueue.toList()..removeAt(index);
+    final currentIndex = state.currentIndex;
+    if (nextQueue.isEmpty) {
+      try {
+        RustApi.instance.audioStop();
+      } catch (_) {
+        // Keep local queue clearing resilient if engine is unavailable.
+      }
+      _setState(
+        state.copyWith(
+          queue: const <Song>[],
+          currentIndex: null,
+          isPlaying: false,
+          positionSecs: 0,
+          durationSecs: 0,
+          error: null,
+        ),
+      );
+      return;
+    }
+
+    if (currentIndex == null) {
+      _setState(
+        state.copyWith(
+          queue: List<Song>.unmodifiable(nextQueue),
+          error: null,
+        ),
+      );
+      return;
+    }
+
+    if (index == currentIndex) {
+      final fallbackIndex = index.clamp(0, nextQueue.length - 1).toInt();
+      await playQueue(nextQueue, startIndex: fallbackIndex);
+      return;
+    }
+
+    final adjustedIndex = index < currentIndex ? currentIndex - 1 : currentIndex;
+    _setState(
+      state.copyWith(
+        queue: List<Song>.unmodifiable(nextQueue),
+        currentIndex: adjustedIndex,
+        error: null,
+      ),
+    );
+  }
+
+  Future<void> clearQueue() async {
+    try {
+      RustApi.instance.audioStop();
+    } catch (_) {
+      // Keep local queue clearing resilient if engine is unavailable.
+    }
+    _setState(
+      state.copyWith(
+        queue: const <Song>[],
+        currentIndex: null,
+        isPlaying: false,
+        positionSecs: 0,
+        durationSecs: 0,
+        error: null,
+      ),
+    );
+  }
+
   Future<void> _refresh() async {
     try {
       final rustState = RustApi.instance.getPlaybackState();

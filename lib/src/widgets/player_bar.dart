@@ -89,7 +89,7 @@ class _SongSlot extends StatelessWidget {
       width: compact ? 180 : 260,
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
-        onTap: song == null ? null : () => context.push('/player'),
+        onTap: song == null ? null : () => context.go('/player'),
         child: Row(
           children: [
             Container(
@@ -249,7 +249,7 @@ class _SecondaryActions extends StatelessWidget {
           tooltip: 'Open player',
           icon: Icon(PhosphorIcons.queue()),
           color: scheme.onSurfaceVariant,
-          onPressed: () => context.push('/player'),
+          onPressed: () => context.go('/player'),
         ),
       ],
     );
