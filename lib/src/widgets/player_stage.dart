@@ -13,7 +13,9 @@ class PlayerStage extends StatelessWidget {
     required this.song,
     required this.mode,
     required this.fft,
+    required this.isPlaying,
     this.showSpectrum = true,
+    this.isColorful = false,
     this.circularCover = false,
     this.coverFraction = 0.84,
   });
@@ -21,7 +23,9 @@ class PlayerStage extends StatelessWidget {
   final Song song;
   final SpectrumMode mode;
   final RustFftSnapshot fft;
+  final bool isPlaying;
   final bool showSpectrum;
+  final bool isColorful;
   final bool circularCover;
   final double coverFraction;
 
@@ -45,6 +49,10 @@ class PlayerStage extends StatelessWidget {
                       waveform: fft.waveform,
                       mode: mode,
                       color: Colors.white.withValues(alpha: 0.78),
+                      kind: SpectrumPainterKind.ring,
+                      isPlaying: isPlaying,
+                      isColorful: isColorful,
+                      stateKey: 'player-stage-${mode.name}',
                     ),
                   ),
                 ),

@@ -171,6 +171,8 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
           _BottomSpectrumLayer(
             fft: fft,
             mode: bottomSpectrumMode,
+            isPlaying: player.isPlaying,
+            isColorful: proSpectrumActive,
           ),
         SafeArea(
           child: Padding(
@@ -651,10 +653,14 @@ class _BottomSpectrumLayer extends StatelessWidget {
   const _BottomSpectrumLayer({
     required this.fft,
     required this.mode,
+    required this.isPlaying,
+    required this.isColorful,
   });
 
   final RustFftSnapshot fft;
   final SpectrumMode mode;
+  final bool isPlaying;
+  final bool isColorful;
 
   @override
   Widget build(BuildContext context) {
@@ -686,6 +692,10 @@ class _BottomSpectrumLayer extends StatelessWidget {
                     waveform: fft.waveform,
                     mode: mode,
                     color: Colors.white.withValues(alpha: 0.9),
+                    kind: SpectrumPainterKind.bottom,
+                    isPlaying: isPlaying,
+                    isColorful: isColorful,
+                    stateKey: 'player-bottom-${mode.name}',
                   ),
                   child: const SizedBox.expand(),
                 ),
@@ -847,7 +857,9 @@ class _SingleBody extends StatelessWidget {
                             song: song,
                             mode: mode,
                             fft: fft,
+                            isPlaying: player.isPlaying,
                             showSpectrum: showRingSpectrum,
+                            isColorful: showRingSpectrum,
                             circularCover: ringLayoutActive,
                             coverFraction: ringLayoutActive ? 0.74 : 0.92,
                           ),
@@ -953,7 +965,9 @@ class _SplitBody extends StatelessWidget {
                       song: song,
                       mode: mode,
                       fft: fft,
+                      isPlaying: player.isPlaying,
                       showSpectrum: showRingSpectrum,
+                      isColorful: showRingSpectrum,
                       circularCover: ringLayoutActive,
                       coverFraction: ringLayoutActive ? 0.74 : 0.9,
                     ),
@@ -1059,7 +1073,9 @@ class _PhoneLandscapeBody extends StatelessWidget {
                     song: song,
                     mode: mode,
                     fft: fft,
+                    isPlaying: player.isPlaying,
                     showSpectrum: showRingSpectrum,
+                    isColorful: showRingSpectrum,
                     circularCover: ringLayoutActive,
                     coverFraction: ringLayoutActive ? 0.72 : 0.9,
                   ),
