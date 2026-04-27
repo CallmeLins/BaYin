@@ -1,20 +1,26 @@
-//! Subsonic API 工具函数
+﻿//! Subsonic API 工具函数
 //! 支持 Navidrome、Subsonic、OpenSubsonic 等兼容服务器
+use std::collections::HashSet;
+
 use rand::Rng;
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize};
+use serde_json::Value;
 
 use crate::models::{
-    ConnectionTestResult, PingResponse, ScannedSong, SearchResponse, StreamServerConfig,
+    ConnectionTestResult, GetAlbumList2Response, GetArtistResponse, GetArtistsResponse,
+    PingResponse, ScannedSong, StreamServerConfig,
     SubsonicPlaylistResponse, SubsonicPlaylistsResponse, SubsonicResponse, SubsonicSong,
 };
 use crate::utils::audio::extract_filename_from_path_str;
 use crate::utils::datetime::parse_datetime_to_epoch_seconds;
 
-/// 无损音频格式
+/// Lossless audio suffixes.
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
 const SUBSONIC_API_VERSION: &str = "1.16.1";
 const SUBSONIC_LEGACY_API_VERSION: &str = "1.12.0";
+const SEARCH_PAGE_SIZE: u64 = 5000;
+const ALBUM_PAGE_SIZE: u64 = 500;
 
 /// 生成 Subsonic API 认证参数
 fn generate_auth_params(config: &StreamServerConfig, include_format: bool) -> Vec<(&str, String)> {
@@ -58,7 +64,7 @@ fn generate_auth_params(config: &StreamServerConfig, include_format: bool) -> Ve
     params
 }
 
-/// 构建 API URL
+/// 鏋勫缓 API URL
 fn build_url(config: &StreamServerConfig, endpoint: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
     format!("{}/rest/{}", base, endpoint)
@@ -75,7 +81,98 @@ fn build_cover_art_url(config: &StreamServerConfig, cover_id: &str) -> String {
     format!("{}/rest/getCoverArt?id={}&{}", base, cover_id, query)
 }
 
-/// 测试服务器连接
+fn music_folder_param(config: &StreamServerConfig) -> Option<(&'static str, String)> {
+    let id = config.music_folder_id.as_ref()?.trim();
+    if id.is_empty() {
+        None
+    } else {
+        Some(("musicFolderId", id.to_string()))
+    }
+}
+
+fn json_kind(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "bool",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+fn truncate_for_log(input: &str, max_chars: usize) -> String {
+    if input.chars().count() <= max_chars {
+        return input.to_string();
+    }
+    let truncated: String = input.chars().take(max_chars).collect();
+    format!("{}…(truncated)", truncated)
+}
+
+fn summarize_subsonic_payload(endpoint: &str, sub: &serde_json::Map<String, Value>) -> String {
+    let mut details: Vec<String> = vec![format!("keys={}", sub.keys().cloned().collect::<Vec<_>>().join(","))];
+
+    match endpoint {
+        "search3" => {
+            let shape = sub
+                .get("searchResult3")
+                .map(json_kind)
+                .unwrap_or("missing");
+            let song_shape = sub
+                .get("searchResult3")
+                .and_then(|v| v.get("song"))
+                .map(json_kind)
+                .unwrap_or("missing");
+            details.push(format!("searchResult3={}", shape));
+            details.push(format!("searchResult3.song={}", song_shape));
+        }
+        "getAlbumList2" => {
+            let list_shape = sub.get("albumList2").map(json_kind).unwrap_or("missing");
+            let album_shape = sub
+                .get("albumList2")
+                .and_then(|v| v.get("album"))
+                .map(json_kind)
+                .unwrap_or("missing");
+            details.push(format!("albumList2={}", list_shape));
+            details.push(format!("albumList2.album={}", album_shape));
+        }
+        "getAlbum" => {
+            let album_shape = sub.get("album").map(json_kind).unwrap_or("missing");
+            let song_shape = sub
+                .get("album")
+                .and_then(|v| v.get("song"))
+                .map(json_kind)
+                .unwrap_or("missing");
+            details.push(format!("album={}", album_shape));
+            details.push(format!("album.song={}", song_shape));
+        }
+        "getArtists" => {
+            let artists_shape = sub.get("artists").map(json_kind).unwrap_or("missing");
+            let index_shape = sub
+                .get("artists")
+                .and_then(|v| v.get("index"))
+                .map(json_kind)
+                .unwrap_or("missing");
+            details.push(format!("artists={}", artists_shape));
+            details.push(format!("artists.index={}", index_shape));
+        }
+        "getArtist" => {
+            let artist_shape = sub.get("artist").map(json_kind).unwrap_or("missing");
+            let album_shape = sub
+                .get("artist")
+                .and_then(|v| v.get("album"))
+                .map(json_kind)
+                .unwrap_or("missing");
+            details.push(format!("artist={}", artist_shape));
+            details.push(format!("artist.album={}", album_shape));
+        }
+        _ => {}
+    }
+
+    details.join(" | ")
+}
+
+/// 测试连接
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
     let client = Client::new();
     let url = build_url(config, "ping");
@@ -129,7 +226,7 @@ pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResul
     }
 }
 
-/// 将 Subsonic 歌曲转换为 ScannedSong
+/// 转换 Subsonic 歌曲为 ScannedSong
 fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong {
     let suffix = song.suffix.as_deref().unwrap_or("");
     let is_sq = LOSSLESS_SUFFIXES.contains(&suffix.to_lowercase().as_str());
@@ -142,7 +239,7 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         .as_ref()
         .map(|cover_id| build_cover_art_url(config, cover_id));
 
-    // 标题：如果 title 为空，尝试从路径提取文件名
+    // 标题为空时尝试从路径提取文件名
     let title = if song.title.is_empty() {
         song.path
             .as_ref()
@@ -158,8 +255,11 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         artist: song
             .artist
             .clone()
-            .unwrap_or_else(|| "未知艺术家".to_string()),
-        album: song.album.clone().unwrap_or_else(|| "未知专辑".to_string()),
+            .unwrap_or_else(|| "Unknown Artist".to_string()),
+        album: song
+            .album
+            .clone()
+            .unwrap_or_else(|| "Unknown Album".to_string()),
         duration: song.duration.unwrap_or(0) as f64,
         file_path: song.path.clone().unwrap_or_default(),
         file_size: song.size.unwrap_or(0),
@@ -167,7 +267,7 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         format: song.suffix.as_ref().map(|s| s.to_uppercase()),
-        bit_depth: song.bit_depth,
+        bit_depth: song.bit_depth.and_then(|value| u8::try_from(value).ok()),
         sample_rate: song.sampling_rate,
         bitrate: song.bit_rate,
         channels: None,
@@ -175,68 +275,486 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
     }
 }
 
-/// 获取所有歌曲（通过搜索所有，分页拉取）
-pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
-    let client = Client::new();
-    let mut all_songs = Vec::new();
-    let page_size: u64 = 5000;
-    let mut offset: u64 = 0;
+/// Scan all songs from a Subsonic-compatible server.
+async fn request_subsonic_value(
+    client: &Client,
+    config: &StreamServerConfig,
+    endpoint: &str,
+    extra_params: Vec<(&str, String)>,
+) -> Result<Value, String> {
+    let url = build_url(config, endpoint);
+    let mut params = generate_auth_params(config, true);
+    params.extend(extra_params);
+
+    let response = client
+        .get(&url)
+        .query(&params)
+        .send()
+        .await
+        .map_err(|e| format!("请求失败: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("请求失败: HTTP {}", response.status()));
+    }
+
+    let root: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("解析响应失败: {}", e))?;
+
+    let sub = root
+        .get("subsonic-response")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| "解析响应失败: 缺少 subsonic-response".to_string())?;
+
+    let status = sub
+        .get("status")
+        .and_then(|v| v.as_str())
+        .unwrap_or_default();
+    if status != "ok" {
+        let code = sub
+            .get("error")
+            .and_then(|e| e.get("code"))
+            .and_then(|v| v.as_i64())
+            .unwrap_or_default();
+        let msg = sub
+            .get("error")
+            .and_then(|e| e.get("message"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("未知错误");
+        eprintln!(
+            "[subsonic-debug] endpoint={} auth={} musicFolderId={} api_error_code={} api_error_msg={}",
+            endpoint,
+            if config.legacy_auth { "legacy" } else { "token" },
+            config.music_folder_id.as_deref().unwrap_or("<none>"),
+            code,
+            msg
+        );
+        return Err(format!("API 错误: {}", msg));
+    }
+
+    Ok(Value::Object(sub.clone()))
+}
+
+async fn request_subsonic<T: DeserializeOwned>(
+    client: &Client,
+    config: &StreamServerConfig,
+    endpoint: &str,
+    extra_params: Vec<(&str, String)>,
+) -> Result<T, String> {
+    let sub_value = request_subsonic_value(client, config, endpoint, extra_params).await?;
+    serde_json::from_value(sub_value.clone()).map_err(|e| {
+        let summary = sub_value
+            .as_object()
+            .map(|sub| summarize_subsonic_payload(endpoint, sub))
+            .unwrap_or_else(|| "subsonic-response is not object".to_string());
+        let snippet = truncate_for_log(&sub_value.to_string(), 1400);
+        eprintln!(
+            "[subsonic-debug] endpoint={} auth={} musicFolderId={} parse_error={} summary={}",
+            endpoint,
+            if config.legacy_auth { "legacy" } else { "token" },
+            config.music_folder_id.as_deref().unwrap_or("<none>"),
+            e,
+            summary
+        );
+        eprintln!(
+            "[subsonic-debug] endpoint={} payload_snippet={}",
+            endpoint, snippet
+        );
+        format!("API 响应字段解析失败({}): {}", endpoint, e)
+    })
+}
+
+fn looks_like_song_object(map: &serde_json::Map<String, Value>) -> bool {
+    if !map.contains_key("id") {
+        return false;
+    }
+    map.contains_key("title")
+        || map.contains_key("artist")
+        || map.contains_key("album")
+        || map.contains_key("duration")
+        || map.contains_key("suffix")
+        || map.contains_key("path")
+        || map.contains_key("contentType")
+        || map.contains_key("bitRate")
+        || map.contains_key("samplingRate")
+        || map.contains_key("coverArt")
+        || map.contains_key("track")
+}
+
+fn collect_songs_from_value(value: &Value, out: &mut Vec<SubsonicSong>, depth: usize) {
+    if depth > 4 {
+        return;
+    }
+
+    match value {
+        Value::Array(items) => {
+            for item in items {
+                collect_songs_from_value(item, out, depth + 1);
+            }
+        }
+        Value::Object(map) => {
+            if looks_like_song_object(map) {
+                if let Ok(song) = serde_json::from_value::<SubsonicSong>(Value::Object(map.clone())) {
+                    out.push(song);
+                    return;
+                }
+            }
+
+            for key in ["song", "songs", "entry", "child", "track", "items", "data"] {
+                if let Some(next) = map.get(key) {
+                    collect_songs_from_value(next, out, depth + 1);
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+fn extract_search3_songs(sub: &Value) -> Vec<SubsonicSong> {
+    let mut songs = Vec::new();
+    if let Some(search_result) = sub.get("searchResult3") {
+        if let Some(song_value) = search_result.get("song") {
+            collect_songs_from_value(song_value, &mut songs, 0);
+        } else {
+            collect_songs_from_value(search_result, &mut songs, 0);
+        }
+    }
+    songs
+}
+
+fn extract_album_songs(sub: &Value) -> Vec<SubsonicSong> {
+    let mut songs = Vec::new();
+    if let Some(album_value) = sub.get("album") {
+        if let Some(song_value) = album_value.get("song") {
+            collect_songs_from_value(song_value, &mut songs, 0);
+        } else {
+            collect_songs_from_value(album_value, &mut songs, 0);
+        }
+    }
+    songs
+}
+
+async fn fetch_songs_via_search3(
+    client: &Client,
+    config: &StreamServerConfig,
+) -> Result<Vec<SubsonicSong>, String> {
+    let mut songs = Vec::new();
+    let mut offset = 0_u64;
 
     loop {
-        let url = build_url(config, "search3");
-        let mut params = generate_auth_params(config, true);
-        params.push(("query", "".to_string())); // 空查询获取所有
-        params.push(("songCount", page_size.to_string()));
-        params.push(("songOffset", offset.to_string()));
-        params.push(("albumCount", "0".to_string()));
-        params.push(("artistCount", "0".to_string()));
-
-        let response = client
-            .get(&url)
-            .query(&params)
-            .send()
-            .await
-            .map_err(|e| format!("请求失败: {}", e))?;
-
-        let data: SubsonicResponse<SearchResponse> = response
-            .json()
-            .await
-            .map_err(|e| format!("解析响应失败: {}", e))?;
-
-        let inner = data.subsonic_response;
-        if inner.status != "ok" {
-            if let Some(error) = inner.error {
-                return Err(format!("API 错误: {}", error.message));
-            }
-            return Err("未知错误".to_string());
+        let mut params = vec![
+            ("query", "".to_string()),
+            ("songCount", SEARCH_PAGE_SIZE.to_string()),
+            ("songOffset", offset.to_string()),
+            ("albumCount", "0".to_string()),
+            ("albumOffset", "0".to_string()),
+            ("artistCount", "0".to_string()),
+            ("artistOffset", "0".to_string()),
+        ];
+        if let Some(param) = music_folder_param(config) {
+            params.push(param);
         }
 
-        let count = if let Some(search_result) = inner.data {
-            if let Some(result) = search_result.search_result3 {
-                if let Some(songs) = result.song {
-                    let n = songs.len();
-                    for song in &songs {
-                        all_songs.push(convert_song(song, config));
-                    }
-                    n
-                } else {
-                    0
-                }
-            } else {
-                0
-            }
-        } else {
-            0
-        };
+        let sub = request_subsonic_value(
+            client,
+            config,
+            "search3",
+            params,
+        )
+        .await?;
 
-        offset += count as u64;
-        // 返回数量小于页大小说明已经是最后一页
-        if (count as u64) < page_size {
+        let page_songs = extract_search3_songs(&sub);
+        let count = page_songs.len() as u64;
+        if count == 0 {
+            eprintln!(
+                "[subsonic-debug] endpoint=search3 empty-page offset={} payload_snippet={}",
+                offset,
+                truncate_for_log(&sub.to_string(), 1000)
+            );
+        }
+
+        songs.extend(page_songs);
+        offset += count;
+
+        if count < SEARCH_PAGE_SIZE {
             break;
         }
     }
 
-    Ok(all_songs)
+    Ok(songs)
+}
+
+async fn fetch_album_ids_via_album_list2(
+    client: &Client,
+    config: &StreamServerConfig,
+) -> Result<Vec<String>, String> {
+    let mut album_ids = Vec::new();
+    let mut seen = HashSet::new();
+    let mut offset = 0_u64;
+
+    loop {
+        let mut params = vec![
+            ("type", "alphabeticalByName".to_string()),
+            ("size", ALBUM_PAGE_SIZE.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(param) = music_folder_param(config) {
+            params.push(param);
+        }
+
+        let data: GetAlbumList2Response = request_subsonic(
+            client,
+            config,
+            "getAlbumList2",
+            params,
+        )
+        .await?;
+
+        let albums = data
+            .album_list2
+            .and_then(|list| list.album)
+            .map(|album| album.into_vec())
+            .unwrap_or_default();
+        let count = albums.len() as u64;
+
+        for album in albums {
+            if seen.insert(album.id.clone()) {
+                album_ids.push(album.id);
+            }
+        }
+
+        offset += count;
+        if count < ALBUM_PAGE_SIZE {
+            break;
+        }
+    }
+
+    Ok(album_ids)
+}
+
+async fn fetch_artist_ids(
+    client: &Client,
+    config: &StreamServerConfig,
+) -> Result<Vec<String>, String> {
+    let mut params = Vec::new();
+    if let Some(param) = music_folder_param(config) {
+        params.push(param);
+    }
+    let data: GetArtistsResponse = request_subsonic(client, config, "getArtists", params).await?;
+
+    let mut artist_ids = Vec::new();
+    let mut seen = HashSet::new();
+    let indexes = data
+        .artists
+        .and_then(|artists| artists.index)
+        .map(|index| index.into_vec())
+        .unwrap_or_default();
+
+    for index in indexes {
+        let artists = index.artist.map(|artist| artist.into_vec()).unwrap_or_default();
+        for artist in artists {
+            if seen.insert(artist.id.clone()) {
+                artist_ids.push(artist.id);
+            }
+        }
+    }
+
+    Ok(artist_ids)
+}
+
+async fn fetch_album_ids_via_artists(
+    client: &Client,
+    config: &StreamServerConfig,
+) -> Result<Vec<String>, String> {
+    let artist_ids = fetch_artist_ids(client, config).await?;
+    if artist_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut album_ids = Vec::new();
+    let mut seen = HashSet::new();
+
+    for artist_id in artist_ids {
+        let data: GetArtistResponse = match request_subsonic(
+            client,
+            config,
+            "getArtist",
+            vec![("id", artist_id)],
+        )
+        .await
+        {
+            Ok(data) => data,
+            Err(err) => {
+                eprintln!("Subsonic artist fallback failed for one artist: {}", err);
+                continue;
+            }
+        };
+
+        let albums = data
+            .artist
+            .and_then(|artist| artist.album)
+            .map(|album| album.into_vec())
+            .unwrap_or_default();
+        for album in albums {
+            if seen.insert(album.id.clone()) {
+                album_ids.push(album.id);
+            }
+        }
+    }
+
+    Ok(album_ids)
+}
+
+async fn fetch_songs_by_album_ids(
+    client: &Client,
+    config: &StreamServerConfig,
+    album_ids: Vec<String>,
+) -> Result<Vec<SubsonicSong>, String> {
+    if album_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut songs = Vec::new();
+
+    for album_id in album_ids {
+        let sub = match request_subsonic_value(
+            client,
+            config,
+            "getAlbum",
+            vec![("id", album_id.clone())],
+        )
+        .await
+        {
+            Ok(sub) => sub,
+            Err(err) => {
+                eprintln!("Subsonic album fallback failed for one album: {}", err);
+                continue;
+            }
+        };
+
+        let album_songs = extract_album_songs(&sub);
+        if album_songs.is_empty() {
+            eprintln!(
+                "[subsonic-debug] endpoint=getAlbum empty-songs album_id={} payload_snippet={}",
+                album_id,
+                truncate_for_log(&sub.to_string(), 900)
+            );
+        }
+        songs.extend(album_songs);
+    }
+
+    Ok(songs)
+}
+
+fn dedupe_songs_by_id(songs: Vec<SubsonicSong>) -> Vec<SubsonicSong> {
+    let mut seen = HashSet::new();
+    let mut deduped = Vec::new();
+    for song in songs {
+        if seen.insert(song.id.clone()) {
+            deduped.push(song);
+        }
+    }
+    deduped
+}
+
+fn is_auth_mechanism_error(err: &str) -> bool {
+    let lower = err.to_lowercase();
+    lower.contains("provided authentication mechanism not supported")
+        || lower.contains("authentication mechanism not supported")
+}
+
+async fn fetch_all_songs_once(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
+    let client = Client::new();
+    let mut search_error: Option<String> = None;
+    eprintln!(
+        "[subsonic-debug] scan_start server={} auth={} musicFolderId={}",
+        config.server_url,
+        if config.legacy_auth { "legacy" } else { "token" },
+        config.music_folder_id.as_deref().unwrap_or("<none>")
+    );
+
+    match fetch_songs_via_search3(&client, config).await {
+        Ok(songs) if !songs.is_empty() => {
+            eprintln!("[subsonic-debug] strategy=search3 songs={}", songs.len());
+            return Ok(dedupe_songs_by_id(songs)
+                .into_iter()
+                .map(|song| convert_song(&song, config))
+                .collect());
+        }
+        Ok(_) => {
+            eprintln!("[subsonic-debug] strategy=search3 songs=0 -> fallback");
+        }
+        Err(err) => {
+            eprintln!("[subsonic-debug] strategy=search3 failed -> fallback, err={}", err);
+            search_error = Some(err);
+        }
+    }
+
+    match fetch_album_ids_via_album_list2(&client, config).await {
+        Ok(album_ids) => {
+            eprintln!("[subsonic-debug] strategy=getAlbumList2 album_ids={}", album_ids.len());
+            match fetch_songs_by_album_ids(&client, config, album_ids).await {
+                Ok(songs) if !songs.is_empty() => {
+                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs={}", songs.len());
+                    return Ok(dedupe_songs_by_id(songs)
+                        .into_iter()
+                        .map(|song| convert_song(&song, config))
+                        .collect());
+                }
+                Ok(_) => {
+                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs=0 -> artist fallback");
+                }
+                Err(err) => {
+                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum failed: {}", err);
+                }
+            }
+        }
+        Err(err) => {
+            eprintln!("[subsonic-debug] strategy=getAlbumList2 failed: {}", err);
+        }
+    }
+
+    let album_ids = fetch_album_ids_via_artists(&client, config).await?;
+    eprintln!("[subsonic-debug] strategy=getArtists+getArtist album_ids={}", album_ids.len());
+    let songs = fetch_songs_by_album_ids(&client, config, album_ids).await?;
+    if !songs.is_empty() {
+        eprintln!("[subsonic-debug] strategy=getArtists+getArtist+getAlbum songs={}", songs.len());
+        return Ok(dedupe_songs_by_id(songs)
+            .into_iter()
+            .map(|song| convert_song(&song, config))
+            .collect());
+    }
+
+    if let Some(err) = search_error {
+        return Err(format!(
+            "Failed to fetch songs (search3 failed and fallbacks returned no results): {}",
+            err
+        ));
+    }
+    Err("No songs found from search3 and all fallback paths".to_string())
+}
+
+pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
+    match fetch_all_songs_once(config).await {
+        Ok(songs) => Ok(songs),
+        Err(err) if is_auth_mechanism_error(&err) => {
+            let mut retry_config = config.clone();
+            retry_config.legacy_auth = !config.legacy_auth;
+            eprintln!(
+                "Subsonic auth mode rejected, retrying with {} auth",
+                if retry_config.legacy_auth {
+                    "legacy"
+                } else {
+                    "token"
+                }
+            );
+            fetch_all_songs_once(&retry_config)
+                .await
+                .map_err(|retry_err| format!("{}; retry failed: {}", err, retry_err))
+        }
+        Err(err) => Err(err),
+    }
 }
 
 // ============ Playlists ============
@@ -558,10 +1076,10 @@ pub async fn remove_playlist_indexes(
     Ok(())
 }
 
-/// 获取歌曲流 URL
+/// Build stream URL for a song.
 pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
-    // 流媒体请求不需要 f=json 参数
+    // Stream endpoint does not need `f=json`.
     let params = generate_auth_params(config, false);
     let query: String = params
         .iter()
@@ -571,7 +1089,7 @@ pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
     format!("{}/rest/stream?id={}&{}", base, song_id, query)
 }
 
-/// 获取结构化歌词响应 (OpenSubsonic 扩展)
+/// OpenSubsonic structured lyrics payload.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GetLyricsBySongIdResponse {
@@ -598,11 +1116,11 @@ pub struct LyricLine {
     pub value: Option<String>,
 }
 
-/// 获取歌曲歌词
+/// Get song lyrics.
 pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
     let client = Client::new();
 
-    // 首先尝试 getLyricsBySongId (OpenSubsonic 扩展，支持同步歌词)
+    // First try `getLyricsBySongId` (OpenSubsonic extension, supports synced lyrics).
     let url = build_url(config, "getLyricsBySongId");
     let mut params = generate_auth_params(config, true);
     params.push(("id", song_id.to_string()));
@@ -617,7 +1135,7 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
                     if let Some(lyrics_data) = data.subsonic_response.data {
                         if let Some(lyrics_list) = lyrics_data.lyrics_list {
                             if let Some(structured) = lyrics_list.structured_lyrics {
-                                // 优先使用同步歌词
+                                // Prefer synced lyrics.
                                 for sl in &structured {
                                     if sl.synced == Some(true) {
                                         if let Some(lines) = &sl.line {
@@ -642,7 +1160,7 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
                                         }
                                     }
                                 }
-                                // 如果没有同步歌词，使用非同步歌词
+                                // Fallback to unsynced lyrics when no synced lyrics exist.
                                 for sl in &structured {
                                     if let Some(lines) = &sl.line {
                                         let text = lines
@@ -666,3 +1184,4 @@ pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<St
 
     None
 }
+

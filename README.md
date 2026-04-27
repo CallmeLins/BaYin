@@ -53,6 +53,24 @@
 - 📱 响应式布局（支持桌面和移动端）
 - ✨ macOS 风格毛玻璃效果
 
+## 支持的协议
+
+BaYin 支持所有实现了 [Navidrome](https://www.navidrome.org/)、[Jellyfin](https://jellyfin.org/) 或 [OpenSubsonic 兼容](https://opensubsonic.netlify.app/) API 的音乐服务器。
+
+- [Navidrome](https://github.com/navidrome/navidrome)
+- [Jellyfin](https://github.com/jellyfin/jellyfin)
+- 兼容 OpenSubsonic 的服务器，例如：
+  - [Airsonic-Advanced](https://github.com/airsonic-advanced/airsonic-advanced)
+  - [Ampache](https://ampache.org)
+  - [Astiga](https://asti.ga/)
+  - [Funkwhale](https://www.funkwhale.audio/)
+  - [Gonic](https://github.com/sentriz/gonic)
+  - [LMS](https://github.com/epoupon/lms)
+  - [Nextcloud Music](https://apps.nextcloud.com/apps/music)
+  - [Supysonic](https://github.com/spl0k/supysonic)
+  - [Qm-Music](https://github.com/chenqimiao/qm-music)
+  - 更多其他兼容服务（?）
+
 ## 界面展示
 
 ### 桌面端

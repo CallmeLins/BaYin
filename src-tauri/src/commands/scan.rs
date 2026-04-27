@@ -413,7 +413,7 @@ pub async fn scan_stream_to_db(
             server_type: match server.server_type.as_str() {
                 "navidrome" => crate::models::ServerType::Navidrome,
                 "subsonic" => crate::models::ServerType::Subsonic,
-                "opensubsonic" => crate::models::ServerType::OpenSubsonic,
+                "opensubsonic" => crate::models::ServerType::Subsonic,
                 "jellyfin" => crate::models::ServerType::Jellyfin,
                 "emby" => crate::models::ServerType::Emby,
                 _ => crate::models::ServerType::Navidrome,
@@ -423,6 +423,7 @@ pub async fn scan_stream_to_db(
             username: server.username.clone(),
             password: server.password.clone(),
             legacy_auth: server.legacy_auth,
+            music_folder_id: server.music_folder_id.clone(),
             access_token: server.access_token.clone(),
             user_id: server.user_id.clone(),
         };
@@ -494,6 +495,7 @@ pub async fn scan_stream_to_db(
                                 "username": server.username,
                                 "password": server.password,
                                 "legacyAuth": server.legacy_auth,
+                                "musicFolderId": server.music_folder_id,
                                 "accessToken": server.access_token,
                                 "userId": server.user_id
                             }

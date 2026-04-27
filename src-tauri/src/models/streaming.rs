@@ -1,11 +1,39 @@
 //! 流媒体服务器数据模型（支持 Navidrome/Subsonic/Jellyfin/Emby 等）
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug)]
 pub enum OneOrMany<T> {
     One(T),
     Many(Vec<T>),
+}
+
+impl<'de, T> Deserialize<'de> for OneOrMany<T>
+where
+    T: DeserializeOwned,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+
+        match value {
+            serde_json::Value::Null => Ok(OneOrMany::Many(Vec::new())),
+            serde_json::Value::Array(items) => {
+                let mut values = Vec::new();
+                for item in items {
+                    if let Ok(parsed) = serde_json::from_value::<T>(item) {
+                        values.push(parsed);
+                    }
+                }
+                Ok(OneOrMany::Many(values))
+            }
+            other => match serde_json::from_value::<T>(other) {
+                Ok(single) => Ok(OneOrMany::One(single)),
+                Err(_) => Ok(OneOrMany::Many(Vec::new())),
+            },
+        }
+    }
 }
 
 impl<T> OneOrMany<T> {
@@ -40,6 +68,8 @@ pub struct StreamServerConfig {
     pub password: String,
     #[serde(default)]
     pub legacy_auth: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub music_folder_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -104,21 +134,65 @@ pub struct PingResponse {}
 /// 搜索响应
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SearchResponse {
-    pub search_result3: Option<SearchResult3>,
+pub struct GetAlbumList2Response {
+    pub album_list2: Option<SubsonicAlbumList2>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SearchResult3 {
-    pub song: Option<Vec<SubsonicSong>>,
+pub struct SubsonicAlbumList2 {
+    pub album: Option<OneOrMany<SubsonicAlbumSummary>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicAlbumSummary {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetArtistsResponse {
+    pub artists: Option<SubsonicArtists>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicArtists {
+    pub index: Option<OneOrMany<SubsonicArtistIndex>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicArtistIndex {
+    pub artist: Option<OneOrMany<SubsonicArtistSummary>>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicArtistSummary {
+    pub id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetArtistResponse {
+    pub artist: Option<SubsonicArtistDetail>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubsonicArtistDetail {
+    pub album: Option<OneOrMany<SubsonicAlbumSummary>>,
 }
 
 /// Subsonic 歌曲信息
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubsonicSong {
+    #[serde(default)]
     pub id: String,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub artist: Option<String>,
@@ -137,7 +211,7 @@ pub struct SubsonicSong {
     #[serde(default)]
     pub sampling_rate: Option<u32>,
     #[serde(default)]
-    pub bit_depth: Option<u8>,
+    pub bit_depth: Option<u32>,
     #[serde(default)]
     pub path: Option<String>,
     #[serde(default)]

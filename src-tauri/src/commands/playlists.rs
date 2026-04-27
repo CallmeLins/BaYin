@@ -22,7 +22,7 @@ fn server_type_from_str(s: &str) -> ServerType {
     match s {
         "navidrome" => ServerType::Navidrome,
         "subsonic" => ServerType::Subsonic,
-        "opensubsonic" => ServerType::OpenSubsonic,
+        "opensubsonic" => ServerType::Subsonic,
         "jellyfin" => ServerType::Jellyfin,
         "emby" => ServerType::Emby,
         _ => ServerType::Navidrome,
@@ -37,6 +37,7 @@ fn build_config(server: &db::servers::DbStreamServer) -> StreamServerConfig {
         username: server.username.clone(),
         password: server.password.clone(),
         legacy_auth: server.legacy_auth,
+        music_folder_id: server.music_folder_id.clone(),
         access_token: server.access_token.clone(),
         user_id: server.user_id.clone(),
     }

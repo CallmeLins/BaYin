@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 5;
+const CURRENT_SCHEMA_VERSION: i32 = 7;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -45,6 +45,12 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 5 {
         migrate_v5(conn)?;
+    }
+    if from_version < 6 {
+        migrate_v6(conn)?;
+    }
+    if from_version < 7 {
+        migrate_v7(conn)?;
     }
 
     Ok(())
@@ -233,6 +239,36 @@ fn migrate_v5(conn: &Connection) -> Result<()> {
     }
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [5])?;
+    Ok(())
+}
+
+/// Version 6: Add optional Subsonic/OpenSubsonic music folder filter id.
+fn migrate_v6(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(stream_servers)")?;
+    let has_music_folder_id = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|row| row.ok())
+        .any(|name| name == "music_folder_id");
+
+    if !has_music_folder_id {
+        conn.execute(
+            "ALTER TABLE stream_servers ADD COLUMN music_folder_id TEXT",
+            [],
+        )?;
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [6])?;
+    Ok(())
+}
+
+/// Version 7: Merge OpenSubsonic server type into Subsonic.
+fn migrate_v7(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "UPDATE stream_servers SET server_type = 'subsonic' WHERE server_type = 'opensubsonic'",
+        [],
+    )?;
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [7])?;
     Ok(())
 }
 
