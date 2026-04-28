@@ -3,7 +3,9 @@ use std::time::Duration;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+#[allow(dead_code)]
 const MAX_RETRIES: u32 = 3;
+#[allow(dead_code)]
 const BASE_BACKOFF_MS: u64 = 300;
 
 /// Create a reqwest Client with sensible timeouts.
@@ -19,6 +21,7 @@ pub fn build_client() -> Result<Client, String> {
 ///
 /// The closure receives the attempt number (0-based). Retries happen on any
 /// `Err` result; the final error is returned when all attempts are exhausted.
+#[allow(dead_code)]
 pub async fn with_retry<T, E, F, Fut>(mut f: F) -> Result<T, E>
 where
     F: FnMut(u32) -> Fut,
