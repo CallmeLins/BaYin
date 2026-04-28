@@ -302,7 +302,7 @@ pub fn run() {
                     .handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())
                 {
-                    eprintln!("Updater plugin init failed (skipped): {e}");
+                    log::warn!("Updater plugin init failed (skipped): {e}");
                 }
             }
 

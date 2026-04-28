@@ -207,7 +207,7 @@ fn audio_buf_to_f32(buf: &AudioBufferRef, channels: usize) -> Vec<f32> {
         }
         _ => {
             // Unsigned 16/24/32 and signed 8 — rare formats, treat as silence
-            eprintln!("Unsupported audio sample format, skipping packet");
+            log::warn!("Unsupported audio sample format, skipping packet");
         }
     }
 

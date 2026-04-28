@@ -42,6 +42,7 @@ impl HttpStreamSource {
     pub fn open(url: &str) -> Result<Self, String> {
         let client = reqwest::blocking::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(30))
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
@@ -148,12 +149,14 @@ impl HttpStreamSource {
 
     /// Abort the current download, open a new Range request, restart download thread.
     fn reopen_from(&mut self, offset: u64) -> io::Result<()> {
-        // Signal abort to current download thread
+        // Signal abort to current download thread and join it
         {
             let mut buf = self.buf.0.lock().unwrap();
             buf.abort = true;
         }
-        // Don't join — just let it finish on its own. Create a new shared buffer.
+        if let Some(handle) = self._download_thread.take() {
+            let _ = handle.join();
+        }
 
         let resp = self
             .client

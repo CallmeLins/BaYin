@@ -143,7 +143,7 @@ fn build_output_stream(
                 }
             },
             move |err| {
-                eprintln!("Audio output error: {}", err);
+                log::error!("Audio output error: {}", err);
                 stream_error.store(true, Ordering::Relaxed);
             },
             None,

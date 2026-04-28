@@ -22,6 +22,8 @@ use crate::playback_control;
 
 const FADE_OUT_MS: f32 = 150.0;
 const FADE_IN_MS: f32 = 200.0;
+const PENDING_SAMPLES_MAX: usize = 1_048_576; // cap at ~1M samples to prevent unbounded growth
+const CMD_CHANNEL_CAP: usize = 256;
 
 enum FadeAction {
     Pause,
@@ -91,7 +93,7 @@ pub struct AudioEngine {
 impl AudioEngine {
     /// Create a new engine + spawn the audio thread.
     pub fn new(app_handle: AppHandle) -> Self {
-        let (cmd_tx, cmd_rx) = crossbeam_channel::unbounded();
+        let (cmd_tx, cmd_rx) = crossbeam_channel::bounded(CMD_CHANNEL_CAP);
         let state = Arc::new(Mutex::new(PlaybackState {
             is_playing: false,
             position_secs: 0.0,
@@ -111,7 +113,9 @@ impl AudioEngine {
     }
 
     pub fn send(&self, cmd: AudioCommand) {
-        let _ = self.cmd_tx.send(cmd);
+        if let Err(err) = self.cmd_tx.try_send(cmd) {
+            log::warn!("Audio command channel full, dropping command: {:?}", std::mem::discriminant(&err.into_inner()));
+        }
     }
 }
 
@@ -163,7 +167,7 @@ fn execute_play(
                         ) {
                             Ok(rs) => *resampler = Some(rs),
                             Err(e) => {
-                                eprintln!("Resampler init warning: {}", e);
+                                log::warn!("Resampler init warning: {}", e);
                             }
                         }
                     }
@@ -252,7 +256,7 @@ fn reinitialize_output_for_route_change(
         match AudioResampler::new(source_sample_rate, out_rate, actual_channels) {
             Ok(rs) => *resampler = Some(rs),
             Err(e) => {
-                eprintln!("Resampler reinit warning after route change: {}", e);
+                log::warn!("Resampler reinit warning after route change: {}", e);
             }
         }
     }
@@ -586,7 +590,7 @@ fn audio_thread(
                             pos.max(0.0)
                         };
                         if let Err(e) = dec.seek(clamped) {
-                            eprintln!("Seek error: {}", e);
+                            log::warn!("Seek error: {}", e);
                         } else {
                             position_secs = clamped;
                             last_emitted_pos = clamped;
@@ -708,7 +712,7 @@ fn audio_thread(
                                             push_or_pend(&mut out.producer, &resampled, &mut pending_samples);
                                         }
                                         Err(e) => {
-                                            eprintln!("Resample error: {}", e);
+                                            log::warn!("Resample error: {}", e);
                                         }
                                     }
                                     let next_needed = rs.input_frames_needed() * out_channels;
@@ -772,7 +776,7 @@ fn audio_thread(
                         if let Some(target) = pause_target_secs.take() {
                             if let Some(ref mut dec) = decoder {
                                 if let Err(e) = dec.seek(target) {
-                                    eprintln!("Pause seek-back error: {}", e);
+                                    log::warn!("Pause seek-back error: {}", e);
                                 } else {
                                     position_secs = target;
                                     last_emitted_pos = target;
@@ -1029,7 +1033,11 @@ fn apply_volume_with_fade(samples: &mut [f32], volume: f32, fade: &mut FadeState
 fn push_or_pend(producer: &mut HeapProd<f32>, samples: &[f32], pending: &mut Vec<f32>) {
     let written = producer.push_slice(samples);
     if written < samples.len() {
-        pending.extend_from_slice(&samples[written..]);
+        if pending.len() < PENDING_SAMPLES_MAX {
+            pending.extend_from_slice(&samples[written..]);
+        } else {
+            log::warn!("Pending samples at capacity ({}), dropping {} samples", PENDING_SAMPLES_MAX, samples.len() - written);
+        }
     }
 }
 

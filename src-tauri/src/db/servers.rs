@@ -4,6 +4,8 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::models::{ServerType, StreamServerConfig};
+
 /// Database stream server record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -23,6 +25,29 @@ pub struct DbStreamServer {
     pub user_id: Option<String>,
     pub enabled: bool,
     pub created_at: i64,
+}
+
+impl From<&DbStreamServer> for StreamServerConfig {
+    fn from(s: &DbStreamServer) -> Self {
+        Self {
+            server_type: match s.server_type.as_str() {
+                "navidrome" => ServerType::Navidrome,
+                "opensubsonic" => ServerType::Subsonic,
+                "subsonic" => ServerType::Subsonic,
+                "jellyfin" => ServerType::Jellyfin,
+                "emby" => ServerType::Emby,
+                _ => ServerType::Navidrome,
+            },
+            server_name: s.server_name.clone(),
+            server_url: s.server_url.clone(),
+            username: s.username.clone(),
+            password: s.password.clone(),
+            legacy_auth: s.legacy_auth,
+            music_folder_id: s.music_folder_id.clone(),
+            access_token: s.access_token.clone(),
+            user_id: s.user_id.clone(),
+        }
+    }
 }
 
 /// Input data for saving a stream server

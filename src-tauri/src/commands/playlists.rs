@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::db::{self, DbState};
-use crate::models::{ServerType, StreamServerConfig};
+use crate::models::StreamServerConfig;
 use crate::utils::{jellyfin, subsonic};
 
 const PLAYLISTS_TTL_SECS: i64 = 10 * 60;
@@ -18,29 +18,8 @@ fn now_ts() -> i64 {
         .as_secs() as i64
 }
 
-fn server_type_from_str(s: &str) -> ServerType {
-    match s {
-        "navidrome" => ServerType::Navidrome,
-        "subsonic" => ServerType::Subsonic,
-        "opensubsonic" => ServerType::Subsonic,
-        "jellyfin" => ServerType::Jellyfin,
-        "emby" => ServerType::Emby,
-        _ => ServerType::Navidrome,
-    }
-}
-
 fn build_config(server: &db::servers::DbStreamServer) -> StreamServerConfig {
-    StreamServerConfig {
-        server_type: server_type_from_str(server.server_type.as_str()),
-        server_name: server.server_name.clone(),
-        server_url: server.server_url.clone(),
-        username: server.username.clone(),
-        password: server.password.clone(),
-        legacy_auth: server.legacy_auth,
-        music_folder_id: server.music_folder_id.clone(),
-        access_token: server.access_token.clone(),
-        user_id: server.user_id.clone(),
-    }
+    StreamServerConfig::from(server)
 }
 
 fn resolve_internal_ids(server_id: &str, song_ids: &[String]) -> Vec<String> {

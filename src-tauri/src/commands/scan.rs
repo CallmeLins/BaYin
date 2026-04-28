@@ -409,24 +409,7 @@ pub async fn scan_stream_to_db(
         );
 
         // Build config for fetching
-        let config = crate::models::StreamServerConfig {
-            server_type: match server.server_type.as_str() {
-                "navidrome" => crate::models::ServerType::Navidrome,
-                "subsonic" => crate::models::ServerType::Subsonic,
-                "opensubsonic" => crate::models::ServerType::Subsonic,
-                "jellyfin" => crate::models::ServerType::Jellyfin,
-                "emby" => crate::models::ServerType::Emby,
-                _ => crate::models::ServerType::Navidrome,
-            },
-            server_name: server.server_name.clone(),
-            server_url: server.server_url.clone(),
-            username: server.username.clone(),
-            password: server.password.clone(),
-            legacy_auth: server.legacy_auth,
-            music_folder_id: server.music_folder_id.clone(),
-            access_token: server.access_token.clone(),
-            user_id: server.user_id.clone(),
-        };
+        let config = crate::models::StreamServerConfig::from(server);
 
         // Fetch songs from server
         let stream_songs = match crate::commands::streaming::fetch_stream_songs_internal(&config).await {
@@ -434,7 +417,7 @@ pub async fn scan_stream_to_db(
             Err(e) => {
                 total_errors += 1;
                 let failure = format!("{}: {}", server.server_name, e);
-                eprintln!("Failed to fetch songs from {}", failure);
+                log::warn!("Failed to fetch songs from {}", failure);
                 stream_failures.push(failure);
                 continue;
             }

@@ -14,6 +14,7 @@ use crate::models::{
 };
 use crate::utils::audio::extract_filename_from_path_str;
 use crate::utils::datetime::parse_datetime_to_epoch_seconds;
+use crate::utils::http::build_client;
 
 /// Lossless audio suffixes.
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -174,7 +175,10 @@ fn summarize_subsonic_payload(endpoint: &str, sub: &serde_json::Map<String, Valu
 
 /// 测试连接
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
-    let client = Client::new();
+    let client = match build_client() {
+        Ok(c) => c,
+        Err(e) => return ConnectionTestResult { success: false, message: e, server_version: None },
+    };
     let url = build_url(config, "ping");
     let params = generate_auth_params(config, true);
 
@@ -322,7 +326,7 @@ async fn request_subsonic_value(
             .and_then(|e| e.get("message"))
             .and_then(|v| v.as_str())
             .unwrap_or("未知错误");
-        eprintln!(
+        log::debug!(
             "[subsonic-debug] endpoint={} auth={} musicFolderId={} api_error_code={} api_error_msg={}",
             endpoint,
             if config.legacy_auth { "legacy" } else { "token" },
@@ -349,7 +353,7 @@ async fn request_subsonic<T: DeserializeOwned>(
             .map(|sub| summarize_subsonic_payload(endpoint, sub))
             .unwrap_or_else(|| "subsonic-response is not object".to_string());
         let snippet = truncate_for_log(&sub_value.to_string(), 1400);
-        eprintln!(
+        log::debug!(
             "[subsonic-debug] endpoint={} auth={} musicFolderId={} parse_error={} summary={}",
             endpoint,
             if config.legacy_auth { "legacy" } else { "token" },
@@ -357,7 +361,7 @@ async fn request_subsonic<T: DeserializeOwned>(
             e,
             summary
         );
-        eprintln!(
+        log::debug!(
             "[subsonic-debug] endpoint={} payload_snippet={}",
             endpoint, snippet
         );
@@ -467,7 +471,7 @@ async fn fetch_songs_via_search3(
         let page_songs = extract_search3_songs(&sub);
         let count = page_songs.len() as u64;
         if count == 0 {
-            eprintln!(
+            log::debug!(
                 "[subsonic-debug] endpoint=search3 empty-page offset={} payload_snippet={}",
                 offset,
                 truncate_for_log(&sub.to_string(), 1000)
@@ -564,41 +568,70 @@ async fn fetch_artist_ids(
 }
 
 async fn fetch_album_ids_via_artists(
-    client: &Client,
+    _client: &Client,
     config: &StreamServerConfig,
 ) -> Result<Vec<String>, String> {
-    let artist_ids = fetch_artist_ids(client, config).await?;
+    let artist_ids = fetch_artist_ids(_client, config).await?;
     if artist_ids.is_empty() {
         return Ok(Vec::new());
     }
 
+    // Parallelize per-artist requests to avoid N+1 sequential bottleneck.
+    let results: Vec<Result<Vec<String>, String>> = artist_ids
+        .into_iter()
+        .collect::<Vec<_>>()
+        .chunks(16) // up to 16 concurrent requests
+        .flat_map(|chunk| {
+            use rayon::prelude::*;
+            let bclient = reqwest::blocking::Client::new();
+            chunk
+                .par_iter()
+                .map(|artist_id| {
+                    let url = build_url(config, "getArtist");
+                    let mut params = generate_auth_params(config, true);
+                    params.push(("id", artist_id.to_string()));
+                    let resp = bclient
+                        .get(&url)
+                        .query(&params)
+                        .send()
+                        .map_err(|e| format!("Request failed: {}", e))?;
+                    if !resp.status().is_success() {
+                        return Err(format!("HTTP {}", resp.status()));
+                    }
+                    let root: Value = resp
+                        .json()
+                        .map_err(|e| format!("Parse error: {}", e))?;
+                    let sub = root
+                        .get("subsonic-response")
+                        .and_then(|v| v.as_object())
+                        .ok_or("Missing subsonic-response")?;
+                    let data: GetArtistResponse =
+                        serde_json::from_value(Value::Object(sub.clone()))
+                            .map_err(|e| format!("Deserialize error: {}", e))?;
+                    let albums = data
+                        .artist
+                        .and_then(|artist| artist.album)
+                        .map(|album| album.into_vec())
+                        .unwrap_or_default();
+                    Ok(albums.into_iter().map(|a| a.id).collect::<Vec<_>>())
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
     let mut album_ids = Vec::new();
     let mut seen = HashSet::new();
-
-    for artist_id in artist_ids {
-        let data: GetArtistResponse = match request_subsonic(
-            client,
-            config,
-            "getArtist",
-            vec![("id", artist_id)],
-        )
-        .await
-        {
-            Ok(data) => data,
-            Err(err) => {
-                eprintln!("Subsonic artist fallback failed for one artist: {}", err);
-                continue;
+    for result in results {
+        match result {
+            Ok(ids) => {
+                for id in ids {
+                    if seen.insert(id.clone()) {
+                        album_ids.push(id);
+                    }
+                }
             }
-        };
-
-        let albums = data
-            .artist
-            .and_then(|artist| artist.album)
-            .map(|album| album.into_vec())
-            .unwrap_or_default();
-        for album in albums {
-            if seen.insert(album.id.clone()) {
-                album_ids.push(album.id);
+            Err(err) => {
+                log::warn!("Subsonic artist fallback failed: {}", err);
             }
         }
     }
@@ -607,7 +640,7 @@ async fn fetch_album_ids_via_artists(
 }
 
 async fn fetch_songs_by_album_ids(
-    client: &Client,
+    _client: &Client,
     config: &StreamServerConfig,
     album_ids: Vec<String>,
 ) -> Result<Vec<SubsonicSong>, String> {
@@ -615,33 +648,47 @@ async fn fetch_songs_by_album_ids(
         return Ok(Vec::new());
     }
 
+    // Parallelize per-album requests to avoid N+1 sequential bottleneck.
+    let results: Vec<Result<Vec<SubsonicSong>, String>> = album_ids
+        .chunks(16)
+        .flat_map(|chunk| {
+            use rayon::prelude::*;
+            let bclient = reqwest::blocking::Client::new();
+            chunk
+                .par_iter()
+                .map(|album_id| {
+                    let url = build_url(config, "getAlbum");
+                    let mut params = generate_auth_params(config, true);
+                    params.push(("id", album_id.to_string()));
+                    let resp = bclient
+                        .get(&url)
+                        .query(&params)
+                        .send()
+                        .map_err(|e| format!("Request failed: {}", e))?;
+                    if !resp.status().is_success() {
+                        return Err(format!("HTTP {}", resp.status()));
+                    }
+                    let root: Value = resp
+                        .json()
+                        .map_err(|e| format!("Parse error: {}", e))?;
+                    let sub = root
+                        .get("subsonic-response")
+                        .and_then(|v| v.as_object())
+                        .ok_or("Missing subsonic-response")?;
+                    Ok(extract_album_songs(&Value::Object(sub.clone())))
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect();
+
     let mut songs = Vec::new();
-
-    for album_id in album_ids {
-        let sub = match request_subsonic_value(
-            client,
-            config,
-            "getAlbum",
-            vec![("id", album_id.clone())],
-        )
-        .await
-        {
-            Ok(sub) => sub,
+    for result in results {
+        match result {
+            Ok(s) => songs.extend(s),
             Err(err) => {
-                eprintln!("Subsonic album fallback failed for one album: {}", err);
-                continue;
+                log::warn!("Subsonic album fetch failed: {}", err);
             }
-        };
-
-        let album_songs = extract_album_songs(&sub);
-        if album_songs.is_empty() {
-            eprintln!(
-                "[subsonic-debug] endpoint=getAlbum empty-songs album_id={} payload_snippet={}",
-                album_id,
-                truncate_for_log(&sub.to_string(), 900)
-            );
         }
-        songs.extend(album_songs);
     }
 
     Ok(songs)
@@ -665,9 +712,9 @@ fn is_auth_mechanism_error(err: &str) -> bool {
 }
 
 async fn fetch_all_songs_once(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
-    let client = Client::new();
+    let client = build_client()?;
     let mut search_error: Option<String> = None;
-    eprintln!(
+    log::debug!(
         "[subsonic-debug] scan_start server={} auth={} musicFolderId={}",
         config.server_url,
         if config.legacy_auth { "legacy" } else { "token" },
@@ -676,50 +723,50 @@ async fn fetch_all_songs_once(config: &StreamServerConfig) -> Result<Vec<Scanned
 
     match fetch_songs_via_search3(&client, config).await {
         Ok(songs) if !songs.is_empty() => {
-            eprintln!("[subsonic-debug] strategy=search3 songs={}", songs.len());
+            log::debug!("[subsonic-debug] strategy=search3 songs={}", songs.len());
             return Ok(dedupe_songs_by_id(songs)
                 .into_iter()
                 .map(|song| convert_song(&song, config))
                 .collect());
         }
         Ok(_) => {
-            eprintln!("[subsonic-debug] strategy=search3 songs=0 -> fallback");
+            log::debug!("[subsonic-debug] strategy=search3 songs=0 -> fallback");
         }
         Err(err) => {
-            eprintln!("[subsonic-debug] strategy=search3 failed -> fallback, err={}", err);
+            log::debug!("[subsonic-debug] strategy=search3 failed -> fallback, err={}", err);
             search_error = Some(err);
         }
     }
 
     match fetch_album_ids_via_album_list2(&client, config).await {
         Ok(album_ids) => {
-            eprintln!("[subsonic-debug] strategy=getAlbumList2 album_ids={}", album_ids.len());
+            log::debug!("[subsonic-debug] strategy=getAlbumList2 album_ids={}", album_ids.len());
             match fetch_songs_by_album_ids(&client, config, album_ids).await {
                 Ok(songs) if !songs.is_empty() => {
-                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs={}", songs.len());
+                    log::debug!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs={}", songs.len());
                     return Ok(dedupe_songs_by_id(songs)
                         .into_iter()
                         .map(|song| convert_song(&song, config))
                         .collect());
                 }
                 Ok(_) => {
-                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs=0 -> artist fallback");
+                    log::debug!("[subsonic-debug] strategy=getAlbumList2+getAlbum songs=0 -> artist fallback");
                 }
                 Err(err) => {
-                    eprintln!("[subsonic-debug] strategy=getAlbumList2+getAlbum failed: {}", err);
+                    log::debug!("[subsonic-debug] strategy=getAlbumList2+getAlbum failed: {}", err);
                 }
             }
         }
         Err(err) => {
-            eprintln!("[subsonic-debug] strategy=getAlbumList2 failed: {}", err);
+            log::debug!("[subsonic-debug] strategy=getAlbumList2 failed: {}", err);
         }
     }
 
     let album_ids = fetch_album_ids_via_artists(&client, config).await?;
-    eprintln!("[subsonic-debug] strategy=getArtists+getArtist album_ids={}", album_ids.len());
+    log::debug!("[subsonic-debug] strategy=getArtists+getArtist album_ids={}", album_ids.len());
     let songs = fetch_songs_by_album_ids(&client, config, album_ids).await?;
     if !songs.is_empty() {
-        eprintln!("[subsonic-debug] strategy=getArtists+getArtist+getAlbum songs={}", songs.len());
+        log::debug!("[subsonic-debug] strategy=getArtists+getArtist+getAlbum songs={}", songs.len());
         return Ok(dedupe_songs_by_id(songs)
             .into_iter()
             .map(|song| convert_song(&song, config))
@@ -741,7 +788,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
         Err(err) if is_auth_mechanism_error(&err) => {
             let mut retry_config = config.clone();
             retry_config.legacy_auth = !config.legacy_auth;
-            eprintln!(
+            log::debug!(
                 "Subsonic auth mode rejected, retrying with {} auth",
                 if retry_config.legacy_auth {
                     "legacy"
@@ -761,7 +808,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
 
 /// Fetch playlist summaries from a Subsonic-compatible server (Navidrome/OpenSubsonic/Subsonic).
 pub async fn fetch_playlists(config: &StreamServerConfig) -> Result<Vec<(String, String, u32, Option<String>)>, String> {
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "getPlaylists");
     let params = generate_auth_params(config, true);
 
@@ -819,7 +866,7 @@ pub async fn fetch_playlist_tracks(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>)>, String> {
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "getPlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
@@ -878,7 +925,7 @@ pub async fn add_songs_to_playlist(
         return Ok(());
     }
 
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -919,7 +966,7 @@ pub async fn create_playlist(
     name: &str,
     song_ids: &[String],
 ) -> Result<(), String> {
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "createPlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("name", name.to_string()));
@@ -960,7 +1007,7 @@ pub async fn rename_playlist(
     playlist_id: &str,
     name: &str,
 ) -> Result<(), String> {
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -998,7 +1045,7 @@ pub async fn delete_playlist(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<(), String> {
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "deletePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
@@ -1040,7 +1087,7 @@ pub async fn remove_playlist_indexes(
         return Ok(());
     }
 
-    let client = Client::new();
+    let client = build_client()?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -1118,7 +1165,7 @@ pub struct LyricLine {
 
 /// Get song lyrics.
 pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
-    let client = Client::new();
+    let client = build_client().ok()?;
 
     // First try `getLyricsBySongId` (OpenSubsonic extension, supports synced lyrics).
     let url = build_url(config, "getLyricsBySongId");
