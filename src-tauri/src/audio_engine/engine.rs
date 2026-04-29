@@ -891,7 +891,7 @@ impl AudioThreadState {
 
         #[cfg(target_os = "android")]
         {
-            if self.try_android_auto_advance(app_handle) {
+            if self.try_android_auto_advance(state, app_handle) {
                 self.pending_samples.clear();
                 return;
             }
@@ -913,7 +913,7 @@ impl AudioThreadState {
     }
 
     #[cfg(target_os = "android")]
-    fn try_android_auto_advance(&mut self, app_handle: &AppHandle) -> bool {
+    fn try_android_auto_advance(&mut self, state: &Arc<Mutex<PlaybackState>>, app_handle: &AppHandle) -> bool {
         let domain = match app_handle.try_state::<PlaybackDomainState>() {
             Some(s) => s,
             None => {
@@ -928,7 +928,6 @@ impl AudioThreadState {
                     self.duration_secs,
                     self.volume,
                 );
-                // We don't have access to `state` here due to borrow rules, handled in caller
                 return false;
             }
         };
