@@ -7,7 +7,6 @@ import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-/// Phase 3 — one artist's catalogue. Shows all songs + album chips grouped.
 class ArtistDetailPage extends ConsumerWidget {
   const ArtistDetailPage({super.key});
 
@@ -38,42 +37,63 @@ class ArtistDetailPage extends ConsumerWidget {
           data: (songs) {
             final mine =
                 songs.where((s) => s.artist == artist.name).toList(growable: false);
-            final albumNames = <String>{
-              for (final s in mine) s.album,
-            }.toList()
-              ..sort();
+            final albumNames = <String>{for (final s in mine) s.album}.toList()..sort();
             return Column(
               children: [
-                _ArtistHeader(
-                  artist: artist,
-                  songCount: mine.length,
-                  albumCount: albumNames.length,
+                BayinPageHeader(
+                  title: Text(artist.name),
+                  left: IconButton(
+                    tooltip: 'Back',
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/artists');
+                      }
+                    },
+                    icon: Icon(PhosphorIcons.caretLeft()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                  child: _ArtistHeader(
+                    artist: artist,
+                    songCount: mine.length,
+                    albumCount: albumNames.length,
+                  ),
                 ),
                 if (albumNames.isNotEmpty)
-                  _AlbumChips(albumNames: albumNames),
-                const Divider(height: 1),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                    child: BayinGlassCard(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: _AlbumChips(albumNames: albumNames),
+                    ),
+                  ),
                 Expanded(
-                  child: mine.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No songs found for "${artist.name}".',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        )
-                      : SongList(
-                          songs: mine,
-                          showIndex: true,
-                          onTap: (song) => ref
-                              .read(playerControllerProvider.notifier)
-                              .playQueue(
-                                mine,
-                                startIndex: mine.indexOf(song),
+                  child: BayinGlassCard(
+                    margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                    child: mine.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No songs found for "${artist.name}".',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
                               ),
-                          onLongPress: (song) =>
-                              SongMenu.show(context, song: song),
-                        ),
+                            ),
+                          )
+                        : SongList(
+                            songs: mine,
+                            showIndex: true,
+                            onTap: (song) => ref
+                                .read(playerControllerProvider.notifier)
+                                .playQueue(
+                                  mine,
+                                  startIndex: mine.indexOf(song),
+                                ),
+                            onLongPress: (song) => SongMenu.show(context, song: song),
+                          ),
+                  ),
                 ),
               ],
             );
@@ -98,31 +118,19 @@ class _ArtistHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+    return BayinGlassCard(
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/artists');
-              }
-            },
-            icon: Icon(PhosphorIcons.arrowLeft()),
-            tooltip: 'Back',
-          ),
-          const SizedBox(width: 4),
           CoverArt(
-            width: 64,
-            height: 64,
+            width: 92,
+            height: 92,
             coverHash: artist.coverHash,
             streamCoverUrl: artist.streamCoverUrl,
             size: CoverArtSize.mid,
             shape: BoxShape.circle,
             placeholderIcon: PhosphorIcons.microphone(),
-            placeholderIconSize: 30,
+            placeholderIconSize: 40,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -138,7 +146,15 @@ class _ArtistHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$albumCount albums · $songCount tracks',
+                  '$albumCount albums',
+                  style: TextStyle(
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$songCount tracks',
                   style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],

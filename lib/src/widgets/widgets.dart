@@ -14,9 +14,11 @@
 library;
 
 export 'alphabet_scroller.dart';
+export 'bayin_surface.dart';
 export 'cover_art.dart';
 export 'equalizer_panel.dart';
 export 'karaoke_line.dart';
+export 'page_header.dart';
 export 'placeholder_page.dart';
 export 'player_bar.dart';
 export 'player_stage.dart';

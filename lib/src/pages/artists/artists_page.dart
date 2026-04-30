@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/cover_art.dart';
+import '../../widgets/widgets.dart';
 
 /// Phase 3 — artists list.
 class ArtistsPage extends ConsumerWidget {
@@ -51,45 +52,55 @@ class ArtistsPage extends ConsumerWidget {
         }
         return Column(
           children: [
-            _Header(count: artists.length),
+            BayinPageHeader(
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Artists'),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${artists.length}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+              right: IconButton(
+                tooltip: 'Search',
+                onPressed: () => context.go('/search'),
+                icon: Icon(PhosphorIcons.magnifyingGlass()),
+              ),
+            ),
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: artists.length,
-                itemExtent: 60,
-                itemBuilder: (context, index) {
-                  return _ArtistRow(artist: artists[index]);
-                },
+              child: Container(
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.07)
+                        : Colors.black.withValues(alpha: 0.06),
+                    width: 0.6,
+                  ),
+                ),
+                child: ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+                  itemCount: artists.length,
+                  itemExtent: 60,
+                  itemBuilder: (context, index) {
+                    return _ArtistRow(artist: artists[index]);
+                  },
+                ),
               ),
             ),
           ],
         );
       },
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Text('Artists', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(width: 8),
-          Text(
-            '$count',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

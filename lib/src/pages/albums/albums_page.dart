@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/cover_art.dart';
+import '../../widgets/widgets.dart';
 
 /// Phase 3 — local album grid.
 class AlbumsPage extends ConsumerWidget {
@@ -27,44 +28,62 @@ class AlbumsPage extends ConsumerWidget {
             subtitle: 'Scan music to populate the library.',
           );
         }
-        return CustomScrollView(
-          slivers: [
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-              sliver: SliverToBoxAdapter(
-                child: Row(
-                  children: [
-                    Text(
-                      'Albums',
-                      style: Theme.of(context).textTheme.titleLarge,
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Column(
+          children: [
+            BayinPageHeader(
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Albums'),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${albums.length}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '${albums.length}',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+                  ),
+                ],
+              ),
+              right: IconButton(
+                tooltip: 'Search',
+                onPressed: () => context.go('/search'),
+                icon: Icon(PhosphorIcons.magnifyingGlass()),
+              ),
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : Colors.black.withValues(alpha: 0.02),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.07)
+                          : Colors.black.withValues(alpha: 0.06),
+                      width: 0.6,
                     ),
-                  ],
+                  ),
+                  child: GridView.builder(
+                    gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: 180,
+                      mainAxisSpacing: 16,
+                      crossAxisSpacing: 16,
+                      childAspectRatio: 0.78,
+                    ),
+                    itemCount: albums.length,
+                    itemBuilder: (context, index) {
+                      return _AlbumCard(album: albums[index]);
+                    },
+                  ),
                 ),
               ),
             ),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverGrid.builder(
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 180,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.78,
-                ),
-                itemCount: albums.length,
-                itemBuilder: (context, index) {
-                  return _AlbumCard(album: albums[index]);
-                },
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 16)),
           ],
         );
       },

@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../widgets/widgets.dart';
 
 class MusicLibraryPage extends ConsumerWidget {
   const MusicLibraryPage({super.key});
@@ -27,42 +28,50 @@ class MusicLibraryPage extends ConsumerWidget {
     }
 
     final metrics = _buildMetrics(songs);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text('Music Library', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        GridView(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-            maxCrossAxisExtent: 220,
-            mainAxisExtent: 100,
-            mainAxisSpacing: 10,
-            crossAxisSpacing: 10,
+        const BayinPageHeader(
+          title: Text('Music Library'),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 4),
+              GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220,
+                  mainAxisExtent: 100,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                ),
+                children: [
+                  _StatCard(icon: PhosphorIcons.musicNotes(), label: 'Songs', value: '${metrics.totalSongs}'),
+                  _StatCard(icon: PhosphorIcons.vinylRecord(), label: 'Albums', value: '${albums.length}'),
+                  _StatCard(icon: PhosphorIcons.microphoneStage(), label: 'Artists', value: '${artists.length}'),
+                  _StatCard(
+                    icon: PhosphorIcons.hardDrives(),
+                    label: 'Library Size',
+                    value: _formatBytes(metrics.totalBytes),
+                  ),
+                  _StatCard(icon: PhosphorIcons.folderSimple(), label: 'Local Songs', value: '${metrics.localSongs}'),
+                  _StatCard(icon: PhosphorIcons.broadcast(), label: 'Stream Songs', value: '${metrics.streamSongs}'),
+                  _StatCard(
+                    icon: PhosphorIcons.clockCounterClockwise(),
+                    label: 'Total Duration',
+                    value: _formatDuration(metrics.totalDurationSeconds),
+                  ),
+                  _StatCard(
+                    icon: PhosphorIcons.imageSquare(),
+                    label: 'Songs With Cover',
+                    value: '${metrics.withCoverSongs} (${_formatPercent(metrics.coverCoverage)})',
+                  ),
+                ],
+              ),
+            ],
           ),
-          children: [
-            _StatCard(icon: PhosphorIcons.musicNotes(), label: 'Songs', value: '${metrics.totalSongs}'),
-            _StatCard(icon: PhosphorIcons.vinylRecord(), label: 'Albums', value: '${albums.length}'),
-            _StatCard(icon: PhosphorIcons.microphoneStage(), label: 'Artists', value: '${artists.length}'),
-            _StatCard(
-              icon: PhosphorIcons.hardDrives(),
-              label: 'Library Size',
-              value: _formatBytes(metrics.totalBytes),
-            ),
-            _StatCard(icon: PhosphorIcons.folderSimple(), label: 'Local Songs', value: '${metrics.localSongs}'),
-            _StatCard(icon: PhosphorIcons.broadcast(), label: 'Stream Songs', value: '${metrics.streamSongs}'),
-            _StatCard(
-              icon: PhosphorIcons.clockCounterClockwise(),
-              label: 'Total Duration',
-              value: _formatDuration(metrics.totalDurationSeconds),
-            ),
-            _StatCard(
-              icon: PhosphorIcons.imageSquare(),
-              label: 'Songs With Cover',
-              value: '${metrics.withCoverSongs} (${_formatPercent(metrics.coverCoverage)})',
-            ),
-          ],
         ),
       ],
     );

@@ -45,29 +45,73 @@ class _SongsPageState extends ConsumerState<SongsPage> {
         final available = buckets.keys.toSet();
         return Column(
           children: [
-            _Header(count: songs.length),
-            Expanded(
-              child: Row(
+            BayinPageHeader(
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Expanded(
-                    child: SongList(
-                      scrollController: _scrollController,
-                      songs: songs,
-                      showIndex: true,
-                      onTap: (song) => ref
-                          .read(playerControllerProvider.notifier)
-                          .playQueue(songs, startIndex: songs.indexOf(song)),
-                      onLongPress: (song) =>
-                          SongMenu.show(context, song: song),
+                  const Text('Songs'),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${songs.length}',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
                   ),
-                  AlphabetScroller(
-                    availableLetters: available,
-                    currentLetter: _activeLetter,
-                    onLetterTap: (letter) => _jumpToBucket(letter, buckets),
-                  ),
-                  const SizedBox(width: 4),
                 ],
+              ),
+              right: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Search',
+                    onPressed: () => context.go('/search'),
+                    icon: Icon(PhosphorIcons.magnifyingGlass()),
+                  ),
+                  IconButton(
+                    tooltip: 'Scan',
+                    onPressed: () => context.go('/scan'),
+                    icon: Icon(PhosphorIcons.folderSimple()),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Container(
+                margin: EdgeInsets.zero,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.04)
+                      : Colors.black.withValues(alpha: 0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.07)
+                        : Colors.black.withValues(alpha: 0.06),
+                    width: 0.6,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: SongList(
+                        scrollController: _scrollController,
+                        songs: songs,
+                        showIndex: true,
+                        onTap: (song) => ref
+                            .read(playerControllerProvider.notifier)
+                            .playQueue(songs, startIndex: songs.indexOf(song)),
+                        onLongPress: (song) =>
+                            SongMenu.show(context, song: song),
+                      ),
+                    ),
+                    AlphabetScroller(
+                      availableLetters: available,
+                      currentLetter: _activeLetter,
+                      onLetterTap: (letter) => _jumpToBucket(letter, buckets),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                ),
               ),
             ),
           ],
@@ -85,36 +129,6 @@ class _SongsPageState extends ConsumerState<SongsPage> {
       index * itemExtent,
       duration: const Duration(milliseconds: 180),
       curve: Curves.easeOut,
-    );
-  }
-}
-
-class _Header extends StatelessWidget {
-  const _Header({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-      child: Row(
-        children: [
-          Text(
-            'Songs',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 14,
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

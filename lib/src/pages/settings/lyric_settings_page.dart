@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../widgets/widgets.dart';
 
 class LyricSettingsPage extends ConsumerWidget {
   const LyricSettingsPage({super.key});
@@ -10,14 +13,27 @@ class LyricSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Lyric Settings',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('Lyric Settings'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/settings');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
+          ),
         ),
-        const SizedBox(height: 10),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
         _SliderCard(
           title: 'Lyrics font size',
           value: app.lyricsFontSize,
@@ -48,12 +64,8 @@ class LyricSettingsPage extends ConsumerWidget {
           onChanged: (value) => controller.setLyricsOffsetMs(value.round()),
         ),
         const SizedBox(height: 10),
-        Container(
+        BayinGlassCard(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(12),
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -99,6 +111,9 @@ class LyricSettingsPage extends ConsumerWidget {
           value: app.lyricsAutoBlur,
           onChanged: controller.setLyricsAutoBlur,
         ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -125,12 +140,8 @@ class _SliderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return BayinGlassCard(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -174,11 +185,7 @@ class _SwitchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return BayinGlassCard(
       child: SwitchListTile.adaptive(
         value: value,
         onChanged: (v) => onChanged(v),

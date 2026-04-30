@@ -115,14 +115,14 @@ final BayinTokens _lightTokens = BayinTokens(
 );
 
 final BayinTokens _darkTokens = BayinTokens(
-  windowBg: hslColor(240, 6, 7),
-  titlebarBg: hslColor(240, 6, 10),
-  sidebarBg: hslColor(240, 6, 12),
-  barBg: hslColor(240, 6, 16),
-  popoverBg: hslColor(240, 6, 18),
-  playerBg: hslColor(240, 6, 7),
+  windowBg: hslColor(240, 4, 2),
+  titlebarBg: hslColor(240, 5, 4),
+  sidebarBg: hslColor(240, 5, 5),
+  barBg: hslColor(240, 5, 6),
+  popoverBg: hslColor(240, 5, 8),
+  playerBg: hslColor(240, 4, 2),
   separator: hslColor(0, 0, 100),
-  separatorAlpha: 0.12,
-  separatorSoftAlpha: 0.10,
+  separatorAlpha: 0.05,
+  separatorSoftAlpha: 0.03,
   highlight: hslColor(0, 0, 100),
 );

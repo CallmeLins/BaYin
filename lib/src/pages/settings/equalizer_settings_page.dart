@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
@@ -11,14 +13,28 @@ class EqualizerSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Equalizer',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('Equalizer'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/settings');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
+          ),
         ),
-        const SizedBox(height: 6),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
+              const SizedBox(height: 6),
         Text(
           '10-band gain profile with Rust engine hook enabled.',
           style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -32,6 +48,9 @@ class EqualizerSettingsPage extends ConsumerWidget {
           onBandGainChanged: controller.setEqBandGain,
           onPresetChanged: (preset) => _applyPreset(controller, preset),
           onReset: controller.resetEq,
+        ),
+            ],
+          ),
         ),
       ],
     );

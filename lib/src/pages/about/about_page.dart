@@ -2,70 +2,82 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../widgets/widgets.dart';
+
 class AboutPage extends StatelessWidget {
   const AboutPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'About BaYin',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('About BaYin'),
+          right: IconButton(
+            tooltip: 'Website',
+            onPressed: () => context.go('/about/website'),
+            icon: Icon(PhosphorIcons.globeHemisphereWest()),
+          ),
         ),
-        const SizedBox(height: 10),
-        const _IntroCard(
-          description:
-              'BaYin is a cross-platform music player built with Flutter + Rust FFI.',
-        ),
-        const SizedBox(height: 12),
-        _GroupCard(
-          title: 'Information',
-          items: [
-            _AboutItem(
-              icon: PhosphorIcons.users(),
-              title: 'Creators',
-              subtitle: 'Team members and responsibilities',
-              route: '/about/creators',
-            ),
-            _AboutItem(
-              icon: PhosphorIcons.fileText(),
-              title: 'Terms',
-              subtitle: 'Terms of use and limitations',
-              route: '/about/terms',
-            ),
-            _AboutItem(
-              icon: PhosphorIcons.shieldCheck(),
-              title: 'Privacy',
-              subtitle: 'Data handling and privacy policy',
-              route: '/about/privacy',
-            ),
-            _AboutItem(
-              icon: PhosphorIcons.scales(),
-              title: 'Licenses',
-              subtitle: 'Open-source licenses and acknowledgements',
-              route: '/about/licenses',
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _GroupCard(
-          title: 'Support',
-          items: [
-            _AboutItem(
-              icon: PhosphorIcons.heart(),
-              title: 'Donate',
-              subtitle: 'Support project development',
-              route: '/about/donate',
-            ),
-            _AboutItem(
-              icon: PhosphorIcons.globeHemisphereWest(),
-              title: 'Official website',
-              subtitle: 'Project links and release channels',
-              route: '/about/website',
-            ),
-          ],
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 2),
+              const _IntroCard(
+                description:
+                    'BaYin is a cross-platform music player built with Flutter + Rust FFI.',
+              ),
+              const SizedBox(height: 12),
+              _GroupCard(
+                title: 'Information',
+                items: [
+                  _AboutItem(
+                    icon: PhosphorIcons.users(),
+                    title: 'Creators',
+                    subtitle: 'Team members and responsibilities',
+                    route: '/about/creators',
+                  ),
+                  _AboutItem(
+                    icon: PhosphorIcons.fileText(),
+                    title: 'Terms',
+                    subtitle: 'Terms of use and limitations',
+                    route: '/about/terms',
+                  ),
+                  _AboutItem(
+                    icon: PhosphorIcons.shieldCheck(),
+                    title: 'Privacy',
+                    subtitle: 'Data handling and privacy policy',
+                    route: '/about/privacy',
+                  ),
+                  _AboutItem(
+                    icon: PhosphorIcons.scales(),
+                    title: 'Licenses',
+                    subtitle: 'Open-source licenses and acknowledgements',
+                    route: '/about/licenses',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _GroupCard(
+                title: 'Support',
+                items: [
+                  _AboutItem(
+                    icon: PhosphorIcons.heart(),
+                    title: 'Donate',
+                    subtitle: 'Support project development',
+                    route: '/about/donate',
+                  ),
+                  _AboutItem(
+                    icon: PhosphorIcons.globeHemisphereWest(),
+                    title: 'Official website',
+                    subtitle: 'Project links and release channels',
+                    route: '/about/website',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

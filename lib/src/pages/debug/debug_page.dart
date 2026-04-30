@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/providers.dart';
 import '../../rust/rust_api.dart';
+import '../../widgets/widgets.dart';
 
 /// FFI smoke-test page (/debug).
 ///
@@ -41,37 +42,42 @@ class _DebugPageState extends ConsumerState<DebugPage> {
     final artists = ref.watch(libraryArtistsProvider);
     final scanner = ref.watch(scannerProvider);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'BaYin Flutter edition',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Rust FFI roundtrip: $pong',
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 14, color: Colors.grey),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                dbPath.when(
-                  data: (path) => 'Database: $path',
-                  loading: () => 'Database: initializing...',
-                  error: (error, _) => 'Database init failed: $error',
-                ),
-                textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              const SizedBox(height: 24),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+      children: [
+        const BayinPageHeader(title: Text('Debug')),
+        BayinGlassCard(
+          margin: const EdgeInsets.fromLTRB(0, 6, 0, 0),
+          padding: const EdgeInsets.all(16),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'BaYin Flutter edition',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Rust FFI roundtrip: $pong',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    dbPath.when(
+                      data: (path) => 'Database: $path',
+                      loading: () => 'Database: initializing...',
+                      error: (error, _) => 'Database init failed: $error',
+                    ),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 24),
               _StatLine(
                 label: 'Library songs',
                 value: songs.when(
@@ -173,10 +179,12 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                   'Scan failed: ${scanner.error}',
                   style: const TextStyle(color: Colors.red),
                 ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

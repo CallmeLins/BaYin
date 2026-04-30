@@ -10,6 +10,7 @@ import '../../providers/providers.dart';
 import '../../rust/rust_api.dart';
 import '../../services/file_watcher_service.dart';
 import '../../services/scan_service.dart';
+import '../../widgets/widgets.dart';
 import 'folder_browser.dart';
 
 class ScanMusicPage extends ConsumerStatefulWidget {
@@ -62,57 +63,62 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
     final config = ref.watch(scanConfigProvider);
     _applyConfigOnce(config);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Scan Music',
-          style: Theme.of(context).textTheme.titleLarge,
+        const BayinPageHeader(
+          title: Text('Scan Music'),
         ),
-        const SizedBox(height: 10),
-        _DirectoriesCard(
-          directories: _directories,
-          pathController: _pathController,
-          onAddTyped: _addTypedPath,
-          onBrowse: _browseFolder,
-          onRemove: _removeDirectory,
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 2),
+              _DirectoriesCard(
+                directories: _directories,
+                pathController: _pathController,
+                onAddTyped: _addTypedPath,
+                onBrowse: _browseFolder,
+                onRemove: _removeDirectory,
+              ),
+              const SizedBox(height: 10),
+              _ScanOptionsCard(
+                skipShort: _skipShort,
+                minDuration: _minDuration,
+                onSkipShortChanged: (value) => setState(() => _skipShort = value),
+                onMinDurationChanged: (value) => setState(() => _minDuration = value),
+              ),
+              const SizedBox(height: 10),
+              _ActionCard(
+                scanDisabled: scanner.isLoading || _directories.isEmpty,
+                backfillDisabled: scanner.isLoading,
+                onSaveConfig: _saveConfig,
+                onPreviewScan: _previewScan,
+                onScanAndSave: _scanAndSave,
+                onBackfillCovers: _backfillCovers,
+              ),
+              if (scanner.isLoading) ...[
+                const SizedBox(height: 10),
+                const LinearProgressIndicator(minHeight: 2),
+              ],
+              const SizedBox(height: 10),
+              _ResultCard(
+                scannedCount: scanner.results.length,
+                directories: scanner.directories,
+                lastSave: scanner.lastSave,
+                error: scanner.error,
+                watchRunning: _watchRunning,
+                watchPendingEvents: _watchPendingEvents,
+                watchEventCount: _watchEventCount,
+                lastWatchEventPath: _lastWatchEventPath,
+                lastWatchEventKind: _lastWatchEventKind,
+              ),
+              if (scanner.results.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _PreviewSongsCard(scanner.results),
+              ],
+            ],
+          ),
         ),
-        const SizedBox(height: 10),
-        _ScanOptionsCard(
-          skipShort: _skipShort,
-          minDuration: _minDuration,
-          onSkipShortChanged: (value) => setState(() => _skipShort = value),
-          onMinDurationChanged: (value) => setState(() => _minDuration = value),
-        ),
-        const SizedBox(height: 10),
-        _ActionCard(
-          scanDisabled: scanner.isLoading || _directories.isEmpty,
-          backfillDisabled: scanner.isLoading,
-          onSaveConfig: _saveConfig,
-          onPreviewScan: _previewScan,
-          onScanAndSave: _scanAndSave,
-          onBackfillCovers: _backfillCovers,
-        ),
-        if (scanner.isLoading) ...[
-          const SizedBox(height: 10),
-          const LinearProgressIndicator(minHeight: 2),
-        ],
-        const SizedBox(height: 10),
-        _ResultCard(
-          scannedCount: scanner.results.length,
-          directories: scanner.directories,
-          lastSave: scanner.lastSave,
-          error: scanner.error,
-          watchRunning: _watchRunning,
-          watchPendingEvents: _watchPendingEvents,
-          watchEventCount: _watchEventCount,
-          lastWatchEventPath: _lastWatchEventPath,
-          lastWatchEventKind: _lastWatchEventKind,
-        ),
-        if (scanner.results.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          _PreviewSongsCard(scanner.results),
-        ],
       ],
     );
   }

@@ -131,7 +131,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     final showRingSpectrum = appSettings.visualizerEnabled && ringLayoutActive;
     final spectrumIsBottom =
         spectrumMode == SpectrumMode.bessel || spectrumMode == SpectrumMode.columnar;
-    final showBottomSpectrum = appSettings.visualizerEnabled;
+    // Ring modes and bottom modes are mutually exclusive.
+    final showBottomSpectrum =
+        appSettings.visualizerEnabled && !ringLayoutActive;
     final bottomSpectrumMode =
         (proSpectrumActive && spectrumIsBottom)
             ? spectrumMode
@@ -175,10 +177,13 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
             isColorful: proSpectrumActive,
           ),
         SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 14),
-            child: Column(
-              children: [
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1400),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 10, 18, 28),
+                child: Column(
+                  children: [
                 if (!isPhoneLandscapeControls)
                   _PlayerTopBar(
                     onBack: () {
@@ -189,6 +194,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                       }
                     },
                     onOpenQueue: () => _openQueueSheet(context, player, controller),
+                    showViewSettings:
+                        showDesktopSplitToggle ||
+                        pureModeFeatureEnabled ||
+                        proSpectrumActive,
                     onOpenViewSettings: () => _openViewSettingsSheet(
                       context,
                       showDesktopSplitToggle: showDesktopSplitToggle,
@@ -206,9 +215,9 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                       },
                     ),
                   ),
-                if (!isPhoneLandscapeControls) const SizedBox(height: 10),
-                Expanded(
-                  child: AnimatedSwitcher(
+                    if (!isPhoneLandscapeControls) const SizedBox(height: 10),
+                    Expanded(
+                      child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
                     switchInCurve: Curves.easeOutCubic,
                     switchOutCurve: Curves.easeInCubic,
@@ -236,6 +245,10 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                                 SongMenu.show(context, song: song),
                             onOpenQueue: () =>
                                 _openQueueSheet(context, player, controller),
+                            showViewSettings:
+                                showDesktopSplitToggle ||
+                                pureModeFeatureEnabled ||
+                                proSpectrumActive,
                             onBack: () {
                               if (context.canPop()) {
                                 context.pop();
@@ -344,9 +357,11 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
                                 onOpenSongMenu: () =>
                                     SongMenu.show(context, song: song),
                               ),
-                  ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -617,15 +632,34 @@ class _PlayerBackground extends StatelessWidget {
         return Stack(
           fit: StackFit.expand,
           children: [
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Color(0xFF111214), Color(0xFF060607)],
+                ),
+              ),
+            ),
             ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 34, sigmaY: 34),
-              child: CoverArt(
-                width: width,
-                height: height,
-                coverHash: song.coverHash,
-                streamInfo: song.streamInfo,
-                size: CoverArtSize.mid,
-                fit: BoxFit.cover,
+              imageFilter: ImageFilter.blur(sigmaX: 44, sigmaY: 44),
+              child: Transform.scale(
+                scale: 1.10,
+                child: CoverArt(
+                  width: width,
+                  height: height,
+                  coverHash: song.coverHash,
+                  streamInfo: song.streamInfo,
+                  size: CoverArtSize.mid,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.60),
+                ),
               ),
             ),
             Positioned.fill(
@@ -665,44 +699,50 @@ class _BottomSpectrumLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IgnorePointer(
-      child: Align(
-        alignment: Alignment.bottomCenter,
-        child: SizedBox(
-          height: 240,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.white.withValues(alpha: 0.08),
-                    ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final h = constraints.maxHeight;
+          final layerHeight = (h * 0.34).clamp(200.0, 340.0);
+          return Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              height: layerHeight,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.white.withValues(alpha: 0.10),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 48, 8, 0),
-                child: CustomPaint(
-                  painter: SpectrumPainter(
-                    frequency: fft.frequency,
-                    waveform: fft.waveform,
-                    mode: mode,
-                    color: Colors.white.withValues(alpha: 0.9),
-                    kind: SpectrumPainterKind.bottom,
-                    isPlaying: isPlaying,
-                    isColorful: isColorful,
-                    stateKey: 'player-bottom-${mode.name}',
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 56, 10, 0),
+                    child: CustomPaint(
+                      painter: SpectrumPainter(
+                        frequency: fft.frequency,
+                        waveform: fft.waveform,
+                        mode: mode,
+                        color: Colors.white.withValues(alpha: 0.95),
+                        kind: SpectrumPainterKind.bottom,
+                        isPlaying: isPlaying,
+                        isColorful: isColorful,
+                        stateKey: 'player-bottom-${mode.name}',
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
                   ),
-                  child: const SizedBox.expand(),
-                ),
+                ],
               ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -712,45 +752,79 @@ class _PlayerTopBar extends StatelessWidget {
   const _PlayerTopBar({
     required this.onBack,
     required this.onOpenQueue,
+    required this.showViewSettings,
     required this.onOpenViewSettings,
   });
 
   final VoidCallback onBack;
   final VoidCallback onOpenQueue;
+  final bool showViewSettings;
   final VoidCallback onOpenViewSettings;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Stack(
+      alignment: Alignment.center,
       children: [
-        _GlassIconButton(
-          onPressed: onBack,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 28),
-          tooltip: 'Back',
-        ),
-        const Spacer(),
-        Text(
-          'NOW PLAYING',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.62),
-            fontSize: 11,
-            letterSpacing: 1.8,
-            fontWeight: FontWeight.w600,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Align(
+              alignment: Alignment.center,
+              child: Text(
+                'NOW PLAYING',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.62),
+                  fontSize: 11,
+                  letterSpacing: 1.8,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ),
-        const Spacer(),
-        _GlassIconButton(
-          onPressed: onOpenQueue,
-          icon: const Icon(Icons.queue_music_rounded),
-          tooltip: 'Queue',
-        ),
-        const SizedBox(width: 8),
-        _GlassIconButton(
-          onPressed: onOpenViewSettings,
-          icon: const Icon(Icons.more_vert_rounded),
-          tooltip: 'View settings',
+        Row(
+          children: [
+            _topBarButton(
+              onPressed: onBack,
+              icon: Icons.keyboard_arrow_down_rounded,
+              iconSize: 28,
+              tooltip: 'Back',
+            ),
+            const Spacer(),
+            _topBarButton(
+              onPressed: onOpenQueue,
+              icon: Icons.queue_music_rounded,
+              tooltip: 'Queue',
+            ),
+            if (showViewSettings) ...[
+              const SizedBox(width: 8),
+              _topBarButton(
+                onPressed: onOpenViewSettings,
+                icon: Icons.more_vert_rounded,
+                tooltip: 'View settings',
+              ),
+            ],
+          ],
         ),
       ],
+    );
+  }
+
+  static Widget _topBarButton({
+    required VoidCallback onPressed,
+    required IconData icon,
+    double iconSize = 20,
+    required String tooltip,
+  }) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Icon(icon, size: iconSize),
+      style: IconButton.styleFrom(
+        foregroundColor: Colors.white,
+        minimumSize: const Size(42, 42),
+        overlayColor: Colors.white.withValues(alpha: 0.12),
+      ),
     );
   }
 }
@@ -949,11 +1023,15 @@ class _SplitBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            children: [
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1320),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 45,
+              child: Column(
+                children: [
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -992,24 +1070,27 @@ class _SplitBody extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: _LyricsPanel(
-            lyricsAsync: lyricsAsync,
-            lyricLines: lyricLines,
-            activeLyricIndex: activeLyricIndex,
-            adjustedPositionMs: adjustedPositionMs,
-            lyricFontSize: lyricFontSize * 1.12,
-            lyricAlign: lyricAlign,
-            lyricSelectable: lyricSelectable,
-            lyricAutoBlur: lyricAutoBlur,
-            lyricWordByWordAnimation: lyricWordByWordAnimation,
-            lyricsScroll: lyricsScroll,
-            onLyricTap: onLyricTap,
-            onUserScroll: onLyricsUserScroll,
-          ),
+            const SizedBox(width: 28),
+            Expanded(
+              flex: 55,
+              child: _LyricsPanel(
+                lyricsAsync: lyricsAsync,
+                lyricLines: lyricLines,
+                activeLyricIndex: activeLyricIndex,
+                adjustedPositionMs: adjustedPositionMs,
+                lyricFontSize: lyricFontSize * 1.12,
+                lyricAlign: lyricAlign,
+                lyricSelectable: lyricSelectable,
+                lyricAutoBlur: lyricAutoBlur,
+                lyricWordByWordAnimation: lyricWordByWordAnimation,
+                lyricsScroll: lyricsScroll,
+                onLyricTap: onLyricTap,
+                onUserScroll: onLyricsUserScroll,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -1031,6 +1112,7 @@ class _PhoneLandscapeBody extends StatelessWidget {
     required this.onTogglePlayMode,
     required this.onOpenSongMenu,
     required this.onOpenQueue,
+    required this.showViewSettings,
     required this.onBack,
     required this.onOpenViewSettings,
   });
@@ -1049,6 +1131,7 @@ class _PhoneLandscapeBody extends StatelessWidget {
   final VoidCallback onTogglePlayMode;
   final VoidCallback onOpenSongMenu;
   final VoidCallback onOpenQueue;
+  final bool showViewSettings;
   final VoidCallback onBack;
   final VoidCallback onOpenViewSettings;
 
@@ -1106,19 +1189,21 @@ class _PhoneLandscapeBody extends StatelessWidget {
         Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _GlassIconButton(
+            _glassButton(
               onPressed: onBack,
-              icon: const Icon(Icons.keyboard_arrow_down_rounded, size: 26),
+              icon: Icons.keyboard_arrow_down_rounded,
+              iconSize: 26,
               tooltip: 'Back',
             ),
-            _GlassIconButton(
-              onPressed: onOpenViewSettings,
-              icon: const Icon(Icons.more_vert_rounded),
-              tooltip: 'View settings',
-            ),
-            _GlassIconButton(
+            if (showViewSettings)
+              _glassButton(
+                onPressed: onOpenViewSettings,
+                icon: Icons.more_vert_rounded,
+                tooltip: 'View settings',
+              ),
+            _glassButton(
               onPressed: onOpenQueue,
-              icon: const Icon(Icons.queue_music_rounded),
+              icon: Icons.queue_music_rounded,
               tooltip: 'Queue',
             ),
           ],
@@ -1164,7 +1249,7 @@ class _TransportPanel extends StatelessWidget {
     final clampedProgress = sliderProgress.clamp(0.0, max);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 4),
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1676,7 +1761,7 @@ class _QueueSheet extends StatelessWidget {
   }
 }
 
-class _ViewSettingsSheet extends StatelessWidget {
+class _ViewSettingsSheet extends StatefulWidget {
   const _ViewSettingsSheet({
     required this.showDesktopSplitToggle,
     required this.splitViewEnabled,
@@ -1698,6 +1783,37 @@ class _ViewSettingsSheet extends StatelessWidget {
   final ValueChanged<bool> onSplitViewChanged;
   final ValueChanged<bool> onPureModeChanged;
   final ValueChanged<SpectrumMode> onSpectrumModeChanged;
+
+  @override
+  State<_ViewSettingsSheet> createState() => _ViewSettingsSheetState();
+}
+
+class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
+  late SpectrumMode _selectedMode;
+  late bool _splitViewEnabled;
+  late bool _pureModeActive;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedMode = widget.mode;
+    _splitViewEnabled = widget.splitViewEnabled;
+    _pureModeActive = widget.pureModeActive;
+  }
+
+  @override
+  void didUpdateWidget(covariant _ViewSettingsSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mode != widget.mode) {
+      _selectedMode = widget.mode;
+    }
+    if (oldWidget.splitViewEnabled != widget.splitViewEnabled) {
+      _splitViewEnabled = widget.splitViewEnabled;
+    }
+    if (oldWidget.pureModeActive != widget.pureModeActive) {
+      _pureModeActive = widget.pureModeActive;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1736,7 +1852,7 @@ class _ViewSettingsSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            if (showDesktopSplitToggle)
+            if (widget.showDesktopSplitToggle)
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text(
@@ -1747,10 +1863,13 @@ class _ViewSettingsSheet extends StatelessWidget {
                   'Desktop two-column layout',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.58)),
                 ),
-                value: splitViewEnabled,
-                onChanged: onSplitViewChanged,
+                value: _splitViewEnabled,
+                onChanged: (value) {
+                  setState(() => _splitViewEnabled = value);
+                  widget.onSplitViewChanged(value);
+                },
               ),
-            if (pureModeFeatureEnabled)
+            if (widget.pureModeFeatureEnabled)
               SwitchListTile.adaptive(
                 contentPadding: EdgeInsets.zero,
                 title: const Text(
@@ -1761,10 +1880,13 @@ class _ViewSettingsSheet extends StatelessWidget {
                   'Hide lyrics and controls for minimalist stage',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.58)),
                 ),
-                value: pureModeActive,
-                onChanged: onPureModeChanged,
+                value: _pureModeActive,
+                onChanged: (value) {
+                  setState(() => _pureModeActive = value);
+                  widget.onPureModeChanged(value);
+                },
               ),
-            if (proSpectrumActive) ...[
+            if (widget.proSpectrumActive) ...[
               const SizedBox(height: 10),
               Text(
                 'Spectrum Mode',
@@ -1776,18 +1898,62 @@ class _ViewSettingsSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final item in SpectrumMode.values)
-                    ChoiceChip(
-                      label: Text(_spectrumLabel(item)),
-                      selected: mode == item,
-                      onSelected: (_) => onSpectrumModeChanged(item),
+              for (final item in SpectrumMode.values)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      if (_selectedMode == item) return;
+                      setState(() => _selectedMode = item);
+                      widget.onSpectrumModeChanged(item);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: _selectedMode == item
+                            ? Colors.white.withValues(alpha: 0.12)
+                            : Colors.white.withValues(alpha: 0.04),
+                        border: Border.all(
+                          color: _selectedMode == item
+                              ? const Color(0xFF3B82F6).withValues(alpha: 0.60)
+                              : Colors.white.withValues(alpha: 0.08),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _spectrumLabel(item),
+                              style: TextStyle(
+                                color: _selectedMode == item
+                                    ? const Color(0xFF93C5FD)
+                                    : Colors.white.withValues(alpha: 0.88),
+                                fontSize: 14,
+                                fontWeight: _selectedMode == item
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            _selectedMode == item
+                                ? Icons.check_rounded
+                                : Icons.circle_outlined,
+                            size: 18,
+                            color: _selectedMode == item
+                                ? const Color(0xFF60A5FA)
+                                : Colors.white.withValues(alpha: 0.35),
+                          ),
+                        ],
+                      ),
                     ),
-                ],
-              ),
+                  ),
+                ),
             ],
           ],
         ),
@@ -1796,30 +1962,22 @@ class _ViewSettingsSheet extends StatelessWidget {
   }
 }
 
-class _GlassIconButton extends StatelessWidget {
-  const _GlassIconButton({
-    required this.onPressed,
-    required this.icon,
-    required this.tooltip,
-  });
-
-  final VoidCallback onPressed;
-  final Widget icon;
-  final String tooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      onPressed: onPressed,
-      tooltip: tooltip,
-      style: IconButton.styleFrom(
-        backgroundColor: Colors.black.withValues(alpha: 0.2),
-        foregroundColor: Colors.white,
-        minimumSize: const Size(42, 42),
-      ),
-      icon: icon,
-    );
-  }
+Widget _glassButton({
+  required VoidCallback onPressed,
+  required IconData icon,
+  double iconSize = 20,
+  required String tooltip,
+}) {
+  return IconButton(
+    onPressed: onPressed,
+    tooltip: tooltip,
+    icon: Icon(icon, size: iconSize),
+    style: IconButton.styleFrom(
+      foregroundColor: Colors.white,
+      minimumSize: const Size(42, 42),
+      overlayColor: Colors.white.withValues(alpha: 0.12),
+    ),
+  );
 }
 
 IconData _playModeIcon(PlayMode mode) {

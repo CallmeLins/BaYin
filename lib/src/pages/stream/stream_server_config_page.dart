@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/library_service.dart';
+import '../../widgets/widgets.dart';
 
 class StreamServerConfigPage extends ConsumerStatefulWidget {
   const StreamServerConfigPage({super.key});
@@ -58,7 +59,7 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
             children: [
               asyncServers.when(
                 loading: () => const LinearProgressIndicator(minHeight: 2),
@@ -284,21 +285,23 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-      child: Row(
-        children: [
-          Text(
-            'Stream Servers',
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const Spacer(),
-          TextButton.icon(
-            onPressed: onOpenPlaylists,
-            icon: Icon(PhosphorIcons.playlist()),
-            label: const Text('Playlists'),
-          ),
-        ],
+    return BayinPageHeader(
+      title: const Text('Stream Servers'),
+      left: IconButton(
+        tooltip: 'Back',
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/playlists');
+          }
+        },
+        icon: Icon(PhosphorIcons.caretLeft()),
+      ),
+      right: TextButton.icon(
+        onPressed: onOpenPlaylists,
+        icon: Icon(PhosphorIcons.playlist()),
+        label: const Text('Playlists'),
       ),
     );
   }
@@ -320,11 +323,7 @@ class _ServerListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return BayinGlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -418,11 +417,7 @@ class _FormCard extends StatelessWidget {
       border: OutlineInputBorder(),
       isDense: true,
     );
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,

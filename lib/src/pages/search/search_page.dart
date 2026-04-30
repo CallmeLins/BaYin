@@ -10,7 +10,6 @@ import '../../providers/providers.dart';
 import '../../utils/utils.dart';
 import '../../widgets/widgets.dart';
 
-/// Phase 3 — pinyin-aware library search across titles / artists / albums.
 class SearchPage extends ConsumerStatefulWidget {
   const SearchPage({super.key});
 
@@ -26,8 +25,6 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   String? _activeLetter;
   Timer? _debounce;
 
-  // Per-library haystack cache keyed by song id. Rebuilt when the song list
-  // identity changes so pinyin conversion only runs once per library load.
   List<Song>? _cachedSongs;
   final Map<String, String> _haystacks = <String, String>{};
 
@@ -145,67 +142,62 @@ class _SearchBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    PhosphorIcons.magnifyingGlass(),
-                    size: 18,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      autofocus: true,
-                      textInputAction: TextInputAction.search,
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        hintText: 'Search songs, artists, albums…',
-                      ),
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  ValueListenableBuilder<TextEditingValue>(
-                    valueListenable: controller,
-                    builder: (context, value, _) {
-                      if (value.text.isEmpty) return const SizedBox.shrink();
-                      return IconButton(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: onClear,
-                        icon: Icon(PhosphorIcons.x(), size: 16),
-                        tooltip: 'Clear',
-                      );
-                    },
-                  ),
-                ],
+    return BayinPageHeader(
+      layout: BayinPageHeaderLayout.fluid,
+      margin: const EdgeInsets.only(bottom: 6),
+      title: Container(
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              PhosphorIcons.magnifyingGlass(),
+              size: 18,
+              color: scheme.onSurfaceVariant,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                autofocus: true,
+                textInputAction: TextInputAction.search,
+                decoration: const InputDecoration(
+                  border: InputBorder.none,
+                  isDense: true,
+                  hintText: 'Search songs, artists, albums...',
+                ),
+                style: const TextStyle(fontSize: 14),
               ),
             ),
-          ),
-          const SizedBox(width: 8),
-          TextButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/');
-              }
-            },
-            child: const Text('Cancel'),
-          ),
-        ],
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controller,
+              builder: (context, value, _) {
+                if (value.text.isEmpty) return const SizedBox.shrink();
+                return IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: onClear,
+                  icon: Icon(PhosphorIcons.x(), size: 16),
+                  tooltip: 'Clear',
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+      right: TextButton(
+        onPressed: () {
+          if (context.canPop()) {
+            context.pop();
+          } else {
+            context.go('/');
+          }
+        },
+        child: const Text('Cancel'),
       ),
     );
   }
@@ -227,18 +219,18 @@ class _ResultsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    // Pinyin-sort by title for predictable bucket order.
-    final sorted = [...songs]..sort((a, b) {
+    final sorted = [...songs]
+      ..sort((a, b) {
         final la = firstPinyinLetter(a.title);
         final lb = firstPinyinLetter(b.title);
         if (la == lb) {
           return a.title.toLowerCase().compareTo(b.title.toLowerCase());
         }
-        // '#' bucket last.
         if (la == '#') return 1;
         if (lb == '#') return -1;
         return la.compareTo(lb);
       });
+
     final buckets = <String, int>{};
     for (var i = 0; i < sorted.length; i++) {
       final letter = firstPinyinLetter(sorted[i].title);
@@ -249,52 +241,66 @@ class _ResultsView extends ConsumerWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 6, 20, 6),
-          child: Row(
-            children: [
-              Text(
-                '${sorted.length} result${sorted.length == 1 ? '' : 's'}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: scheme.onSurfaceVariant,
-                ),
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '${sorted.length} result${sorted.length == 1 ? '' : 's'}',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurfaceVariant,
               ),
-            ],
+            ),
           ),
         ),
         Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: SongList(
-                  scrollController: scrollController,
-                  songs: sorted,
-                  showIndex: false,
-                  onTap: (song) => ref
-                      .read(playerControllerProvider.notifier)
-                      .playQueue(sorted, startIndex: sorted.indexOf(song)),
-                  onLongPress: (song) => SongMenu.show(context, song: song),
-                ),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.02),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: Theme.of(context).brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.07)
+                    : Colors.black.withValues(alpha: 0.06),
+                width: 0.6,
               ),
-              if (showScroller) ...[
-                AlphabetScroller(
-                  availableLetters: buckets.keys.toSet(),
-                  currentLetter: activeLetter,
-                  onLetterTap: (letter) {
-                    final index = buckets[letter];
-                    if (index == null || !scrollController.hasClients) return;
-                    onLetterChange(letter);
-                    const itemExtent = 52.0;
-                    scrollController.animateTo(
-                      index * itemExtent,
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOut,
-                    );
-                  },
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: SongList(
+                    scrollController: scrollController,
+                    songs: sorted,
+                    showIndex: false,
+                    onTap: (song) => ref
+                        .read(playerControllerProvider.notifier)
+                        .playQueue(sorted, startIndex: sorted.indexOf(song)),
+                    onLongPress: (song) => SongMenu.show(context, song: song),
+                  ),
                 ),
-                const SizedBox(width: 4),
+                if (showScroller) ...[
+                  AlphabetScroller(
+                    availableLetters: buckets.keys.toSet(),
+                    currentLetter: activeLetter,
+                    onLetterTap: (letter) {
+                      final index = buckets[letter];
+                      if (index == null || !scrollController.hasClients) return;
+                      onLetterChange(letter);
+                      const itemExtent = 52.0;
+                      scrollController.animateTo(
+                        index * itemExtent,
+                        duration: const Duration(milliseconds: 180),
+                        curve: Curves.easeOut,
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 4),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       ],
@@ -323,14 +329,6 @@ class _PromptState extends StatelessWidget {
             Text(
               'Start typing to search your library',
               style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Pinyin initials work too — try "jcd" for 紧箍咒',
-              style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
-              ),
             ),
           ],
         ),
@@ -365,7 +363,7 @@ class _EmptyResults extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              'Try a different keyword or pinyin shortcut.',
+              'Try a different keyword.',
               style: TextStyle(
                 fontSize: 12,
                 color: scheme.onSurfaceVariant,
@@ -377,3 +375,4 @@ class _EmptyResults extends StatelessWidget {
     );
   }
 }
+

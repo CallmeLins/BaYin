@@ -37,45 +37,14 @@ class PlayerStage extends StatelessWidget {
         builder: (context, constraints) {
           final shortest = constraints.biggest.shortestSide;
           final coverSize = shortest * coverFraction.clamp(0.5, 0.98);
+
           return Stack(
             fit: StackFit.expand,
             children: [
-              if (showSpectrum)
-                Padding(
-                  padding: const EdgeInsets.all(10),
-                  child: CustomPaint(
-                    painter: SpectrumPainter(
-                      frequency: fft.frequency,
-                      waveform: fft.waveform,
-                      mode: mode,
-                      color: Colors.white.withValues(alpha: 0.78),
-                      kind: SpectrumPainterKind.ring,
-                      isPlaying: isPlaying,
-                      isColorful: isColorful,
-                      stateKey: 'player-stage-${mode.name}',
-                    ),
-                  ),
-                ),
               Center(
-                child: Container(
+                child: SizedBox(
                   width: coverSize,
                   height: coverSize,
-                  decoration: BoxDecoration(
-                    shape: circularCover ? BoxShape.circle : BoxShape.rectangle,
-                    borderRadius:
-                        circularCover ? null : BorderRadius.circular(26),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.45),
-                        blurRadius: 28,
-                        offset: const Offset(0, 16),
-                      ),
-                    ],
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.14),
-                    ),
-                  ),
-                  clipBehavior: Clip.antiAlias,
                   child: CoverArt(
                     width: coverSize,
                     height: coverSize,
@@ -87,9 +56,27 @@ class PlayerStage extends StatelessWidget {
                         circularCover ? null : BorderRadius.circular(26),
                     placeholderIcon: PhosphorIcons.musicNote(),
                     placeholderIconSize: 34,
-                  ).animate().fadeIn(duration: 280.ms),
+                    fit: BoxFit.cover,
+                  ).animate().fadeIn(duration: 240.ms),
                 ),
               ),
+              if (showSpectrum)
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: SpectrumPainter(
+                        frequency: fft.frequency,
+                        waveform: fft.waveform,
+                        mode: mode,
+                        color: Colors.white.withValues(alpha: 0.84),
+                        kind: SpectrumPainterKind.ring,
+                        isPlaying: isPlaying,
+                        isColorful: isColorful,
+                        stateKey: 'player-stage-${mode.name}',
+                      ),
+                    ),
+                  ),
+                ),
             ],
           );
         },

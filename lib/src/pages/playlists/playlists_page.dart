@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../widgets/widgets.dart';
 
 /// Phase 3 — playlists overview (local placeholder + stream-server cached ones).
 ///
@@ -22,35 +23,49 @@ class PlaylistsPage extends ConsumerWidget {
         child: SelectableText('Failed to load stream servers\n$error'),
       ),
       data: (servers) {
-        return ListView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        return Column(
           children: [
-            _SectionHeader(
-              title: 'Local playlists',
-              trailing: TextButton.icon(
-                icon: Icon(PhosphorIcons.plus()),
-                label: const Text('New'),
-                onPressed: null,
-              ),
-            ),
-            const _LocalPlaylistsPlaceholder(),
-            const SizedBox(height: 24),
-            _SectionHeader(
-              title: 'Stream servers',
-              trailing: TextButton.icon(
+            BayinPageHeader(
+              title: const Text('Playlists'),
+              right: IconButton(
                 icon: Icon(PhosphorIcons.cloud()),
-                label: const Text('Configure'),
+                tooltip: 'Configure',
                 onPressed: () => context.go('/stream-config'),
               ),
             ),
-            if (servers.isEmpty)
-              const _NoStreamServersPlaceholder()
-            else
-              for (final server in servers)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: _StreamServerBlock(server: server),
-                ),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                children: [
+                  _SectionHeader(
+                    title: 'Local playlists',
+                    trailing: TextButton.icon(
+                      icon: Icon(PhosphorIcons.plus()),
+                      label: const Text('New'),
+                      onPressed: null,
+                    ),
+                  ),
+                  const _LocalPlaylistsPlaceholder(),
+                  const SizedBox(height: 24),
+                  _SectionHeader(
+                    title: 'Stream servers',
+                    trailing: TextButton.icon(
+                      icon: Icon(PhosphorIcons.cloud()),
+                      label: const Text('Configure'),
+                      onPressed: () => context.go('/stream-config'),
+                    ),
+                  ),
+                  if (servers.isEmpty)
+                    const _NoStreamServersPlaceholder()
+                  else
+                    for (final server in servers)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _StreamServerBlock(server: server),
+                      ),
+                ],
+              ),
+            ),
           ],
         );
       },
@@ -84,11 +99,20 @@ class _LocalPlaylistsPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: dark
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.6,
+        ),
       ),
       child: Row(
         children: [
@@ -116,11 +140,20 @@ class _NoStreamServersPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: dark
+            ? Colors.white.withValues(alpha: 0.05)
+            : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.07)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.6,
+        ),
       ),
       child: Row(
         children: [

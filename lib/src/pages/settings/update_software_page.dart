@@ -1,8 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+import '../../widgets/widgets.dart';
 
 class UpdateSoftwarePage extends StatefulWidget {
   const UpdateSoftwarePage({super.key});
@@ -26,20 +30,30 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Update Software',
-          style: Theme.of(context).textTheme.titleLarge,
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(12),
+        BayinPageHeader(
+          title: const Text('Update Software'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/settings');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
           ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
+              const SizedBox(height: 12),
+        BayinGlassCard(
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -71,6 +85,9 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
             style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
           ),
         ],
+            ],
+          ),
+        ),
       ],
     );
   }

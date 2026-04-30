@@ -79,52 +79,43 @@ class _StreamPlaylistDetailPageState
 
     return Column(
       children: [
+        BayinPageHeader(
+          title: Text(playlistName),
+          left: IconButton(
+            onPressed: () => context.go('/playlists'),
+            icon: Icon(PhosphorIcons.caretLeft()),
+            tooltip: 'Back to playlists',
+          ),
+          right: IconButton(
+            onPressed: _isSyncing ? null : _handleSyncAndReload,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Icon(PhosphorIcons.arrowsClockwise()),
+            tooltip: 'Sync and refresh',
+          ),
+        ),
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
-          child: Row(
-            children: [
-              IconButton(
-                onPressed: () => context.go('/playlists'),
-                icon: Icon(PhosphorIcons.caretLeft()),
-                tooltip: 'Back to playlists',
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              serverName,
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      playlistName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    Text(
-                      serverName,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              IconButton(
-                onPressed: _isSyncing ? null : _handleSyncAndReload,
-                icon: _isSyncing
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : Icon(PhosphorIcons.arrowsClockwise()),
-                tooltip: 'Sync and refresh',
-              ),
-            ],
+            ),
           ),
         ),
         Expanded(
-          child: _buildBody(context),
+          child: BayinGlassCard(
+            margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            child: _buildBody(context),
+          ),
         ),
       ],
     );

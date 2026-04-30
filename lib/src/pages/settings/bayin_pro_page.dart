@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../widgets/widgets.dart';
 
 class BayinProPage extends ConsumerWidget {
   const BayinProPage({super.key});
@@ -10,14 +13,28 @@ class BayinProPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'BaYin Pro',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('BaYin Pro'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/settings');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
+          ),
         ),
-        const SizedBox(height: 6),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
+              const SizedBox(height: 6),
         Text(
           'Feature flags for advanced visuals and focused playback.',
           style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -63,6 +80,9 @@ class BayinProPage extends ConsumerWidget {
               ? controller.setPureModeEnabled
               : null,
         ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -83,11 +103,7 @@ class _SwitchCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
+    return BayinGlassCard(
       child: SwitchListTile.adaptive(
         value: value,
         onChanged: onChanged == null ? null : (v) => onChanged!(v),

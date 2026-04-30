@@ -7,7 +7,6 @@ import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-/// Phase 3 — one album's songs.
 class AlbumDetailPage extends ConsumerWidget {
   const AlbumDetailPage({super.key});
 
@@ -30,6 +29,7 @@ class AlbumDetailPage extends ConsumerWidget {
         if (album == null) {
           return _AlbumNotFound(albumId: albumId);
         }
+
         return asyncSongs.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, _) => Center(
@@ -40,22 +40,41 @@ class AlbumDetailPage extends ConsumerWidget {
                 songs.where((s) => s.album == album.name).toList(growable: false);
             return Column(
               children: [
-                _AlbumHeader(album: album, songCount: inAlbum.length),
+                BayinPageHeader(
+                  title: Text(album.name),
+                  left: IconButton(
+                    tooltip: 'Back',
+                    onPressed: () {
+                      if (context.canPop()) {
+                        context.pop();
+                      } else {
+                        context.go('/albums');
+                      }
+                    },
+                    icon: Icon(PhosphorIcons.caretLeft()),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                  child: _AlbumHeader(album: album, songCount: inAlbum.length),
+                ),
                 Expanded(
-                  child: inAlbum.isEmpty
-                      ? _EmptySongsInAlbum(album: album)
-                      : SongList(
-                          songs: inAlbum,
-                          showIndex: true,
-                          onTap: (song) => ref
-                              .read(playerControllerProvider.notifier)
-                              .playQueue(
-                                inAlbum,
-                                startIndex: inAlbum.indexOf(song),
-                              ),
-                          onLongPress: (song) =>
-                              SongMenu.show(context, song: song),
-                        ),
+                  child: BayinGlassCard(
+                    margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                    child: inAlbum.isEmpty
+                        ? _EmptySongsInAlbum(album: album)
+                        : SongList(
+                            songs: inAlbum,
+                            showIndex: true,
+                            onTap: (song) => ref
+                                .read(playerControllerProvider.notifier)
+                                .playQueue(
+                                  inAlbum,
+                                  startIndex: inAlbum.indexOf(song),
+                                ),
+                            onLongPress: (song) => SongMenu.show(context, song: song),
+                          ),
+                  ),
                 ),
               ],
             );
@@ -75,31 +94,19 @@ class _AlbumHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+    return BayinGlassCard(
+      padding: const EdgeInsets.all(14),
       child: Row(
         children: [
-          IconButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/albums');
-              }
-            },
-            icon: Icon(PhosphorIcons.arrowLeft()),
-            tooltip: 'Back',
-          ),
-          const SizedBox(width: 4),
           CoverArt(
-            width: 64,
-            height: 64,
+            width: 92,
+            height: 92,
             coverHash: album.coverHash,
             streamCoverUrl: album.streamCoverUrl,
             size: CoverArtSize.mid,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             placeholderIcon: PhosphorIcons.vinylRecord(),
-            placeholderIconSize: 30,
+            placeholderIconSize: 40,
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -115,10 +122,16 @@ class _AlbumHeader extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${album.artist} · $songCount tracks',
+                  album.artist,
                   style: TextStyle(
-                    color: scheme.onSurfaceVariant,
+                    color: scheme.primary,
+                    fontWeight: FontWeight.w500,
                   ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$songCount tracks',
+                  style: TextStyle(color: scheme.onSurfaceVariant),
                 ),
               ],
             ),

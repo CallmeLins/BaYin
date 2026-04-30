@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../providers/providers.dart';
+import '../../widgets/widgets.dart';
 
 class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
@@ -15,66 +16,76 @@ class SettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);
     final app = ref.watch(appSettingsProvider);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          t.nav.settings,
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: Text(t.nav.settings),
+          right: IconButton(
+            tooltip: 'About',
+            onPressed: () => context.go('/about'),
+            icon: Icon(PhosphorIcons.info()),
+          ),
         ),
-        const SizedBox(height: 10),
-        _SummaryCard(
-          themeMode: _themeLabel(themeMode),
-          localeLabel: _localeLabel(locale),
-          eqEnabled: app.eqEnabled,
-        ),
-        const SizedBox(height: 12),
-        _GroupCard(
-          title: 'Preferences',
-          tiles: [
-            _SettingsTileData(
-              icon: PhosphorIcons.palette(),
-              title: 'User interface',
-              subtitle: 'Theme, language and list presentation',
-              route: '/settings/interface',
-            ),
-            _SettingsTileData(
-              icon: PhosphorIcons.textAa(),
-              title: 'Lyrics',
-              subtitle: 'Lyrics typography and animation',
-              route: '/settings/lyrics',
-            ),
-            _SettingsTileData(
-              icon: PhosphorIcons.sliders(),
-              title: 'Equalizer',
-              subtitle: '10-band EQ profiles and gains',
-              route: '/settings/equalizer',
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _GroupCard(
-          title: 'Product',
-          tiles: [
-            _SettingsTileData(
-              icon: PhosphorIcons.sparkle(),
-              title: 'BaYin Pro',
-              subtitle: 'Feature switches and visual modes',
-              route: '/settings/pro',
-            ),
-            _SettingsTileData(
-              icon: PhosphorIcons.chatTeardropText(),
-              title: 'Help & feedback',
-              subtitle: 'Troubleshooting and support info',
-              route: '/settings/help',
-            ),
-            _SettingsTileData(
-              icon: PhosphorIcons.downloadSimple(),
-              title: 'Update software',
-              subtitle: 'Version and update checks',
-              route: '/settings/update',
-            ),
-          ],
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 2),
+              _SummaryCard(
+                themeMode: _themeLabel(themeMode),
+                localeLabel: _localeLabel(locale),
+                eqEnabled: app.eqEnabled,
+              ),
+              const SizedBox(height: 12),
+              _GroupCard(
+                title: 'Preferences',
+                tiles: [
+                  _SettingsTileData(
+                    icon: PhosphorIcons.palette(),
+                    title: 'User interface',
+                    subtitle: 'Theme, language and list presentation',
+                    route: '/settings/interface',
+                  ),
+                  _SettingsTileData(
+                    icon: PhosphorIcons.textAa(),
+                    title: 'Lyrics',
+                    subtitle: 'Lyrics typography and animation',
+                    route: '/settings/lyrics',
+                  ),
+                  _SettingsTileData(
+                    icon: PhosphorIcons.sliders(),
+                    title: 'Equalizer',
+                    subtitle: '10-band EQ profiles and gains',
+                    route: '/settings/equalizer',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              _GroupCard(
+                title: 'Product',
+                tiles: [
+                  _SettingsTileData(
+                    icon: PhosphorIcons.sparkle(),
+                    title: 'BaYin Pro',
+                    subtitle: 'Feature switches and visual modes',
+                    route: '/settings/pro',
+                  ),
+                  _SettingsTileData(
+                    icon: PhosphorIcons.chatTeardropText(),
+                    title: 'Help & feedback',
+                    subtitle: 'Troubleshooting and support info',
+                    route: '/settings/help',
+                  ),
+                  _SettingsTileData(
+                    icon: PhosphorIcons.downloadSimple(),
+                    title: 'Update software',
+                    subtitle: 'Version and update checks',
+                    route: '/settings/update',
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ],
     );

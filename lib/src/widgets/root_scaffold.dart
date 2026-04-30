@@ -12,24 +12,6 @@ import 'player_bar.dart';
 import 'sidebar.dart';
 import 'titlebar.dart';
 
-/// Phase 2 shell. Composes:
-///
-/// ```
-/// ┌───────── Titlebar (Win/Linux/macOS; no-op on mobile) ─────────┐
-/// │                                                               │
-/// │  ┌── Sidebar (docked) ──┐  ┌── body (child) ──────────────┐   │
-/// │  │                      │  │                              │   │
-/// │  │                      │  │                              │   │
-/// │  └──────────────────────┘  └──────────────────────────────┘   │
-/// ├─────────── PlayerBar ─────────────────────────────────────────┤
-/// └───────────────────────────────────────────────────────────────┘
-/// ```
-///
-/// On narrow layouts (medium / compact on mobile, or compact on desktop) the
-/// sidebar collapses to an overlay drawer controlled by a local flag.
-///
-/// On `/player` the sidebar and player bar are hidden — that's the
-/// full-screen player stage (Phase 5 polishes it).
 class RootScaffold extends ConsumerStatefulWidget {
   const RootScaffold({super.key, required this.child});
 
@@ -40,7 +22,7 @@ class RootScaffold extends ConsumerStatefulWidget {
 }
 
 class _RootScaffoldState extends ConsumerState<RootScaffold>
-    with SingleTickerProviderStateMixin {
+{
   bool _overlayOpen = false;
   ProviderSubscription<AsyncValue<List<RustFileWatchEvent>>>?
       _watchEventsSubscription;
@@ -79,8 +61,16 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
     final location = GoRouterState.of(context).uri.path;
 
     final isPlayer = location == '/player' || location.startsWith('/player/');
-    final docked = !isPlayer && layout.sidebarMode == SidebarMode.docked;
-    final showOverlaySidebar = !isPlayer && !docked && _overlayOpen;
+    final sidebarDocked = !isPlayer && layout.sidebarMode == SidebarMode.docked;
+    final sidebarOverlayCapable = !isPlayer && !sidebarDocked;
+    final overlaySidebarShown = sidebarOverlayCapable && _overlayOpen;
+
+    if (sidebarDocked && _overlayOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _overlayOpen = false);
+      });
+    }
 
     return Scaffold(
       backgroundColor: tokens.windowBg,
@@ -88,35 +78,54 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
         children: [
           if (_isDesktop) const AppTitlebar(),
           Expanded(
-            child: Stack(
-              children: [
-                Row(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final overlayShift = constraints.maxWidth * 0.6;
+                return Stack(
+                  fit: StackFit.expand,
                   children: [
-                    if (docked)
-                      SizedBox(
-                        width: kSidebarDockedWidth,
-                        child: Sidebar(isOverlay: false),
+                    if (sidebarOverlayCapable)
+                      _OverlaySidebar(
+                        visible: overlaySidebarShown,
+                        onClose: () => setState(() => _overlayOpen = false),
                       ),
-                    Expanded(
-                      child: _BodySurface(
-                        isPlayer: isPlayer,
-                        onRequestOpenSidebar: docked || isPlayer
-                            ? null
-                            : () => setState(() => _overlayOpen = true),
-                        child: widget.child,
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 300),
+                      curve: const Cubic(0.25, 1, 0.5, 1),
+                      transform: Matrix4.translationValues(
+                        overlaySidebarShown ? overlayShift : 0,
+                        0,
+                        0,
+                      ),
+                      child: Row(
+                        children: [
+                          if (sidebarDocked)
+                            const SizedBox(
+                              width: kSidebarDockedWidth,
+                              child: Sidebar(isOverlay: false),
+                            ),
+                          Expanded(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: overlaySidebarShown
+                                  ? () => setState(() => _overlayOpen = false)
+                                  : null,
+                              child: _BodySurface(
+                                isPlayer: isPlayer,
+                                onRequestOpenSidebar:
+                                    sidebarOverlayCapable
+                                        ? () => setState(() => _overlayOpen = true)
+                                        : null,
+                                child: widget.child,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
-                ),
-                if (!isPlayer && !docked) _OverlaySidebarScrim(
-                      visible: showOverlaySidebar,
-                      onTap: () => setState(() => _overlayOpen = false),
-                    ),
-                if (!isPlayer && !docked) _OverlaySidebar(
-                      visible: showOverlaySidebar,
-                      onClose: () => setState(() => _overlayOpen = false),
-                    ),
-              ],
+                );
+              },
             ),
           ),
           if (!isPlayer) const PlayerBar(),
@@ -150,36 +159,18 @@ class _BodySurface extends StatelessWidget {
               top: 8,
               left: 8,
               child: SafeArea(
-                child: IconButton.filledTonal(
+                child: IconButton(
                   tooltip: 'Open sidebar',
-                  icon: const Icon(Icons.menu),
+                  style: IconButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.08),
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
+                  ),
+                  icon: const Icon(Icons.menu_rounded),
                   onPressed: onRequestOpenSidebar,
                 ),
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _OverlaySidebarScrim extends StatelessWidget {
-  const _OverlaySidebarScrim({required this.visible, required this.onTap});
-
-  final bool visible;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      ignoring: !visible,
-      child: AnimatedOpacity(
-        duration: const Duration(milliseconds: 200),
-        opacity: visible ? 0.4 : 0,
-        child: GestureDetector(
-          onTap: onTap,
-          child: Container(color: Colors.black),
-        ),
       ),
     );
   }
@@ -195,16 +186,13 @@ class _OverlaySidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width * kSidebarOverlayWidthFraction;
     return AnimatedPositioned(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 300),
+      curve: const Cubic(0.25, 1, 0.5, 1),
       top: 0,
       bottom: 0,
       left: visible ? 0 : -width,
       width: width,
-      child: Material(
-        elevation: 12,
-        child: Sidebar(isOverlay: true, onNavigate: onClose),
-      ),
+      child: Sidebar(isOverlay: true, onNavigate: onClose),
     );
   }
 }

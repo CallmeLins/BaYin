@@ -10,14 +10,9 @@ import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
 
-const double kSidebarDockedWidth = 256; // matches Tailwind w-64
-const double kSidebarOverlayWidthFraction = 0.6; // 60% viewport width
+const double kSidebarDockedWidth = 256;
+const double kSidebarOverlayWidthFraction = 0.6;
 
-/// Sidebar nav — mirrors `src-ui/src/components/Sidebar.tsx`.
-///
-/// Two render modes controlled by the parent (usually RootScaffold):
-///   * docked — fixed 256 px column inside a Row; no slide animation
-///   * overlay — absolute-positioned drawer that slides in from the left
 class Sidebar extends ConsumerWidget {
   const Sidebar({
     super.key,
@@ -31,82 +26,153 @@ class Sidebar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = Theme.of(context).extension<BayinTokens>()!;
-    final scheme = Theme.of(context).colorScheme;
     final t = context.t;
-    final currentPath = GoRouterState.of(context).matchedLocation;
+    final layout = ref.watch(responsiveLayoutProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final currentPath = GoRouterState.of(context).uri.path;
 
-    final librarySection = _NavSection(
-      title: t.nav.library,
-      items: [
-        _NavItem(
-          icon: PhosphorIcons.musicNote(),
-          label: t.nav.songs,
-          path: '/',
-        ),
-        _NavItem(
-          icon: PhosphorIcons.vinylRecord(),
-          label: t.nav.albums,
-          path: '/albums',
-        ),
-        _NavItem(
-          icon: PhosphorIcons.microphone(),
-          label: t.nav.artists,
-          path: '/artists',
-        ),
-        _NavItem(
-          icon: PhosphorIcons.playlist(),
-          label: t.nav.playlists,
-          path: '/playlists',
-        ),
-      ],
-    );
+    final useMobileSidebarStyle = isOverlay && !layout.isTablet;
+    final sectionBg = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.04);
 
-    final systemSection = _NavSection(
-      title: t.nav.system,
-      items: [
-        _NavItem(
-          icon: PhosphorIcons.folderSimple(),
-          label: t.nav.scanMusic,
-          path: '/scan',
+    Widget sectionWrap({required Widget child}) {
+      if (!useMobileSidebarStyle) return child;
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: sectionBg,
+          borderRadius: BorderRadius.circular(12),
         ),
-        _NavItem(
-          icon: PhosphorIcons.database(),
-          label: t.nav.libraryStats,
-          path: '/library',
-        ),
-        _NavItem(
-          icon: PhosphorIcons.gearSix(),
-          label: t.nav.settings,
-          path: '/settings',
-        ),
-        _NavItem(
-          icon: PhosphorIcons.info(),
-          label: t.nav.about,
-          path: '/about',
-        ),
-      ],
-    );
+        child: child,
+      );
+    }
 
     return Material(
-      color: isOverlay ? tokens.windowBg : tokens.sidebarBg,
+      color: isOverlay
+          ? tokens.windowBg
+          : tokens.sidebarBg.withValues(alpha: 0.70),
       child: SafeArea(
+        bottom: false,
         right: false,
         child: Column(
           children: [
-            _TopActions(onNavigate: onNavigate),
-            Divider(color: tokens.separatorColor, height: 1, thickness: 0.5),
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                12,
+                useMobileSidebarStyle ? 12 : 8,
+                12,
+                useMobileSidebarStyle ? 8 : 6,
+              ),
+              child: _TopActions(
+                mobileCardStyle: useMobileSidebarStyle,
+                onToggleTheme: () {
+                  final next = themeMode == ThemeMode.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark;
+                  ref.read(themeModeProvider.notifier).setThemeMode(next);
+                },
+                onExit: () async {
+                  onNavigate?.call();
+                  if (kIsWeb) {
+                    return;
+                  }
+                  final isDesktop = switch (defaultTargetPlatform) {
+                    TargetPlatform.windows => true,
+                    TargetPlatform.linux => true,
+                    TargetPlatform.macOS => true,
+                    _ => false,
+                  };
+                  if (isDesktop) {
+                    await windowManager.close();
+                    return;
+                  }
+                  await SystemNavigator.pop();
+                },
+                darkModeLabel: t.common.toggleDarkMode,
+                exitLabel: t.common.exit,
+              ),
+            ),
+            if (!useMobileSidebarStyle)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                child: Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        tokens.separatorColor,
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+              ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                 children: [
-                  librarySection.build(context, currentPath, onNavigate),
-                  const SizedBox(height: 16),
-                  systemSection.build(context, currentPath, onNavigate),
-                  const SizedBox(height: 16),
-                  _DevOnlyDebugLink(
-                    currentPath: currentPath,
-                    onNavigate: onNavigate,
-                    fg: scheme.onSurfaceVariant,
+                  sectionWrap(
+                    child: _NavSection(
+                      title: t.nav.library,
+                      useMobileStyle: useMobileSidebarStyle,
+                      items: [
+                        _NavItem(
+                          icon: PhosphorIcons.musicNote(),
+                          label: t.nav.songs,
+                          path: '/',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.vinylRecord(),
+                          label: t.nav.albums,
+                          path: '/albums',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.microphone(),
+                          label: t.nav.artists,
+                          path: '/artists',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.playlist(),
+                          label: t.nav.playlists,
+                          path: '/playlists',
+                        ),
+                      ],
+                      currentPath: currentPath,
+                      onNavigate: onNavigate,
+                    ),
+                  ),
+                  sectionWrap(
+                    child: _NavSection(
+                      title: t.nav.system,
+                      useMobileStyle: useMobileSidebarStyle,
+                      items: [
+                        _NavItem(
+                          icon: PhosphorIcons.folderSimple(),
+                          label: t.nav.scanMusic,
+                          path: '/scan',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.database(),
+                          label: t.nav.libraryStats,
+                          path: '/library',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.gearSix(),
+                          label: t.nav.settings,
+                          path: '/settings',
+                        ),
+                        _NavItem(
+                          icon: PhosphorIcons.info(),
+                          label: t.nav.about,
+                          path: '/about',
+                        ),
+                      ],
+                      currentPath: currentPath,
+                      onNavigate: onNavigate,
+                    ),
                   ),
                 ],
               ),
@@ -118,125 +184,168 @@ class Sidebar extends ConsumerWidget {
   }
 }
 
-class _TopActions extends ConsumerWidget {
-  const _TopActions({required this.onNavigate});
-
-  final VoidCallback? onNavigate;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeModeProvider);
-    final t = context.t;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          IconButton(
-            tooltip: t.common.toggleDarkMode,
-            icon: Icon(isDark ? PhosphorIcons.sun() : PhosphorIcons.moon()),
-            onPressed: () {
-              final next = themeMode == ThemeMode.dark
-                  ? ThemeMode.light
-                  : ThemeMode.dark;
-              ref.read(themeModeProvider.notifier).setThemeMode(next);
-            },
-          ),
-          IconButton(
-            tooltip: t.common.exit,
-            icon: Icon(PhosphorIcons.signOut()),
-            onPressed: () async {
-              onNavigate?.call();
-              if (kIsWeb) {
-                return;
-              }
-              final isDesktop = switch (defaultTargetPlatform) {
-                TargetPlatform.windows => true,
-                TargetPlatform.linux => true,
-                TargetPlatform.macOS => true,
-                _ => false,
-              };
-              if (isDesktop) {
-                await windowManager.close();
-                return;
-              }
-              await SystemNavigator.pop();
-            },
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DevOnlyDebugLink extends StatelessWidget {
-  const _DevOnlyDebugLink({
-    required this.currentPath,
-    required this.onNavigate,
-    required this.fg,
+class _TopActions extends StatelessWidget {
+  const _TopActions({
+    required this.mobileCardStyle,
+    required this.onToggleTheme,
+    required this.onExit,
+    required this.darkModeLabel,
+    required this.exitLabel,
   });
 
-  final String currentPath;
-  final VoidCallback? onNavigate;
-  final Color fg;
+  final bool mobileCardStyle;
+  final VoidCallback onToggleTheme;
+  final Future<void> Function() onExit;
+  final String darkModeLabel;
+  final String exitLabel;
 
   @override
   Widget build(BuildContext context) {
-    final isActive = currentPath == '/debug';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: _NavListTile(
-        icon: PhosphorIcons.bug(),
-        label: 'Debug (FFI)',
-        isActive: isActive,
-        onTap: () {
-          context.go('/debug');
-          onNavigate?.call();
-        },
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget button({
+      required IconData icon,
+      required VoidCallback onTap,
+      required String tooltip,
+      bool danger = false,
+    }) {
+      final fg = danger
+          ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
+          : (isDark ? Colors.white70 : Colors.black54);
+      final hoverBg = danger
+          ? const Color(0xFFEF4444).withValues(alpha: 0.10)
+          : (isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.black.withValues(alpha: 0.06));
+      final radius = mobileCardStyle ? 10.0 : 8.0;
+
+      return Tooltip(
+        message: tooltip,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(radius),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(radius),
+            onTap: onTap,
+            hoverColor: hoverBg,
+            child: Container(
+              width: mobileCardStyle ? 40 : 38,
+              height: mobileCardStyle ? 40 : 38,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+              ),
+              child: Icon(icon, size: mobileCardStyle ? 20 : 18, color: fg),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final content = Row(
+      children: [
+        button(
+          icon: isDark ? PhosphorIcons.sun() : PhosphorIcons.moon(),
+          onTap: onToggleTheme,
+          tooltip: darkModeLabel,
+        ),
+        const SizedBox(width: 8),
+        button(
+          icon: PhosphorIcons.signOut(),
+          onTap: () => onExit(),
+          tooltip: exitLabel,
+          danger: true,
+        ),
+      ],
+    );
+
+    if (!mobileCardStyle) {
+      return content;
+    }
+
+    final cardBg = isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.05);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(12),
       ),
+      child: content,
     );
   }
 }
 
-class _NavSection {
-  _NavSection({required this.title, required this.items});
+class _NavSection extends StatelessWidget {
+  const _NavSection({
+    required this.title,
+    required this.useMobileStyle,
+    required this.items,
+    required this.currentPath,
+    required this.onNavigate,
+  });
 
   final String title;
+  final bool useMobileStyle;
   final List<_NavItem> items;
+  final String currentPath;
+  final VoidCallback? onNavigate;
 
-  Widget build(BuildContext context, String currentPath, VoidCallback? onNavigate) {
-    final fg = Theme.of(context).colorScheme.onSurfaceVariant;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 6),
-            child: Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: fg,
-                letterSpacing: 0.4,
+  @override
+  Widget build(BuildContext context) {
+    final titleColor = Theme.of(context).brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.45)
+        : Colors.black.withValues(alpha: 0.45);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+          child: Row(
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: titleColor,
+                  letterSpacing: 0.35,
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  height: 1,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.08),
+                ),
+              ),
+            ],
           ),
-          for (final item in items)
-            _NavListTile(
-              icon: item.icon,
-              label: item.label,
-              isActive: currentPath == item.path,
-              onTap: () {
-                context.go(item.path);
-                onNavigate?.call();
-              },
-            ),
-        ],
-      ),
+        ),
+        for (final item in items)
+          _NavListTile(
+            icon: item.icon,
+            label: item.label,
+            isMobileStyle: useMobileStyle,
+            isActive: _pathActive(currentPath, item.path),
+            onTap: () {
+              context.go(item.path);
+              onNavigate?.call();
+            },
+          ),
+      ],
     );
+  }
+
+  bool _pathActive(String currentPath, String targetPath) {
+    if (targetPath == '/') {
+      return currentPath == '/';
+    }
+    return currentPath == targetPath || currentPath.startsWith('$targetPath/');
   }
 }
 
@@ -252,45 +361,86 @@ class _NavListTile extends StatelessWidget {
   const _NavListTile({
     required this.icon,
     required this.label,
+    required this.isMobileStyle,
     required this.isActive,
     required this.onTap,
   });
 
   final IconData icon;
   final String label;
+  final bool isMobileStyle;
   final bool isActive;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final bg = isActive ? scheme.primary.withValues(alpha: 0.08) : null;
-    final fg = isActive ? scheme.primary : scheme.onSurface;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final activeBg = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.05);
+    final normalFg = isDark
+        ? Colors.white.withValues(alpha: 0.82)
+        : Colors.black.withValues(alpha: 0.72);
+    final activeFg = isDark ? Colors.white : Colors.black87;
+    final iconColor = isActive
+        ? const Color(0xFF3B82F6)
+        : (isDark ? Colors.white54 : Colors.black45);
+
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
+      padding: EdgeInsets.symmetric(vertical: isMobileStyle ? 2 : 1),
       child: Material(
-        color: bg ?? Colors.transparent,
+        color: isActive ? activeBg : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
           borderRadius: BorderRadius.circular(8),
           onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(icon, size: 18, color: fg),
-                const SizedBox(width: 12),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    color: fg,
-                    fontWeight:
-                        isActive ? FontWeight.w600 : FontWeight.w400,
+          child: Stack(
+            children: [
+              Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: isMobileStyle ? 10 : 8,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      icon,
+                      size: isMobileStyle ? 20 : 18,
+                      color: iconColor,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: isMobileStyle ? 16 : 14,
+                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                          color: isActive ? activeFg : normalFg,
+                          letterSpacing: 0.1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isActive)
+                Positioned(
+                  left: 0,
+                  top: isMobileStyle ? 10 : 8,
+                  bottom: isMobileStyle ? 10 : 8,
+                  child: Container(
+                    width: 3,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3B82F6),
+                      borderRadius: const BorderRadius.horizontal(
+                        right: Radius.circular(3),
+                      ),
+                    ),
                   ),
                 ),
-              ],
-            ),
+            ],
           ),
         ),
       ),

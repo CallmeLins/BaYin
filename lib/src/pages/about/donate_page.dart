@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+import '../../widgets/widgets.dart';
 
 class DonatePage extends StatelessWidget {
   const DonatePage({super.key});
@@ -10,29 +13,46 @@ class DonatePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Donate',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('Donate'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/about');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
+          ),
         ),
-        const SizedBox(height: 12),
-        Text(
-          'Support ongoing development and maintenance.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
-        _DonateCard(
-          title: 'GitHub Sponsors',
-          value: _githubSponsors,
-          icon: PhosphorIcons.heart(),
-        ),
-        const SizedBox(height: 10),
-        _DonateCard(
-          title: 'Ko-fi',
-          value: _koFi,
-          icon: PhosphorIcons.coffee(),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
+              const SizedBox(height: 12),
+              Text(
+                'Support ongoing development and maintenance.',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              ),
+              const SizedBox(height: 12),
+              _DonateCard(
+                title: 'GitHub Sponsors',
+                value: _githubSponsors,
+                icon: PhosphorIcons.heart(),
+              ),
+              const SizedBox(height: 10),
+              _DonateCard(
+                title: 'Ko-fi',
+                value: _koFi,
+                icon: PhosphorIcons.coffee(),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -53,12 +73,8 @@ class _DonateCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
+    return BayinGlassCard(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

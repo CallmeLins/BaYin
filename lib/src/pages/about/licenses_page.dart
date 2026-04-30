@@ -1,30 +1,50 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+import '../../widgets/widgets.dart';
 
 class LicensesPage extends StatelessWidget {
   const LicensesPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+    return Column(
       children: [
-        Text(
-          'Licenses',
-          style: Theme.of(context).textTheme.titleLarge,
+        BayinPageHeader(
+          title: const Text('Licenses'),
+          left: IconButton(
+            tooltip: 'Back',
+            onPressed: () {
+              if (context.canPop()) {
+                context.pop();
+              } else {
+                context.go('/about');
+              }
+            },
+            icon: Icon(PhosphorIcons.caretLeft()),
+          ),
         ),
-        const SizedBox(height: 12),
-        _LicenseCard(
-          title: 'Open source components',
-          content:
-              'BaYin uses Flutter, Rust and multiple open-source libraries. View the full license list below.',
-          actionLabel: 'View full licenses',
-          onTap: () {
-            showLicensePage(
-              context: context,
-              applicationName: 'BaYin',
-              applicationVersion: '0.1.0',
-            );
-          },
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            children: [
+              const SizedBox(height: 10),
+              _LicenseCard(
+                title: 'Open source components',
+                content:
+                    'BaYin uses Flutter, Rust and multiple open-source libraries. View the full license list below.',
+                actionLabel: 'View full licenses',
+                onTap: () {
+                  showLicensePage(
+                    context: context,
+                    applicationName: 'BaYin',
+                    applicationVersion: '0.1.0',
+                  );
+                },
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -47,12 +67,8 @@ class _LicenseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return Container(
+    return BayinGlassCard(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
-        borderRadius: BorderRadius.circular(12),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

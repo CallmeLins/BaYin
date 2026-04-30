@@ -189,8 +189,7 @@ class SpectrumPainter extends CustomPainter {
           ..style = PaintingStyle.stroke
           ..strokeCap = StrokeCap.round
           ..strokeWidth = thickness
-          ..color = _hsla(hue, 0.90, 0.65, alpha)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+          ..color = _hsla(hue, 0.90, 0.65, alpha);
 
         final a = t * math.pi * 2 + rot;
         final p1 = Offset(math.cos(a) * baseR, math.sin(a) * baseR);
@@ -264,8 +263,8 @@ class SpectrumPainter extends CustomPainter {
 
       final thickness = _clamp(math.min(size.width, size.height) * 0.06, 10.0, 26.0) *
           (0.62 + 0.38 * edgeFade);
-      final outer = ripple.r + thickness * 0.5;
-      final inner = math.max(0.0, ripple.r - thickness * 0.5);
+      final double outer = (ripple.r + thickness * 0.5).toDouble();
+      final double inner = math.max(0.0, ripple.r - thickness * 0.5).toDouble();
 
       final path = _buildWavyAnnulus(center, outer, inner, ripple, nowMs);
       final shader = ui.Gradient.radial(
@@ -282,8 +281,7 @@ class SpectrumPainter extends CustomPainter {
       );
       final paint = Paint()
         ..style = PaintingStyle.fill
-        ..shader = shader
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+        ..shader = shader;
       canvas.drawPath(path, paint);
 
       next.add(ripple);
@@ -313,8 +311,7 @@ class SpectrumPainter extends CustomPainter {
     final glow = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.2
-      ..color = _hsla(_themeHue(smoothed), 0.95, 0.72, 0.42)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+      ..color = _hsla(_themeHue(smoothed), 0.95, 0.72, 0.42);
     canvas.drawCircle(center, ringR, glow);
   }
 
@@ -397,8 +394,7 @@ class SpectrumPainter extends CustomPainter {
           _hsla(hue, 0.90, 0.65, 0.95),
         ],
         const <double>[0.0, 0.5, 1.0],
-      )
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      );
     canvas.drawPath(_buildClosedSpline(points), stroke);
 
     final inner = Paint()
@@ -444,8 +440,7 @@ class SpectrumPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round
         ..strokeWidth = 3
-        ..color = _hsla(hue, 0.90, 0.65, _clamp01(0.25 + _clamp01(v) * 0.75))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+        ..color = _hsla(hue, 0.90, 0.65, _clamp01(0.25 + _clamp01(v) * 0.75));
       canvas.drawLine(p1, p2, paint);
     }
 
@@ -466,16 +461,14 @@ class SpectrumPainter extends CustomPainter {
     final base = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(1.3, math.min(w, h) * 0.006)
-      ..color = _hsla(hue, 0.90, 0.75, 0.35)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+      ..color = _hsla(hue, 0.90, 0.75, 0.35);
     canvas.drawCircle(Offset.zero, outerR, base);
 
     final arc = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = math.max(2.5, math.min(w, h) * 0.015)
       ..strokeCap = StrokeCap.round
-      ..color = _hsla(hue, 0.90, 0.70, 0.70)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
+      ..color = _hsla(hue, 0.90, 0.70, 0.70);
     canvas.drawArc(
       Rect.fromCircle(center: Offset.zero, radius: outerR),
       -math.pi / 2,
