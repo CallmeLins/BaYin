@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
-import '../theme/bayin_tokens.dart';
 
 class BayinPageHeader extends ConsumerWidget {
   const BayinPageHeader({
@@ -23,7 +22,7 @@ class BayinPageHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final responsive = ref.watch(responsiveLayoutProvider);
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
+    final tokens = ref.watch(bayinTokensProvider);
     final isCompact = responsive.breakpoint == Breakpoint.compact;
 
     return Container(
@@ -49,7 +48,7 @@ class BayinPageHeader extends ConsumerWidget {
         height: 40,
         child: Row(
           children: [
-            if (left != null) left!,
+            ?left,
             if (left != null) const SizedBox(width: 8),
             Expanded(
               child: Align(
@@ -58,7 +57,7 @@ class BayinPageHeader extends ConsumerWidget {
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Theme.of(context).colorScheme.onSurface,
+                    color: tokens.textPrimary,
                     letterSpacing: -0.1,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -68,7 +67,7 @@ class BayinPageHeader extends ConsumerWidget {
               ),
             ),
             if (right != null) const SizedBox(width: 8),
-            if (right != null) right!,
+            ?right,
           ],
         ),
       ),

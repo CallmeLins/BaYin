@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -12,6 +12,7 @@ class ArtistDetailPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final artistId = Uri.decodeComponent(
       GoRouterState.of(context).pathParameters['artistId'] ?? '',
     );
@@ -19,7 +20,7 @@ class ArtistDetailPage extends ConsumerWidget {
     final asyncSongs = ref.watch(librarySongsProvider);
 
     return asyncArtists.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: ProgressRing()),
       error: (error, _) => Center(
         child: SelectableText('Failed to load artist\n$error'),
       ),
@@ -30,7 +31,7 @@ class ArtistDetailPage extends ConsumerWidget {
           return _ArtistNotFound(id: artistId);
         }
         return asyncSongs.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: ProgressRing()),
           error: (error, _) => Center(
             child: SelectableText('Failed to load songs\n$error'),
           ),
@@ -42,16 +43,18 @@ class ArtistDetailPage extends ConsumerWidget {
               children: [
                 BayinPageHeader(
                   title: Text(artist.name),
-                  left: IconButton(
-                    tooltip: 'Back',
-                    onPressed: () {
-                      if (context.canPop()) {
-                        context.pop();
-                      } else {
-                        context.go('/artists');
-                      }
-                    },
-                    icon: Icon(PhosphorIcons.caretLeft()),
+                  left: Tooltip(
+                    message: 'Back',
+                    child: IconButton(
+                      onPressed: () {
+                        if (context.canPop()) {
+                          context.pop();
+                        } else {
+                          context.go('/artists');
+                        }
+                      },
+                      icon: Icon(PhosphorIcons.caretLeft()),
+                    ),
                   ),
                 ),
                 Padding(
@@ -78,7 +81,7 @@ class ArtistDetailPage extends ConsumerWidget {
                             child: Text(
                               'No songs found for "${artist.name}".',
                               style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                color: tokens.textSecondary,
                               ),
                             ),
                           )
@@ -104,7 +107,7 @@ class ArtistDetailPage extends ConsumerWidget {
   }
 }
 
-class _ArtistHeader extends StatelessWidget {
+class _ArtistHeader extends ConsumerWidget {
   const _ArtistHeader({
     required this.artist,
     required this.songCount,
@@ -116,8 +119,8 @@ class _ArtistHeader extends StatelessWidget {
   final int albumCount;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinGlassCard(
       padding: const EdgeInsets.all(14),
       child: Row(
@@ -140,7 +143,7 @@ class _ArtistHeader extends StatelessWidget {
               children: [
                 Text(
                   artist.name,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -148,14 +151,14 @@ class _ArtistHeader extends StatelessWidget {
                 Text(
                   '$albumCount albums',
                   style: TextStyle(
-                    color: scheme.primary,
+                    color: const Color(0xFF3B82F6),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   '$songCount tracks',
-                  style: TextStyle(color: scheme.onSurfaceVariant),
+                  style: TextStyle(color: tokens.textSecondary),
                 ),
               ],
             ),
@@ -166,13 +169,14 @@ class _ArtistHeader extends StatelessWidget {
   }
 }
 
-class _AlbumChips extends StatelessWidget {
+class _AlbumChips extends ConsumerWidget {
   const _AlbumChips({required this.albumNames});
 
   final List<String> albumNames;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return SizedBox(
       height: 44,
       child: ListView.separated(
@@ -182,9 +186,27 @@ class _AlbumChips extends StatelessWidget {
         separatorBuilder: (_, _) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final name = albumNames[index];
-          return Chip(
-            label: Text(name, overflow: TextOverflow.ellipsis),
-            avatar: Icon(PhosphorIcons.vinylRecord(), size: 14),
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: tokens.isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: tokens.isDark
+                    ? Colors.white.withValues(alpha: 0.12)
+                    : Colors.black.withValues(alpha: 0.1),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(PhosphorIcons.vinylRecord(), size: 14),
+                const SizedBox(width: 6),
+                Text(name, overflow: TextOverflow.ellipsis),
+              ],
+            ),
           );
         },
       ),
@@ -192,13 +214,14 @@ class _AlbumChips extends StatelessWidget {
   }
 }
 
-class _ArtistNotFound extends StatelessWidget {
+class _ArtistNotFound extends ConsumerWidget {
   const _ArtistNotFound({required this.id});
 
   final String id;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -208,7 +231,7 @@ class _ArtistNotFound extends StatelessWidget {
             Icon(
               PhosphorIcons.questionMark(),
               size: 40,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
             const SizedBox(height: 12),
             const Text('Artist not found'),
@@ -217,7 +240,7 @@ class _ArtistNotFound extends StatelessWidget {
               id,
               style: TextStyle(
                 fontSize: 11,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ],

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -13,12 +13,12 @@ class EqualizerSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Equalizer'),
           left: IconButton(
-            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -35,20 +35,20 @@ class EqualizerSettingsPage extends ConsumerWidget {
             children: [
               const SizedBox(height: 10),
               const SizedBox(height: 6),
-        Text(
-          '10-band gain profile with Rust engine hook enabled.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
-        EqualizerPanel(
-          enabled: app.eqEnabled,
-          selectedPreset: app.eqPreset,
-          gains: app.eqGains,
-          onEnabledChanged: controller.setEqEnabled,
-          onBandGainChanged: controller.setEqBandGain,
-          onPresetChanged: (preset) => _applyPreset(controller, preset),
-          onReset: controller.resetEq,
-        ),
+              Text(
+                '10-band gain profile with Rust engine hook enabled.',
+                style: TextStyle(color: tokens.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              EqualizerPanel(
+                enabled: app.eqEnabled,
+                selectedPreset: app.eqPreset,
+                gains: app.eqGains,
+                onEnabledChanged: controller.setEqEnabled,
+                onBandGainChanged: controller.setEqBandGain,
+                onPresetChanged: (preset) => _applyPreset(controller, preset),
+                onReset: controller.resetEq,
+              ),
             ],
           ),
         ),

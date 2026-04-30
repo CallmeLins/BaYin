@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../theme/bayin_tokens.dart';
+import '../../utils/info_bar_helper.dart';
 import '../../rust/rust_api.dart';
 import '../../services/file_watcher_service.dart';
 import '../../services/scan_service.dart';
@@ -61,7 +63,12 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   Widget build(BuildContext context) {
     final scanner = ref.watch(scannerProvider);
     final config = ref.watch(scanConfigProvider);
+    final tokens = ref.watch(bayinTokensProvider);
     _applyConfigOnce(config);
+
+    final surfaceBg = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
 
     return Column(
       children: [
@@ -76,6 +83,8 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               _DirectoriesCard(
                 directories: _directories,
                 pathController: _pathController,
+                surfaceBg: surfaceBg,
+                tokens: tokens,
                 onAddTyped: _addTypedPath,
                 onBrowse: _browseFolder,
                 onRemove: _removeDirectory,
@@ -84,6 +93,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               _ScanOptionsCard(
                 skipShort: _skipShort,
                 minDuration: _minDuration,
+                surfaceBg: surfaceBg,
                 onSkipShortChanged: (value) => setState(() => _skipShort = value),
                 onMinDurationChanged: (value) => setState(() => _minDuration = value),
               ),
@@ -91,6 +101,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               _ActionCard(
                 scanDisabled: scanner.isLoading || _directories.isEmpty,
                 backfillDisabled: scanner.isLoading,
+                surfaceBg: surfaceBg,
                 onSaveConfig: _saveConfig,
                 onPreviewScan: _previewScan,
                 onScanAndSave: _scanAndSave,
@@ -98,7 +109,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               ),
               if (scanner.isLoading) ...[
                 const SizedBox(height: 10),
-                const LinearProgressIndicator(minHeight: 2),
+                const ProgressBar(),
               ],
               const SizedBox(height: 10),
               _ResultCard(
@@ -106,6 +117,8 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
                 directories: scanner.directories,
                 lastSave: scanner.lastSave,
                 error: scanner.error,
+                surfaceBg: surfaceBg,
+                tokens: tokens,
                 watchRunning: _watchRunning,
                 watchPendingEvents: _watchPendingEvents,
                 watchEventCount: _watchEventCount,
@@ -114,7 +127,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               ),
               if (scanner.results.isNotEmpty) ...[
                 const SizedBox(height: 10),
-                _PreviewSongsCard(scanner.results),
+                _PreviewSongsCard(scanner.results, surfaceBg: surfaceBg, tokens: tokens),
               ],
             ],
           ),
@@ -124,21 +137,13 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   }
 
   void _applyConfigOnce(AsyncValue<ScanConfig?> config) {
-    if (_configApplied) {
-      return;
-    }
-    if (!config.hasValue) {
-      return;
-    }
+    if (_configApplied) return;
+    if (!config.hasValue) return;
     _configApplied = true;
     final data = config.valueOrNull;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      if (data == null) {
-        return;
-      }
+      if (!mounted) return;
+      if (data == null) return;
       setState(() {
         _directories = List<String>.from(data.directories);
         _skipShort = data.skipShort;
@@ -148,32 +153,22 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   }
 
   Future<void> _browseFolder() async {
-    final initialPath = _directories.isNotEmpty
-        ? _directories.last
-        : Directory.current.path;
-    final selected = await FolderBrowser.show(
-      context,
-      initialPath: initialPath,
-    );
-    if (selected == null || selected.trim().isEmpty) {
-      return;
-    }
+    final initialPath =
+        _directories.isNotEmpty ? _directories.last : Directory.current.path;
+    final selected = await FolderBrowser.show(context, initialPath: initialPath);
+    if (selected == null || selected.trim().isEmpty) return;
     _addDirectory(selected.trim());
   }
 
   void _addTypedPath() {
     final path = _pathController.text.trim();
-    if (path.isEmpty) {
-      return;
-    }
+    if (path.isEmpty) return;
     _addDirectory(path);
     _pathController.clear();
   }
 
   void _addDirectory(String path) {
-    if (_directories.contains(path)) {
-      return;
-    }
+    if (_directories.contains(path)) return;
     setState(() {
       _directories = <String>[..._directories, path];
     });
@@ -199,14 +194,10 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
       _refreshWatcherStatus();
       ref.invalidate(scanConfigProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Scan config saved.')),
-      );
+      showInfoMessage(context, 'Scan config saved.');
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save config: $error')),
-      );
+      showInfoMessage(context, 'Failed to save config: $error', isError: true);
     }
   }
 
@@ -253,18 +244,13 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
       ref.invalidate(libraryAlbumsProvider);
       ref.invalidate(libraryArtistsProvider);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Cover backfill finished. Updated ${result.updated}/${result.totalCandidates}, skipped ${result.skipped}, failed ${result.failed}.',
-          ),
-        ),
-      );
+      showInfoMessage(
+          context,
+          'Cover backfill finished. Updated ${result.updated}/${result.totalCandidates}, skipped ${result.skipped}, failed ${result.failed}.',
+          duration: const Duration(seconds: 5));
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Cover backfill failed: $error')),
-      );
+      showInfoMessage(context, 'Cover backfill failed: $error', isError: true);
     }
   }
 }
@@ -273,6 +259,8 @@ class _DirectoriesCard extends StatelessWidget {
   const _DirectoriesCard({
     required this.directories,
     required this.pathController,
+    required this.surfaceBg,
+    required this.tokens,
     required this.onAddTyped,
     required this.onBrowse,
     required this.onRemove,
@@ -280,75 +268,89 @@ class _DirectoriesCard extends StatelessWidget {
 
   final List<String> directories;
   final TextEditingController pathController;
+  final Color surfaceBg;
+  final BayinTokens tokens;
   final VoidCallback onAddTyped;
   final VoidCallback onBrowse;
   final ValueChanged<String> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: surfaceBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Folders',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
+          const Text('Folders', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child: TextField(
+                child: TextBox(
                   controller: pathController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                    hintText: r'Enter a folder path, e.g. D:\Music',
-                  ),
-                  onSubmitted: (_) => onAddTyped(),
+                  placeholder: r'Enter a folder path, e.g. D:\Music',
+                  onSubmitted: (value) => onAddTyped(),
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filledTonal(
+              IconButton(
                 onPressed: onAddTyped,
-                icon: const Icon(Icons.add),
-                tooltip: 'Add path',
+                icon: Icon(PhosphorIcons.plus()),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
+              IconButton(
                 onPressed: onBrowse,
                 icon: Icon(PhosphorIcons.folderOpen()),
-                tooltip: 'Browse folders',
               ),
             ],
           ),
           const SizedBox(height: 8),
           if (directories.isEmpty)
-            Text(
-              'No folders selected yet.',
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onSurfaceVariant,
-              ),
-            )
+            Text('No folders selected yet.',
+                style: TextStyle(fontSize: 12, color: tokens.textSecondary))
           else
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 for (final path in directories)
-                  InputChip(
-                    label: Text(path, overflow: TextOverflow.ellipsis),
-                    onDeleted: () => onRemove(path),
-                  ),
+                  _PathChip(path: path, onRemove: () => onRemove(path)),
               ],
             ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PathChip extends StatelessWidget {
+  const _PathChip({required this.path, required this.onRemove});
+  final String path;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.only(left: 10, right: 4, top: 6, bottom: 6),
+      decoration: BoxDecoration(
+        color: const Color(0x0A000000),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(path,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13)),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onRemove,
+            child: Icon(PhosphorIcons.x(), size: 16),
+          ),
         ],
       ),
     );
@@ -359,39 +361,47 @@ class _ScanOptionsCard extends StatelessWidget {
   const _ScanOptionsCard({
     required this.skipShort,
     required this.minDuration,
+    required this.surfaceBg,
     required this.onSkipShortChanged,
     required this.onMinDurationChanged,
   });
 
   final bool skipShort;
   final double minDuration;
+  final Color surfaceBg;
   final ValueChanged<bool> onSkipShortChanged;
   final ValueChanged<double> onMinDurationChanged;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: surfaceBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            value: skipShort,
-            title: const Text('Skip short tracks'),
-            subtitle: const Text('Ignore tracks shorter than the minimum duration.'),
-            onChanged: onSkipShortChanged,
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Skip short tracks',
+                        style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Text('Ignore tracks shorter than the minimum duration.',
+                        style: TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ),
+              ToggleSwitch(checked: skipShort, onChanged: onSkipShortChanged),
+            ],
           ),
           const SizedBox(height: 6),
-          Text(
-            'Minimum duration: ${minDuration.round()}s',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text('Minimum duration: ${minDuration.round()}s',
+              style: const TextStyle(fontWeight: FontWeight.w600)),
           Slider(
             value: minDuration.clamp(5, 300),
             min: 5,
@@ -410,6 +420,7 @@ class _ActionCard extends StatelessWidget {
   const _ActionCard({
     required this.scanDisabled,
     required this.backfillDisabled,
+    required this.surfaceBg,
     required this.onSaveConfig,
     required this.onPreviewScan,
     required this.onScanAndSave,
@@ -418,6 +429,7 @@ class _ActionCard extends StatelessWidget {
 
   final bool scanDisabled;
   final bool backfillDisabled;
+  final Color surfaceBg;
   final Future<void> Function() onSaveConfig;
   final Future<void> Function() onPreviewScan;
   final Future<void> Function() onScanAndSave;
@@ -428,35 +440,53 @@ class _ActionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: surfaceBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         children: [
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: OutlinedButton(
               onPressed: scanDisabled ? null : onSaveConfig,
-              icon: const Icon(Icons.save_alt),
-              label: const Text('Save scan config'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(PhosphorIcons.floppyDisk()),
+                  const SizedBox(width: 8),
+                  const Text('Save scan config'),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
               Expanded(
-                child: OutlinedButton.icon(
+                child: OutlinedButton(
                   onPressed: scanDisabled ? null : onPreviewScan,
-                  icon: Icon(PhosphorIcons.magnifyingGlass()),
-                  label: const Text('Preview scan'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(PhosphorIcons.magnifyingGlass()),
+                      const SizedBox(width: 8),
+                      const Text('Preview scan'),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: FilledButton.icon(
+                child: FilledButton(
                   onPressed: scanDisabled ? null : onScanAndSave,
-                  icon: Icon(PhosphorIcons.database()),
-                  label: const Text('Scan & save'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(PhosphorIcons.database()),
+                      const SizedBox(width: 8),
+                      const Text('Scan & save'),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -464,10 +494,16 @@ class _ActionCard extends StatelessWidget {
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: OutlinedButton(
               onPressed: backfillDisabled ? null : onBackfillCovers,
-              icon: Icon(PhosphorIcons.imageSquare()),
-              label: const Text('Backfill covers'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(PhosphorIcons.imageSquare()),
+                  const SizedBox(width: 8),
+                  const Text('Backfill covers'),
+                ],
+              ),
             ),
           ),
         ],
@@ -482,6 +518,8 @@ class _ResultCard extends StatelessWidget {
     required this.directories,
     required this.lastSave,
     required this.error,
+    required this.surfaceBg,
+    required this.tokens,
     required this.watchRunning,
     required this.watchPendingEvents,
     required this.watchEventCount,
@@ -493,6 +531,8 @@ class _ResultCard extends StatelessWidget {
   final List<String> directories;
   final ScanAndSaveResult? lastSave;
   final String? error;
+  final Color surfaceBg;
+  final BayinTokens tokens;
   final bool watchRunning;
   final int watchPendingEvents;
   final int watchEventCount;
@@ -501,54 +541,42 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: surfaceBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Scan status',
-            style: TextStyle(fontWeight: FontWeight.w600),
-          ),
+          const Text('Scan status',
+              style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 6),
           Text('Preview results: $scannedCount'),
           if (directories.isNotEmpty)
-            Text(
-              'Last run: ${directories.join(', ')}',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
+            Text('Last run: ${directories.join(', ')}',
+                style: TextStyle(color: tokens.textSecondary)),
           if (lastSave != null)
             Text(
-              'Saved: scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
-              style: TextStyle(color: scheme.onSurfaceVariant),
-            ),
+                'Saved: scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
+                style: TextStyle(color: tokens.textSecondary)),
+          Text('Watcher: ${watchRunning ? 'running' : 'stopped'}',
+              style: TextStyle(color: tokens.textSecondary)),
           Text(
-            'Watcher: ${watchRunning ? 'running' : 'stopped'}',
-            style: TextStyle(color: scheme.onSurfaceVariant),
-          ),
-          Text(
-            'Watcher events: $watchEventCount (pending: $watchPendingEvents)',
-            style: TextStyle(color: scheme.onSurfaceVariant),
-          ),
+              'Watcher events: $watchEventCount (pending: $watchPendingEvents)',
+              style: TextStyle(color: tokens.textSecondary)),
           if (lastWatchEventPath != null && lastWatchEventPath!.isNotEmpty)
             Text(
               'Last watcher event: ${lastWatchEventKind ?? 'unknown'} - $lastWatchEventPath',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: TextStyle(color: tokens.textSecondary),
             ),
           if (error != null)
             Padding(
               padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                'Error: $error',
-                style: TextStyle(color: scheme.error),
-              ),
+              child: Text('Error: $error', style: TextStyle(color: Colors.red)),
             ),
         ],
       ),
@@ -557,16 +585,19 @@ class _ResultCard extends StatelessWidget {
 }
 
 class _PreviewSongsCard extends StatelessWidget {
-  const _PreviewSongsCard(this.results);
+  const _PreviewSongsCard(this.results,
+      {required this.surfaceBg, required this.tokens});
 
   final List<ScannedSong> results;
+  final Color surfaceBg;
+  final BayinTokens tokens;
 
   @override
   Widget build(BuildContext context) {
     final maxCount = results.length > 20 ? 20 : results.length;
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: surfaceBg,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -575,26 +606,25 @@ class _PreviewSongsCard extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
               children: [
-                Text(
-                  'Preview songs',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
+                Text('Preview songs',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
               ],
             ),
           ),
           for (var i = 0; i < maxCount; i++)
-            ListTile(
-              dense: true,
-              visualDensity: VisualDensity.compact,
-              title: Text(
-                results[i].title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              subtitle: Text(
-                '${results[i].artist} - ${results[i].album}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(results[i].title,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text('${results[i].artist} - ${results[i].album}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12)),
+                ],
               ),
             ),
           if (results.length > maxCount)
@@ -603,9 +633,7 @@ class _PreviewSongsCard extends StatelessWidget {
               child: Text(
                 '...and ${results.length - maxCount} more',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
+                    fontSize: 12, color: tokens.textSecondary),
               ),
             ),
         ],

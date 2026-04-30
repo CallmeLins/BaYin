@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show showModalBottomSheet;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -30,7 +31,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
     final layout = ref.watch(responsiveLayoutProvider);
     final player = ref.watch(playerControllerProvider);
     final controller = ref.read(playerControllerProvider.notifier);
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
+    final tokens = ref.watch(bayinTokensProvider);
 
     final isCompact = layout.isCompact;
     final safeBottom = isCompact ? MediaQuery.paddingOf(context).bottom : 0.0;
@@ -49,7 +50,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
         ? (clampedProgress / effectiveDuration).clamp(0.0, 1.0)
         : 0.0;
 
-    return Material(
+    return Container(
       color: tokens.barBg.withValues(alpha: 0.86),
       child: SizedBox(
         height: height,
@@ -62,6 +63,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
               child: _ProgressScrubBar(
                 key: _progressKey,
                 progressPercent: progressPercent,
+                isDark: tokens.isDark,
                 onSeek: (fraction) {
                   if (effectiveDuration <= 0) return;
                   final next = fraction * effectiveDuration;
@@ -77,6 +79,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                     Expanded(
                       child: _SongSlot(
                         song: song,
+                        tokens: tokens,
                         onTap: song == null ? null : () => context.go('/player'),
                       ),
                     ),
@@ -85,6 +88,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                       isCompact: isCompact,
                       canControl: canControl,
                       isPlaying: player.isPlaying,
+                      isDark: tokens.isDark,
                       onPrevious: () => unawaited(controller.previous()),
                       onToggle: () => unawaited(controller.togglePlayPause()),
                       onNext: () => unawaited(controller.next()),
@@ -96,6 +100,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                         queueCount: player.queue.length,
                         volume: player.volume.clamp(0.0, 1.0),
                         volumeKey: _volumeKey,
+                        isDark: tokens.isDark,
                         onQueue: () => _openQueueSheet(context, player, controller),
                         onSetVolume: (value) {
                           if (value > 0.001) {
@@ -129,7 +134,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
     PlayerControllerState player,
     PlayerController controller,
   ) {
-    return showModalBottomSheet<void>(
+    return mat.showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -171,7 +176,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                       ),
                       const Spacer(),
                       if (queue.isNotEmpty)
-                        TextButton(
+                        Button(
                           onPressed: () => unawaited(controller.clearQueue()),
                           child: const Text('Clear'),
                         ),
@@ -197,8 +202,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                             final active = player.currentIndex == index;
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: InkWell(
-                                borderRadius: BorderRadius.circular(12),
+                              child: GestureDetector(
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   unawaited(controller.jumpTo(index));
@@ -256,7 +260,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                         onPressed: () =>
                                             unawaited(controller.removeFromQueue(index)),
                                         icon: Icon(
-                                          Icons.close_rounded,
+                                          PhosphorIcons.x(),
                                           color: Colors.white.withValues(alpha: 0.35),
                                         ),
                                       ),
@@ -281,15 +285,17 @@ class _ProgressScrubBar extends StatelessWidget {
   const _ProgressScrubBar({
     super.key,
     required this.progressPercent,
+    required this.isDark,
     required this.onSeek,
   });
 
   final double progressPercent;
+  final bool isDark;
   final ValueChanged<double> onSeek;
 
   @override
   Widget build(BuildContext context) {
-    final trackBg = Theme.of(context).brightness == Brightness.dark
+    final trackBg = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.black.withValues(alpha: 0.10);
 
@@ -333,10 +339,12 @@ class _ProgressScrubBar extends StatelessWidget {
 class _SongSlot extends StatefulWidget {
   const _SongSlot({
     required this.song,
+    required this.tokens,
     required this.onTap,
   });
 
   final Song? song;
+  final BayinTokens tokens;
   final VoidCallback? onTap;
 
   @override
@@ -418,7 +426,7 @@ class _SongSlotState extends State<_SongSlot> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: widget.tokens.textSecondary,
                 ),
               ),
             ],
@@ -434,6 +442,7 @@ class _TransportCluster extends StatelessWidget {
     required this.isCompact,
     required this.canControl,
     required this.isPlaying,
+    required this.isDark,
     required this.onPrevious,
     required this.onToggle,
     required this.onNext,
@@ -442,44 +451,47 @@ class _TransportCluster extends StatelessWidget {
   final bool isCompact;
   final bool canControl;
   final bool isPlaying;
+  final bool isDark;
   final VoidCallback onPrevious;
   final VoidCallback onToggle;
   final VoidCallback onNext;
 
   @override
   Widget build(BuildContext context) {
+    final playBg = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.white;
+    final playFg = isDark ? Colors.white : Colors.black;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (!isCompact)
           IconButton(
             onPressed: canControl ? onPrevious : null,
-            tooltip: 'Previous',
             icon: Icon(PhosphorIcons.skipBack(PhosphorIconsStyle.fill), size: 22),
           ),
-        IconButton.filled(
-          onPressed: canControl ? onToggle : null,
-          tooltip: isPlaying ? 'Pause' : 'Play',
-          style: IconButton.styleFrom(
-            backgroundColor: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.12)
-                : Colors.white,
-            foregroundColor: Theme.of(context).brightness == Brightness.dark
-                ? Colors.white
-                : Colors.black,
-            minimumSize: const Size(44, 44),
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: playBg,
+            borderRadius: BorderRadius.circular(8),
           ),
-          icon: Icon(
-            isPlaying
-                ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
-                : PhosphorIcons.play(PhosphorIconsStyle.fill),
-            size: 22,
+          child: IconButton(
+            onPressed: canControl ? onToggle : null,
+            icon: Icon(
+              isPlaying
+                  ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
+                  : PhosphorIcons.play(PhosphorIconsStyle.fill),
+              size: 22,
+              color: playFg,
+            ),
           ),
         ),
         if (!isCompact)
           IconButton(
             onPressed: canControl ? onNext : null,
-            tooltip: 'Next',
             icon: Icon(PhosphorIcons.skipForward(PhosphorIconsStyle.fill), size: 22),
           ),
       ],
@@ -493,6 +505,7 @@ class _RightActions extends StatelessWidget {
     required this.queueCount,
     required this.volume,
     required this.volumeKey,
+    required this.isDark,
     required this.onQueue,
     required this.onSetVolume,
     required this.onToggleMute,
@@ -502,6 +515,7 @@ class _RightActions extends StatelessWidget {
   final int queueCount;
   final double volume;
   final GlobalKey volumeKey;
+  final bool isDark;
   final VoidCallback onQueue;
   final ValueChanged<double> onSetVolume;
   final VoidCallback onToggleMute;
@@ -510,7 +524,7 @@ class _RightActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final muted = volume <= 0.001;
 
-    void _setFromGlobal(Offset global) {
+    void setFromGlobal(Offset global) {
       final ctx = volumeKey.currentContext;
       final box = ctx?.findRenderObject() as RenderBox?;
       if (box == null || box.size.width <= 0) return;
@@ -523,9 +537,9 @@ class _RightActions extends StatelessWidget {
       return GestureDetector(
         key: volumeKey,
         behavior: HitTestBehavior.opaque,
-        onTapDown: (d) => _setFromGlobal(d.globalPosition),
-        onHorizontalDragStart: (d) => _setFromGlobal(d.globalPosition),
-        onHorizontalDragUpdate: (d) => _setFromGlobal(d.globalPosition),
+        onTapDown: (d) => setFromGlobal(d.globalPosition),
+        onHorizontalDragStart: (d) => setFromGlobal(d.globalPosition),
+        onHorizontalDragUpdate: (d) => setFromGlobal(d.globalPosition),
         child: SizedBox(
           width: 96,
           height: 18,
@@ -535,7 +549,7 @@ class _RightActions extends StatelessWidget {
                 Container(
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Theme.of(context).brightness == Brightness.dark
+                    color: isDark
                         ? Colors.white.withValues(alpha: 0.12)
                         : Colors.black.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(999),
@@ -546,7 +560,7 @@ class _RightActions extends StatelessWidget {
                   child: Container(
                     height: 4,
                     decoration: BoxDecoration(
-                      color: Theme.of(context).brightness == Brightness.dark
+                      color: isDark
                           ? Colors.white.withValues(alpha: 0.58)
                           : Colors.black.withValues(alpha: 0.45),
                       borderRadius: BorderRadius.circular(999),
@@ -566,7 +580,6 @@ class _RightActions extends StatelessWidget {
       children: [
         IconButton(
           onPressed: onQueue,
-          tooltip: 'Queue',
           icon: Icon(
             PhosphorIcons.queue(),
             color: queueCount > 0 ? const Color(0xFF3B82F6) : null,
@@ -578,7 +591,6 @@ class _RightActions extends StatelessWidget {
           const SizedBox(width: 2),
           IconButton(
             onPressed: onToggleMute,
-            tooltip: muted ? 'Unmute' : 'Mute',
             icon: Icon(
               muted
                   ? PhosphorIcons.speakerSlash()

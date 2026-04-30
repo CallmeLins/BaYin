@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -13,12 +13,12 @@ class BayinProPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('BaYin Pro'),
           left: IconButton(
-            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -35,51 +35,49 @@ class BayinProPage extends ConsumerWidget {
             children: [
               const SizedBox(height: 10),
               const SizedBox(height: 6),
-        Text(
-          'Feature flags for advanced visuals and focused playback.',
-          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-        ),
-        const SizedBox(height: 12),
-        _SwitchCard(
-          title: 'Enable Pro',
-          subtitle: 'Master switch for all Pro-only options.',
-          value: app.proEnabled,
-          onChanged: controller.setProEnabled,
-        ),
-        const SizedBox(height: 10),
-        _SwitchCard(
-          title: 'Desktop glass effect',
-          subtitle: 'Enable translucent desktop surface accents.',
-          value: app.proGlassEnabled,
-          onChanged: app.proEnabled ? controller.setProGlassEnabled : null,
-        ),
-        const SizedBox(height: 10),
-        _SwitchCard(
-          title: 'Colorful spectrum',
-          subtitle: 'Allow richer color rendering for spectrum views.',
-          value: app.proColorSpectrumEnabled,
-          onChanged: app.proEnabled
-              ? controller.setProColorSpectrumEnabled
-              : null,
-        ),
-        const SizedBox(height: 10),
-        _SwitchCard(
-          title: 'Pure mode feature',
-          subtitle: 'Unlock Pure mode toggle in playback experience.',
-          value: app.proPureModeEnabled,
-          onChanged: app.proEnabled
-              ? controller.setProPureModeFeatureEnabled
-              : null,
-        ),
-        const SizedBox(height: 10),
-        _SwitchCard(
-          title: 'Pure mode active',
-          subtitle: 'Hide non-essential UI during playback.',
-          value: app.pureModeEnabled,
-          onChanged: app.proEnabled && app.proPureModeEnabled
-              ? controller.setPureModeEnabled
-              : null,
-        ),
+              Text(
+                'Feature flags for advanced visuals and focused playback.',
+                style: TextStyle(color: tokens.textSecondary),
+              ),
+              const SizedBox(height: 12),
+              _SwitchCard(
+                title: 'Enable Pro',
+                subtitle: 'Master switch for all Pro-only options.',
+                value: app.proEnabled,
+                onChanged: controller.setProEnabled,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                title: 'Desktop glass effect',
+                subtitle: 'Enable translucent desktop surface accents.',
+                value: app.proGlassEnabled,
+                onChanged: app.proEnabled ? controller.setProGlassEnabled : null,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                title: 'Colorful spectrum',
+                subtitle: 'Allow richer color rendering for spectrum views.',
+                value: app.proColorSpectrumEnabled,
+                onChanged:
+                    app.proEnabled ? controller.setProColorSpectrumEnabled : null,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                title: 'Pure mode feature',
+                subtitle: 'Unlock Pure mode toggle in playback experience.',
+                value: app.proPureModeEnabled,
+                onChanged:
+                    app.proEnabled ? controller.setProPureModeFeatureEnabled : null,
+              ),
+              const SizedBox(height: 10),
+              _SwitchCard(
+                title: 'Pure mode active',
+                subtitle: 'Hide non-essential UI during playback.',
+                value: app.pureModeEnabled,
+                onChanged: app.proEnabled && app.proPureModeEnabled
+                    ? controller.setPureModeEnabled
+                    : null,
+              ),
             ],
           ),
         ),
@@ -104,11 +102,26 @@ class _SwitchCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BayinGlassCard(
-      child: SwitchListTile.adaptive(
-        value: value,
-        onChanged: onChanged == null ? null : (v) => onChanged!(v),
-        title: Text(title),
-        subtitle: Text(subtitle),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            ToggleSwitch(
+              checked: value,
+              onChanged: onChanged == null ? null : (v) => onChanged!(v),
+            ),
+          ],
+        ),
       ),
     );
   }

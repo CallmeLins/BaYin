@@ -1,20 +1,21 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-class AboutPage extends StatelessWidget {
+class AboutPage extends ConsumerWidget {
   const AboutPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('About BaYin'),
           right: IconButton(
-            tooltip: 'Website',
             onPressed: () => context.go('/about/website'),
             icon: Icon(PhosphorIcons.globeHemisphereWest()),
           ),
@@ -84,18 +85,20 @@ class AboutPage extends StatelessWidget {
   }
 }
 
-class _IntroCard extends StatelessWidget {
+class _IntroCard extends ConsumerWidget {
   const _IntroCard({required this.description});
 
   final String description;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: tokens.isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -103,12 +106,16 @@ class _IntroCard extends StatelessWidget {
         children: [
           Text(
             'BaYin 0.1.0',
-            style: Theme.of(context).textTheme.titleMedium,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: tokens.textPrimary,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             description,
-            style: TextStyle(color: scheme.onSurfaceVariant),
+            style: TextStyle(color: tokens.textSecondary),
           ),
         ],
       ),
@@ -116,7 +123,7 @@ class _IntroCard extends StatelessWidget {
   }
 }
 
-class _GroupCard extends StatelessWidget {
+class _GroupCard extends ConsumerWidget {
   const _GroupCard({
     required this.title,
     required this.items,
@@ -126,11 +133,13 @@ class _GroupCard extends StatelessWidget {
   final List<_AboutItem> items;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: tokens.isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -147,7 +156,11 @@ class _GroupCard extends StatelessWidget {
             ),
           ),
           for (var i = 0; i < items.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: scheme.outlineVariant),
+            if (i > 0)
+              Container(
+                height: 1,
+                color: tokens.separatorSoftColor,
+              ),
             _AboutTile(item: items[i]),
           ],
         ],
@@ -170,42 +183,40 @@ class _AboutItem {
   final String route;
 }
 
-class _AboutTile extends StatelessWidget {
+class _AboutTile extends ConsumerWidget {
   const _AboutTile({required this.item});
 
   final _AboutItem item;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.go(item.route),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Row(
-            children: [
-              Icon(item.icon, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.title),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    return GestureDetector(
+      onTap: () => context.go(item.route),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          children: [
+            Icon(item.icon, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.title),
+                  const SizedBox(height: 2),
+                  Text(
+                    item.subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: tokens.textSecondary,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Icon(PhosphorIcons.caretRight(), size: 16),
-            ],
-          ),
+            ),
+            Icon(PhosphorIcons.caretRight(), size: 16),
+          ],
         ),
       ),
     );

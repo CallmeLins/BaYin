@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -13,12 +13,6 @@ import '../theme/bayin_tokens.dart';
 const double _winTitlebarHeight = 32;
 const double _macTitlebarHeight = 28;
 
-/// Platform-conditional titlebar.
-///
-/// * Windows / Linux desktop → custom titlebar with minimize/maximize/close
-/// * macOS desktop          → 28 px drag region (traffic lights render natively
-///                            via `TitleBarStyle.hidden` + overlay)
-/// * Mobile / web           → zero-height SizedBox
 class AppTitlebar extends ConsumerStatefulWidget {
   const AppTitlebar({super.key});
 
@@ -74,7 +68,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
     }
     final t = context.t;
     final platform = ref.watch(platformProvider);
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
+    final tokens = ref.watch(bayinTokensProvider);
 
     if (platform.isMacOS) {
       return SizedBox(
@@ -90,7 +84,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
                 'BaYin',
                 style: TextStyle(
                   fontSize: 12,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: tokens.textSecondary,
                 ),
               ),
             ),
@@ -117,7 +111,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
                         'BaYin',
                         style: TextStyle(
                           fontSize: 12,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          color: tokens.textSecondary,
                         ),
                       ),
                     ),
@@ -128,6 +122,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
             _WindowButton(
               icon: PhosphorIcons.minus(),
               tooltip: t.common.minimize,
+              tokens: tokens,
               onTap: windowManager.minimize,
             ),
             _WindowButton(
@@ -135,11 +130,13 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
                   ? PhosphorIcons.copy()
                   : PhosphorIcons.square(),
               tooltip: _isMaximized ? t.common.restore : t.common.maximize,
+              tokens: tokens,
               onTap: _toggleMaximize,
             ),
             _WindowButton(
               icon: PhosphorIcons.x(),
               tooltip: t.common.closeWindow,
+              tokens: tokens,
               isDanger: true,
               onTap: windowManager.close,
             ),
@@ -162,12 +159,14 @@ class _WindowButton extends StatefulWidget {
   const _WindowButton({
     required this.icon,
     required this.tooltip,
+    required this.tokens,
     required this.onTap,
     this.isDanger = false,
   });
 
   final IconData icon;
   final String tooltip;
+  final BayinTokens tokens;
   final Future<void> Function() onTap;
   final bool isDanger;
 
@@ -180,20 +179,18 @@ class _WindowButtonState extends State<_WindowButton> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final hoverBg = widget.isDanger
         ? const Color(0xFFE81123)
-        : scheme.onSurface.withValues(alpha: 0.08);
+        : Colors.white.withValues(alpha: 0.08);
     final hoverFg =
-        widget.isDanger ? Colors.white : scheme.onSurface;
+        widget.isDanger ? Colors.white : widget.tokens.textPrimary;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: Tooltip(
         message: widget.tooltip,
-        waitDuration: const Duration(milliseconds: 500),
-        child: InkWell(
+        child: GestureDetector(
           onTap: () => widget.onTap(),
           child: Container(
             width: 44,
@@ -203,7 +200,7 @@ class _WindowButtonState extends State<_WindowButton> {
             child: Icon(
               widget.icon,
               size: 14,
-              color: _hover ? hoverFg : scheme.onSurfaceVariant,
+              color: _hover ? hoverFg : widget.tokens.textSecondary,
             ),
           ),
         ),

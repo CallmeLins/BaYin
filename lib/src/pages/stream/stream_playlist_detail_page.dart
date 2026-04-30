@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/library_service.dart';
+import '../../theme/bayin_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class StreamPlaylistDetailPage extends ConsumerStatefulWidget {
@@ -25,6 +26,10 @@ class _StreamPlaylistDetailPageState
   bool _isSyncing = false;
   String? _error;
   List<Song> _songs = const <Song>[];
+
+  String? _infoTitle;
+  String? _infoMessage;
+  InfoBarSeverity _infoSeverity = InfoBarSeverity.success;
 
   @override
   void didChangeDependencies() {
@@ -48,6 +53,7 @@ class _StreamPlaylistDetailPageState
 
   @override
   Widget build(BuildContext context) {
+    final tokens = ref.watch(bayinTokensProvider);
     final serverId = _serverId;
     final playlistId = _playlistId;
     if (serverId == null || playlistId == null) {
@@ -81,21 +87,25 @@ class _StreamPlaylistDetailPageState
       children: [
         BayinPageHeader(
           title: Text(playlistName),
-          left: IconButton(
-            onPressed: () => context.go('/playlists'),
-            icon: Icon(PhosphorIcons.caretLeft()),
-            tooltip: 'Back to playlists',
+          left: Tooltip(
+            message: 'Back to playlists',
+            child: IconButton(
+              onPressed: () => context.go('/playlists'),
+              icon: Icon(PhosphorIcons.caretLeft()),
+            ),
           ),
-          right: IconButton(
-            onPressed: _isSyncing ? null : _handleSyncAndReload,
-            icon: _isSyncing
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Icon(PhosphorIcons.arrowsClockwise()),
-            tooltip: 'Sync and refresh',
+          right: Tooltip(
+            message: 'Sync and refresh',
+            child: IconButton(
+              onPressed: _isSyncing ? null : _handleSyncAndReload,
+              icon: _isSyncing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: ProgressRing(strokeWidth: 2),
+                    )
+                  : Icon(PhosphorIcons.arrowsClockwise()),
+            ),
           ),
         ),
         Padding(
@@ -106,24 +116,37 @@ class _StreamPlaylistDetailPageState
               serverName,
               style: TextStyle(
                 fontSize: 12,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ),
         ),
+        if (_infoTitle != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+            child: InfoBar(
+              title: Text(_infoTitle!),
+              content: _infoMessage != null ? Text(_infoMessage!) : null,
+              severity: _infoSeverity,
+              onClose: () => setState(() {
+                _infoTitle = null;
+                _infoMessage = null;
+              }),
+            ),
+          ),
         Expanded(
           child: BayinGlassCard(
             margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
-            child: _buildBody(context),
+            child: _buildBody(context, tokens),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildBody(BuildContext context) {
+  Widget _buildBody(BuildContext context, BayinTokens tokens) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ProgressRing());
     }
     if (_error != null) {
       return Center(
@@ -132,7 +155,7 @@ class _StreamPlaylistDetailPageState
           child: SelectableText(
             _error!,
             textAlign: TextAlign.center,
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: TextStyle(color: Colors.red),
           ),
         ),
       );
@@ -142,7 +165,7 @@ class _StreamPlaylistDetailPageState
         child: Text(
           'No songs in this stream playlist.',
           style: TextStyle(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: tokens.textSecondary,
           ),
         ),
       );
@@ -199,14 +222,18 @@ class _StreamPlaylistDetailPageState
       ref.invalidate(streamPlaylistsProvider(serverId));
       await _loadSongs();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Playlists synced.')),
-      );
+      setState(() {
+        _infoTitle = 'Sync Complete';
+        _infoMessage = 'Playlists synced.';
+        _infoSeverity = InfoBarSeverity.success;
+      });
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sync failed: $error')),
-      );
+      setState(() {
+        _infoTitle = 'Sync Failed';
+        _infoMessage = '$error';
+        _infoSeverity = InfoBarSeverity.error;
+      });
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);

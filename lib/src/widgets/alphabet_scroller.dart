@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../providers/providers.dart';
+import '../theme/bayin_tokens.dart';
 import '../utils/pinyin.dart';
 
-/// Sticky A–Z + # rail. Taps emit the letter; the host list scrolls to the
-/// first entry in that bucket.
-class AlphabetScroller extends StatelessWidget {
+class AlphabetScroller extends ConsumerWidget {
   const AlphabetScroller({
     super.key,
     required this.availableLetters,
@@ -12,15 +13,13 @@ class AlphabetScroller extends StatelessWidget {
     this.currentLetter,
   });
 
-  /// Which buckets actually exist in the current list (A, F, W, #, …). Letters
-  /// outside this set render disabled.
   final Set<String> availableLetters;
   final ValueChanged<String> onLetterTap;
   final String? currentLetter;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Container(
       width: 20,
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -33,7 +32,7 @@ class AlphabetScroller extends StatelessWidget {
               letter: letter,
               isAvailable: availableLetters.contains(letter),
               isActive: currentLetter == letter,
-              scheme: scheme,
+              tokens: tokens,
               onTap: () => onLetterTap(letter),
             ),
         ],
@@ -47,25 +46,25 @@ class _LetterDot extends StatelessWidget {
     required this.letter,
     required this.isAvailable,
     required this.isActive,
-    required this.scheme,
+    required this.tokens,
     required this.onTap,
   });
 
   final String letter;
   final bool isAvailable;
   final bool isActive;
-  final ColorScheme scheme;
+  final BayinTokens tokens;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final Color color;
     if (isActive) {
-      color = scheme.primary;
+      color = const Color(0xFF3B82F6);
     } else if (isAvailable) {
-      color = scheme.onSurface;
+      color = tokens.textPrimary;
     } else {
-      color = scheme.onSurface.withValues(alpha: 0.3);
+      color = tokens.textPrimary.withValues(alpha: 0.3);
     }
     return GestureDetector(
       behavior: HitTestBehavior.opaque,

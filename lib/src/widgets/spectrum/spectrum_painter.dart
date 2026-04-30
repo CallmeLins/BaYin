@@ -2,7 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
 import '../../models/models.dart';
 

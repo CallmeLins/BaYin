@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 
 /// Glass surface / separator tokens ported from
-/// `src-ui/src/index.css` (the `--bayin-*` custom properties).
+/// src-ui/src/index.css (the --bayin- custom properties).
 ///
-/// Exposed via `Theme.of(context).extension<BayinTokens>()`.
+/// Accessed via [bayinTokensProvider] (Riverpod), not ThemeExtension.
 @immutable
-class BayinTokens extends ThemeExtension<BayinTokens> {
+class BayinTokens {
   const BayinTokens({
     required this.windowBg,
     required this.titlebarBg,
@@ -34,57 +35,20 @@ class BayinTokens extends ThemeExtension<BayinTokens> {
   Color get separatorSoftColor =>
       separator.withValues(alpha: separatorSoftAlpha);
 
-  @override
-  BayinTokens copyWith({
-    Color? windowBg,
-    Color? titlebarBg,
-    Color? sidebarBg,
-    Color? barBg,
-    Color? popoverBg,
-    Color? playerBg,
-    Color? separator,
-    double? separatorAlpha,
-    double? separatorSoftAlpha,
-    Color? highlight,
-  }) {
-    return BayinTokens(
-      windowBg: windowBg ?? this.windowBg,
-      titlebarBg: titlebarBg ?? this.titlebarBg,
-      sidebarBg: sidebarBg ?? this.sidebarBg,
-      barBg: barBg ?? this.barBg,
-      popoverBg: popoverBg ?? this.popoverBg,
-      playerBg: playerBg ?? this.playerBg,
-      separator: separator ?? this.separator,
-      separatorAlpha: separatorAlpha ?? this.separatorAlpha,
-      separatorSoftAlpha: separatorSoftAlpha ?? this.separatorSoftAlpha,
-      highlight: highlight ?? this.highlight,
-    );
-  }
+  /// True when the background luminance suggests a dark surface.
+  bool get isDark => windowBg.computeLuminance() < 0.5;
 
-  @override
-  BayinTokens lerp(ThemeExtension<BayinTokens>? other, double t) {
-    if (other is! BayinTokens) return this;
-    return BayinTokens(
-      windowBg: Color.lerp(windowBg, other.windowBg, t) ?? windowBg,
-      titlebarBg: Color.lerp(titlebarBg, other.titlebarBg, t) ?? titlebarBg,
-      sidebarBg: Color.lerp(sidebarBg, other.sidebarBg, t) ?? sidebarBg,
-      barBg: Color.lerp(barBg, other.barBg, t) ?? barBg,
-      popoverBg: Color.lerp(popoverBg, other.popoverBg, t) ?? popoverBg,
-      playerBg: Color.lerp(playerBg, other.playerBg, t) ?? playerBg,
-      separator: Color.lerp(separator, other.separator, t) ?? separator,
-      separatorAlpha:
-          _lerpDouble(separatorAlpha, other.separatorAlpha, t),
-      separatorSoftAlpha:
-          _lerpDouble(separatorSoftAlpha, other.separatorSoftAlpha, t),
-      highlight: Color.lerp(highlight, other.highlight, t) ?? highlight,
-    );
-  }
+  /// A text color suitable for body text on this surface.
+  Color get textPrimary =>
+      isDark ? const Color(0xFFF3F3F3) : const Color(0xFF0A0A0A);
+
+  /// A muted text color for secondary content.
+  Color get textSecondary =>
+      isDark ? const Color(0x99FFFFFF) : const Color(0x99000000);
 }
 
-double _lerpDouble(double a, double b, double t) => a + (b - a) * t;
-
 /// Convert a CSS-style HSL triple (h in degrees, s/l in 0–100) to a Flutter
-/// Color. Matches the `hsl(var(--token))` expansion done by shadcn + Tailwind.
+/// Color. Matches the hsl(var(--token)) expansion done by shadcn + Tailwind.
 Color hslColor(double h, double s, double l) {
   return HSLColor.fromAHSL(1.0, h, s / 100.0, l / 100.0).toColor();
 }

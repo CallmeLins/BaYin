@@ -1,12 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// Phase 1 placeholder page.
-///
-/// Shows the target page name, the matched route path, and any path
-/// parameters. Replaced per-page in Phase 3+ with the real implementation.
-/// Rendered inside RootShell — do not add its own Scaffold.
-class PlaceholderPage extends StatelessWidget {
+import '../providers/providers.dart';
+
+class PlaceholderPage extends ConsumerWidget {
   const PlaceholderPage({
     super.key,
     required this.title,
@@ -19,10 +17,11 @@ class PlaceholderPage extends StatelessWidget {
   final String? note;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final routerState = GoRouterState.of(context);
     final path = routerState.matchedLocation;
     final params = routerState.pathParameters;
+    final tokens = ref.watch(bayinTokensProvider);
 
     return Center(
       child: Padding(
@@ -32,19 +31,19 @@ class PlaceholderPage extends StatelessWidget {
           children: [
             Text(
               title,
-              style: Theme.of(context).textTheme.headlineSmall,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Route: $path',
-              style: Theme.of(context).textTheme.bodySmall,
+              style: TextStyle(fontSize: 12, color: tokens.textSecondary),
             ),
             if (params.isNotEmpty) ...[
               const SizedBox(height: 4),
               Text(
                 'Params: ${params.entries.map((e) => '${e.key}=${e.value}').join(', ')}',
-                style: Theme.of(context).textTheme.bodySmall,
+                style: TextStyle(fontSize: 12, color: tokens.textSecondary),
               ),
             ],
             if (phase != null) ...[
@@ -52,14 +51,16 @@ class PlaceholderPage extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.secondaryContainer,
+                  color: tokens.isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   phase!,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    color: tokens.textPrimary,
                   ),
                 ),
               ),
@@ -68,7 +69,7 @@ class PlaceholderPage extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 note!,
-                style: Theme.of(context).textTheme.bodyMedium,
+                style: TextStyle(fontSize: 14, color: tokens.textSecondary),
                 textAlign: TextAlign.center,
               ),
             ],

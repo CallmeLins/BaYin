@@ -1,25 +1,28 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show SelectableText;
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../providers/providers.dart';
+import '../../utils/info_bar_helper.dart';
 import '../../widgets/widgets.dart';
 
-class OfficialWebsitePage extends StatelessWidget {
+class OfficialWebsitePage extends ConsumerWidget {
   const OfficialWebsitePage({super.key});
 
   static const String _website = 'https://bayin.app';
   static const String _repository = 'https://github.com/';
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Official website'),
           left: IconButton(
-            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -52,7 +55,7 @@ class OfficialWebsitePage extends StatelessWidget {
   }
 }
 
-class _LinkCard extends StatelessWidget {
+class _LinkCard extends ConsumerWidget {
   const _LinkCard({
     required this.title,
     required this.value,
@@ -62,8 +65,8 @@ class _LinkCard extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -74,25 +77,23 @@ class _LinkCard extends StatelessWidget {
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 6),
-          SelectableText(
+          mat.SelectableText(
             value,
-            style: TextStyle(color: scheme.onSurfaceVariant),
+            style: TextStyle(color: tokens.textSecondary),
           ),
           const SizedBox(height: 10),
           Row(
             children: [
               FilledButton(
-                onPressed: () => _openLink(context, value),
+                onPressed: () => _openLink(context, ref, value),
                 child: const Text('Open'),
               ),
               const SizedBox(width: 8),
-              FilledButton.tonal(
+              FilledButton(
                 onPressed: () async {
                   await Clipboard.setData(ClipboardData(text: value));
                   if (!context.mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Link copied to clipboard.')),
-                  );
+                  showInfoMessage(context, 'Link copied to clipboard.');
                 },
                 child: const Text('Copy link'),
               ),
@@ -103,20 +104,16 @@ class _LinkCard extends StatelessWidget {
     );
   }
 
-  Future<void> _openLink(BuildContext context, String raw) async {
+  Future<void> _openLink(BuildContext context, WidgetRef ref, String raw) async {
     final uri = Uri.tryParse(raw);
     if (uri == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid URL')),
-      );
+      showInfoMessage(context, 'Invalid URL');
       return;
     }
     final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
     if (opened || !context.mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Failed to open URL.')),
-    );
+    showInfoMessage(context, 'Failed to open URL.');
   }
 }

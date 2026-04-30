@@ -24,3 +24,4 @@ export 'responsive_provider.dart';
 export 'scanner_provider.dart';
 export 'settings_provider.dart';
 export 'spectrum_provider.dart';
+export 'tokens_provider.dart';

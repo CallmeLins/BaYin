@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/providers.dart';
@@ -35,6 +35,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = ref.watch(bayinTokensProvider);
     final pong = RustApi.instance.ping();
     final dbPath = ref.watch(databasePathProvider);
     final songs = ref.watch(librarySongsProvider);
@@ -65,7 +66,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                   Text(
                     'Rust FFI roundtrip: $pong',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 14, color: Colors.grey),
+                    style: TextStyle(fontSize: 14, color: tokens.textSecondary),
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -75,7 +76,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                       error: (error, _) => 'Database init failed: $error',
                     ),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: TextStyle(fontSize: 12, color: tokens.textSecondary),
                   ),
                   const SizedBox(height: 24),
               _StatLine(
@@ -108,12 +109,9 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-              TextField(
+              TextBox(
                 controller: _directoryController,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: r'Enter a local music directory, e.g. D:\Music',
-                ),
+                placeholder: r'Enter a local music directory, e.g. D:\Music',
               ),
               const SizedBox(height: 8),
               FilledButton(
@@ -146,7 +144,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                 child: Text(scanner.isLoading ? 'Working...' : 'Scan & save to DB'),
               ),
               const SizedBox(height: 8),
-              TextButton(
+              HyperlinkButton(
                 onPressed: scanner.isLoading
                     ? null
                     : () => ref.read(scannerProvider.notifier).clearLibrary(),
@@ -177,7 +175,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
               if (scanner.error != null)
                 Text(
                   'Scan failed: ${scanner.error}',
-                  style: const TextStyle(color: Colors.red),
+                  style: const TextStyle(color: Color(0xFFE81123)),
                 ),
                 ],
               ),

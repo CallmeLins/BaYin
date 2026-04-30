@@ -1,8 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
+import '../providers/providers.dart';
 
-class KaraokeLine extends StatelessWidget {
+class KaraokeLine extends ConsumerWidget {
   const KaraokeLine({
     super.key,
     required this.line,
@@ -15,14 +17,14 @@ class KaraokeLine extends StatelessWidget {
   final bool active;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final baseStyle = TextStyle(
       fontSize: active ? 20 : 16,
       fontWeight: active ? FontWeight.w700 : FontWeight.w500,
       color: active
-          ? scheme.onSurface
-          : scheme.onSurfaceVariant.withValues(alpha: 0.72),
+          ? tokens.textPrimary
+          : tokens.textSecondary.withValues(alpha: 0.72),
       height: 1.35,
     );
 
@@ -43,7 +45,7 @@ class KaraokeLine extends StatelessWidget {
               text: token.text,
               style: baseStyle.copyWith(
                 color: _isTokenActive(token)
-                    ? Theme.of(context).colorScheme.primary
+                    ? const Color(0xFF3B82F6)
                     : baseStyle.color,
               ),
             ),

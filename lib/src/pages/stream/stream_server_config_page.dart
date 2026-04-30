@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -6,6 +6,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/library_service.dart';
+import '../../utils/info_bar_helper.dart';
 import '../../widgets/widgets.dart';
 
 class StreamServerConfigPage extends ConsumerStatefulWidget {
@@ -16,7 +17,8 @@ class StreamServerConfigPage extends ConsumerStatefulWidget {
       _StreamServerConfigPageState();
 }
 
-class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage> {
+class _StreamServerConfigPageState
+    extends ConsumerState<StreamServerConfigPage> {
   static const List<_ServerTypeOption> _serverTypes = <_ServerTypeOption>[
     _ServerTypeOption('navidrome', 'Navidrome'),
     _ServerTypeOption('subsonic', 'Subsonic'),
@@ -62,7 +64,7 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
             children: [
               asyncServers.when(
-                loading: () => const LinearProgressIndicator(minHeight: 2),
+                loading: () => const ProgressBar(),
                 error: (error, _) => _ErrorCard(message: '$error'),
                 data: (servers) => _ServerListCard(
                   servers: servers,
@@ -163,19 +165,13 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
           _userId = result.userId;
         }
       });
-      final suffix = result.serverVersion == null
-          ? ''
-          : ' (v${result.serverVersion})';
-      _showMessage(
-        '${result.message}$suffix',
-        isError: !result.success,
-      );
+      final suffix =
+          result.serverVersion == null ? '' : ' (v${result.serverVersion})';
+      _showMessage('${result.message}$suffix', isError: !result.success);
     } catch (error) {
       _showMessage('Connection test failed: $error', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isTesting = false);
-      }
+      if (mounted) setState(() => _isTesting = false);
     }
   }
 
@@ -200,9 +196,7 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
     } catch (error) {
       _showMessage('Failed to save server: $error', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -214,18 +208,16 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
     }
     setState(() => _isSyncing = true);
     try {
-      final result = await LibraryService.instance.syncStreamPlaylists(serverId);
+      final result =
+          await LibraryService.instance.syncStreamPlaylists(serverId);
       if (!mounted) return;
       ref.invalidate(streamPlaylistsProvider(serverId));
       _showMessage(
-        'Synced ${result.playlistCount} playlists from ${result.serverName}.',
-      );
+          'Synced ${result.playlistCount} playlists from ${result.serverName}.');
     } catch (error) {
       _showMessage('Failed to sync playlists: $error', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -246,41 +238,27 @@ class _StreamServerConfigPageState extends ConsumerState<StreamServerConfigPage>
     } catch (error) {
       _showMessage('Failed to delete server: $error', isError: true);
     } finally {
-      if (mounted) {
-        setState(() => _isDeleting = false);
-      }
+      if (mounted) setState(() => _isDeleting = false);
     }
   }
 
   String _normalizedServerName() {
     final raw = _serverNameController.text.trim();
-    if (raw.isNotEmpty) {
-      return raw;
-    }
+    if (raw.isNotEmpty) return raw;
     for (final item in _serverTypes) {
-      if (item.value == _serverType) {
-        return item.label;
-      }
+      if (item.value == _serverType) return item.label;
     }
     return _serverType;
   }
 
   void _showMessage(String message, {bool isError = false}) {
     if (!mounted) return;
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Theme.of(context).colorScheme.error : null,
-      ),
-    );
+    showInfoMessage(context, message, isError: isError);
   }
 }
 
 class _Header extends StatelessWidget {
   const _Header({required this.onOpenPlaylists});
-
   final VoidCallback onOpenPlaylists;
 
   @override
@@ -288,7 +266,6 @@ class _Header extends StatelessWidget {
     return BayinPageHeader(
       title: const Text('Stream Servers'),
       left: IconButton(
-        tooltip: 'Back',
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -298,16 +275,22 @@ class _Header extends StatelessWidget {
         },
         icon: Icon(PhosphorIcons.caretLeft()),
       ),
-      right: TextButton.icon(
+      right: Button(
         onPressed: onOpenPlaylists,
-        icon: Icon(PhosphorIcons.playlist()),
-        label: const Text('Playlists'),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(PhosphorIcons.playlist()),
+            const SizedBox(width: 6),
+            const Text('Playlists'),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _ServerListCard extends StatelessWidget {
+class _ServerListCard extends ConsumerWidget {
   const _ServerListCard({
     required this.servers,
     required this.selectedServerId,
@@ -321,8 +304,8 @@ class _ServerListCard extends StatelessWidget {
   final VoidCallback onCreateNew;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinGlassCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -331,57 +314,41 @@ class _ServerListCard extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
             child: Row(
               children: [
-                const Text(
-                  'Saved servers',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
+                const Text('Saved servers',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const Spacer(),
-                TextButton(
-                  onPressed: onCreateNew,
-                  child: const Text('New'),
-                ),
+                Button(onPressed: onCreateNew, child: const Text('New')),
               ],
             ),
           ),
           if (servers.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-              child: Text(
-                'No stream servers configured yet.',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
+              child: Text('No stream servers configured yet.',
+                  style: TextStyle(fontSize: 12, color: tokens.textSecondary)),
             )
           else
             for (final server in servers)
-              Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => onSelect(server),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    child: Row(
-                      children: [
-                        Icon(PhosphorIcons.cloud(), size: 16),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '${server.serverName} (${server.serverType})',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 13),
-                          ),
+              GestureDetector(
+                onTap: () => onSelect(server),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: Row(
+                    children: [
+                      Icon(PhosphorIcons.cloud(), size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${server.serverName} (${server.serverType})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
                         ),
-                        if (server.id == selectedServerId)
-                          Icon(
-                            PhosphorIcons.checkCircle(PhosphorIconsStyle.fill),
-                            size: 16,
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                      ],
-                    ),
+                      ),
+                      if (server.id == selectedServerId)
+                        Icon(PhosphorIcons.checkCircle(PhosphorIconsStyle.fill),
+                            size: 16, color: const Color(0xFF3B82F6)),
+                    ],
                   ),
                 ),
               ),
@@ -413,25 +380,18 @@ class _FormCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final decoration = const InputDecoration(
-      border: OutlineInputBorder(),
-      isDense: true,
-    );
     return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          DropdownButtonFormField<String>(
-            initialValue: serverType,
-            decoration: decoration.copyWith(labelText: 'Server type'),
+          ComboBox<String>(
+            value: serverType,
             items: serverTypes
-                .map(
-                  (item) => DropdownMenuItem<String>(
-                    value: item.value,
-                    child: Text(item.label),
-                  ),
-                )
+                .map((item) => ComboBoxItem<String>(
+                      value: item.value,
+                      child: Text(item.label),
+                    ))
                 .toList(growable: false),
             onChanged: (value) {
               if (value == null) return;
@@ -439,25 +399,24 @@ class _FormCard extends StatelessWidget {
             },
           ),
           const SizedBox(height: 10),
-          TextField(
+          TextBox(
             controller: serverNameController,
-            decoration: decoration.copyWith(labelText: 'Server name (optional)'),
+            placeholder: 'Server name (optional)',
           ),
           const SizedBox(height: 10),
-          TextField(
+          TextBox(
             controller: serverUrlController,
-            decoration: decoration.copyWith(labelText: 'Server URL'),
-            keyboardType: TextInputType.url,
+            placeholder: 'Server URL',
           ),
           const SizedBox(height: 10),
-          TextField(
+          TextBox(
             controller: usernameController,
-            decoration: decoration.copyWith(labelText: 'Username'),
+            placeholder: 'Username',
           ),
           const SizedBox(height: 10),
-          TextField(
+          TextBox(
             controller: passwordController,
-            decoration: decoration.copyWith(labelText: 'Password'),
+            placeholder: 'Password',
             obscureText: true,
           ),
         ],
@@ -496,33 +455,44 @@ class _ActionButtons extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: OutlinedButton(
                 onPressed: isTesting ? null : onTest,
-                icon: isTesting
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isTesting)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
                       )
-                    : Icon(PhosphorIcons.plugs()),
-                label: const Text('Test'),
+                    else
+                      Icon(PhosphorIcons.plugs()),
+                    const SizedBox(width: 6),
+                    const Text('Test'),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: FilledButton.icon(
+              child: FilledButton(
                 onPressed: isSaving ? null : onSave,
-                icon: isSaving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSaving)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
                       )
-                    : Icon(PhosphorIcons.floppyDisk()),
-                label: const Text('Save'),
+                    else
+                      Icon(PhosphorIcons.floppyDisk()),
+                    const SizedBox(width: 6),
+                    const Text('Save'),
+                  ],
+                ),
               ),
             ),
           ],
@@ -531,30 +501,44 @@ class _ActionButtons extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: OutlinedButton.icon(
+              child: OutlinedButton(
                 onPressed: hasSelectedServer && !isSyncing ? onSync : null,
-                icon: isSyncing
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isSyncing)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
                       )
-                    : Icon(PhosphorIcons.arrowsClockwise()),
-                label: const Text('Sync playlists'),
+                    else
+                      Icon(PhosphorIcons.arrowsClockwise()),
+                    const SizedBox(width: 6),
+                    const Text('Sync playlists'),
+                  ],
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: FilledButton.tonalIcon(
+              child: FilledButton(
                 onPressed: hasSelectedServer && !isDeleting ? onDelete : null,
-                icon: isDeleting
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (isDeleting)
+                      const Padding(
+                        padding: EdgeInsets.only(right: 6),
+                        child: SizedBox(
+                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
                       )
-                    : Icon(PhosphorIcons.trash()),
-                label: const Text('Delete'),
+                    else
+                      Icon(PhosphorIcons.trash()),
+                    const SizedBox(width: 6),
+                    const Text('Delete'),
+                  ],
+                ),
               ),
             ),
           ],
@@ -566,7 +550,6 @@ class _ActionButtons extends StatelessWidget {
 
 class _ErrorCard extends StatelessWidget {
   const _ErrorCard({required this.message});
-
   final String message;
 
   @override
@@ -574,23 +557,17 @@ class _ErrorCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer,
+        color: Colors.red.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        message,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onErrorContainer,
-          fontSize: 12,
-        ),
-      ),
+      child: Text(message,
+          style: TextStyle(color: Colors.red, fontSize: 12)),
     );
   }
 }
 
 class _ServerTypeOption {
   const _ServerTypeOption(this.value, this.label);
-
   final String value;
   final String label;
 }

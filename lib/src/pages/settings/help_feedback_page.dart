@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../utils/info_bar_helper.dart';
 import '../../widgets/widgets.dart';
 
 class HelpFeedbackPage extends ConsumerWidget {
@@ -18,16 +19,18 @@ class HelpFeedbackPage extends ConsumerWidget {
       children: [
         BayinPageHeader(
           title: const Text('Help & Feedback'),
-          left: IconButton(
-            tooltip: 'Back',
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/settings');
-              }
-            },
-            icon: Icon(PhosphorIcons.caretLeft()),
+          left: Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/settings');
+                }
+              },
+              icon: Icon(PhosphorIcons.caretLeft()),
+            ),
           ),
         ),
         Expanded(
@@ -54,7 +57,7 @@ class HelpFeedbackPage extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: 10),
-        FilledButton.tonalIcon(
+        FilledButton(
           onPressed: () async {
             final text = [
               'BaYin diagnostics',
@@ -65,12 +68,16 @@ class HelpFeedbackPage extends ConsumerWidget {
             ].join('\n');
             await Clipboard.setData(ClipboardData(text: text));
             if (!context.mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Diagnostics copied to clipboard.')),
-            );
+            showInfoMessage(context, 'Diagnostics copied to clipboard.');
           },
-          icon: const Icon(Icons.copy),
-          label: const Text('Copy diagnostics'),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(PhosphorIcons.copy(), size: 18),
+              const SizedBox(width: 8),
+              const Text('Copy diagnostics'),
+            ],
+          ),
         ),
             ],
           ),
@@ -80,7 +87,7 @@ class HelpFeedbackPage extends ConsumerWidget {
   }
 }
 
-class _InfoCard extends StatelessWidget {
+class _InfoCard extends ConsumerWidget {
   const _InfoCard({
     required this.title,
     required this.children,
@@ -90,8 +97,8 @@ class _InfoCard extends StatelessWidget {
   final List<String> children;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -104,7 +111,7 @@ class _InfoCard extends StatelessWidget {
               padding: const EdgeInsets.only(bottom: 4),
               child: Text(
                 line,
-                style: TextStyle(color: scheme.onSurfaceVariant),
+                style: TextStyle(color: tokens.textSecondary),
               ),
             ),
         ],

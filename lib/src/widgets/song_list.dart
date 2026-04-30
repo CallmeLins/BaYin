@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
+import '../providers/providers.dart';
+import '../theme/bayin_tokens.dart';
 import 'cover_art.dart';
 
 String _formatDuration(double seconds) {
@@ -15,9 +18,7 @@ String _formatDuration(double seconds) {
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
-/// Virtualized Song row list. Used by SongsPage, AlbumDetailPage,
-/// PlaylistDetailPage, and search results.
-class SongList extends StatelessWidget {
+class SongList extends ConsumerWidget {
   const SongList({
     super.key,
     required this.songs,
@@ -36,7 +37,8 @@ class SongList extends StatelessWidget {
   final bool showIndex;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return ListView.builder(
       controller: scrollController,
       padding: padding ?? const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -47,6 +49,7 @@ class SongList extends StatelessWidget {
         return _SongRow(
           song: song,
           index: showIndex ? index + 1 : null,
+          tokens: tokens,
           onTap: onTap == null ? null : () => onTap!(song),
           onLongPress: onLongPress == null ? null : () => onLongPress!(song),
         );
@@ -59,94 +62,94 @@ class _SongRow extends StatelessWidget {
   const _SongRow({
     required this.song,
     required this.index,
+    required this.tokens,
     required this.onTap,
     required this.onLongPress,
   });
 
   final Song song;
   final int? index;
+  final BayinTokens tokens;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(6),
-        onTap: onTap,
-        onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          child: Row(
-            children: [
-              if (index != null)
-                SizedBox(
-                  width: 36,
-                  child: Text(
-                    '$index',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: scheme.onSurfaceVariant,
-                      fontFeatures: const <FontFeature>[
-                        FontFeature.tabularFigures(),
-                      ],
-                    ),
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            if (index != null)
+              SizedBox(
+                width: 36,
+                child: Text(
+                  '$index',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: tokens.textSecondary,
+                    fontFeatures: const <FontFeature>[
+                      FontFeature.tabularFigures(),
+                    ],
                   ),
                 ),
-              CoverArt(
-                width: 36,
-                height: 36,
-                coverHash: song.coverHash,
-                streamInfo: song.streamInfo,
-                size: CoverArtSize.small,
-                borderRadius: BorderRadius.circular(4),
-                placeholderIconSize: 16,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      song.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
+            CoverArt(
+              width: 36,
+              height: 36,
+              coverHash: song.coverHash,
+              streamInfo: song.streamInfo,
+              size: CoverArtSize.small,
+              borderRadius: BorderRadius.circular(4),
+              placeholderIconSize: 16,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    song.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${song.artist} · ${song.album}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: scheme.onSurfaceVariant,
-                      ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${song.artist} · ${song.album}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: tokens.textSecondary,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                _formatDuration(song.duration),
-                style: TextStyle(
-                  fontSize: 12,
-                  color: scheme.onSurfaceVariant,
-                  fontFeatures: const <FontFeature>[
-                    FontFeature.tabularFigures(),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              _formatDuration(song.duration),
+              style: TextStyle(
+                fontSize: 12,
+                color: tokens.textSecondary,
+                fontFeatures: const <FontFeature>[
+                  FontFeature.tabularFigures(),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

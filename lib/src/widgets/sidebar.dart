@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,7 +8,6 @@ import 'package:window_manager/window_manager.dart';
 
 import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
-import '../theme/bayin_tokens.dart';
 
 const double kSidebarDockedWidth = 256;
 const double kSidebarOverlayWidthFraction = 0.6;
@@ -25,14 +24,15 @@ class Sidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
+    final tokens = ref.watch(bayinTokensProvider);
     final t = context.t;
     final layout = ref.watch(responsiveLayoutProvider);
     final themeMode = ref.watch(themeModeProvider);
     final currentPath = GoRouterState.of(context).uri.path;
 
     final useMobileSidebarStyle = isOverlay && !layout.isTablet;
-    final sectionBg = Theme.of(context).brightness == Brightness.dark
+    final isDark = tokens.isDark;
+    final sectionBg = isDark
         ? Colors.white.withValues(alpha: 0.05)
         : Colors.black.withValues(alpha: 0.04);
 
@@ -49,7 +49,7 @@ class Sidebar extends ConsumerWidget {
       );
     }
 
-    return Material(
+    return Container(
       color: isOverlay
           ? tokens.windowBg
           : tokens.sidebarBg.withValues(alpha: 0.70),
@@ -67,6 +67,7 @@ class Sidebar extends ConsumerWidget {
               ),
               child: _TopActions(
                 mobileCardStyle: useMobileSidebarStyle,
+                isDark: isDark,
                 onToggleTheme: () {
                   final next = themeMode == ThemeMode.dark
                       ? ThemeMode.light
@@ -118,6 +119,7 @@ class Sidebar extends ConsumerWidget {
                     child: _NavSection(
                       title: t.nav.library,
                       useMobileStyle: useMobileSidebarStyle,
+                      isDark: isDark,
                       items: [
                         _NavItem(
                           icon: PhosphorIcons.musicNote(),
@@ -148,6 +150,7 @@ class Sidebar extends ConsumerWidget {
                     child: _NavSection(
                       title: t.nav.system,
                       useMobileStyle: useMobileSidebarStyle,
+                      isDark: isDark,
                       items: [
                         _NavItem(
                           icon: PhosphorIcons.folderSimple(),
@@ -187,6 +190,7 @@ class Sidebar extends ConsumerWidget {
 class _TopActions extends StatelessWidget {
   const _TopActions({
     required this.mobileCardStyle,
+    required this.isDark,
     required this.onToggleTheme,
     required this.onExit,
     required this.darkModeLabel,
@@ -194,6 +198,7 @@ class _TopActions extends StatelessWidget {
   });
 
   final bool mobileCardStyle;
+  final bool isDark;
   final VoidCallback onToggleTheme;
   final Future<void> Function() onExit;
   final String darkModeLabel;
@@ -201,58 +206,22 @@ class _TopActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    Widget button({
-      required IconData icon,
-      required VoidCallback onTap,
-      required String tooltip,
-      bool danger = false,
-    }) {
-      final fg = danger
-          ? (isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
-          : (isDark ? Colors.white70 : Colors.black54);
-      final hoverBg = danger
-          ? const Color(0xFFEF4444).withValues(alpha: 0.10)
-          : (isDark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06));
-      final radius = mobileCardStyle ? 10.0 : 8.0;
-
-      return Tooltip(
-        message: tooltip,
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(radius),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(radius),
-            onTap: onTap,
-            hoverColor: hoverBg,
-            child: Container(
-              width: mobileCardStyle ? 40 : 38,
-              height: mobileCardStyle ? 40 : 38,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(radius),
-              ),
-              child: Icon(icon, size: mobileCardStyle ? 20 : 18, color: fg),
-            ),
-          ),
-        ),
-      );
-    }
-
     final content = Row(
       children: [
-        button(
+        _ActionButton(
           icon: isDark ? PhosphorIcons.sun() : PhosphorIcons.moon(),
           onTap: onToggleTheme,
           tooltip: darkModeLabel,
+          isDark: isDark,
+          mobileCardStyle: mobileCardStyle,
         ),
         const SizedBox(width: 8),
-        button(
+        _ActionButton(
           icon: PhosphorIcons.signOut(),
           onTap: () => onExit(),
           tooltip: exitLabel,
+          isDark: isDark,
+          mobileCardStyle: mobileCardStyle,
           danger: true,
         ),
       ],
@@ -277,10 +246,72 @@ class _TopActions extends StatelessWidget {
   }
 }
 
+class _ActionButton extends StatefulWidget {
+  const _ActionButton({
+    required this.icon,
+    required this.onTap,
+    required this.tooltip,
+    required this.isDark,
+    required this.mobileCardStyle,
+    this.danger = false,
+  });
+
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+  final bool isDark;
+  final bool mobileCardStyle;
+  final bool danger;
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = widget.danger
+        ? (widget.isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
+        : (widget.isDark
+            ? Colors.white.withValues(alpha: 0.70)
+            : Colors.black.withValues(alpha: 0.54));
+    final hoverBg = widget.danger
+        ? const Color(0xFFEF4444).withValues(alpha: 0.10)
+        : (widget.isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06));
+    final radius = widget.mobileCardStyle ? 10.0 : 8.0;
+
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            width: widget.mobileCardStyle ? 40 : 38,
+            height: widget.mobileCardStyle ? 40 : 38,
+            decoration: BoxDecoration(
+              color: _hovering ? hoverBg : Colors.transparent,
+              borderRadius: BorderRadius.circular(radius),
+            ),
+            child: Icon(widget.icon,
+                size: widget.mobileCardStyle ? 20 : 18, color: fg),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NavSection extends StatelessWidget {
   const _NavSection({
     required this.title,
     required this.useMobileStyle,
+    required this.isDark,
     required this.items,
     required this.currentPath,
     required this.onNavigate,
@@ -288,13 +319,14 @@ class _NavSection extends StatelessWidget {
 
   final String title;
   final bool useMobileStyle;
+  final bool isDark;
   final List<_NavItem> items;
   final String currentPath;
   final VoidCallback? onNavigate;
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = Theme.of(context).brightness == Brightness.dark
+    final titleColor = isDark
         ? Colors.white.withValues(alpha: 0.45)
         : Colors.black.withValues(alpha: 0.45);
 
@@ -318,7 +350,7 @@ class _NavSection extends StatelessWidget {
               Expanded(
                 child: Container(
                   height: 1,
-                  color: Theme.of(context).brightness == Brightness.dark
+                  color: isDark
                       ? Colors.white.withValues(alpha: 0.08)
                       : Colors.black.withValues(alpha: 0.08),
                 ),
@@ -332,6 +364,7 @@ class _NavSection extends StatelessWidget {
             label: item.label,
             isMobileStyle: useMobileStyle,
             isActive: _pathActive(currentPath, item.path),
+            isDark: isDark,
             onTap: () {
               context.go(item.path);
               onNavigate?.call();
@@ -357,12 +390,13 @@ class _NavItem {
   final String path;
 }
 
-class _NavListTile extends StatelessWidget {
+class _NavListTile extends StatefulWidget {
   const _NavListTile({
     required this.icon,
     required this.label,
     required this.isMobileStyle,
     required this.isActive,
+    required this.isDark,
     required this.onTap,
   });
 
@@ -370,77 +404,102 @@ class _NavListTile extends StatelessWidget {
   final String label;
   final bool isMobileStyle;
   final bool isActive;
+  final bool isDark;
   final VoidCallback onTap;
 
   @override
+  State<_NavListTile> createState() => _NavListTileState();
+}
+
+class _NavListTileState extends State<_NavListTile> {
+  bool _hovering = false;
+
+  @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = widget.isDark;
+    final isActive = widget.isActive;
+    final hoverBg = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.black.withValues(alpha: 0.03);
     final activeBg = isDark
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.black.withValues(alpha: 0.05);
     final normalFg = isDark
         ? Colors.white.withValues(alpha: 0.82)
         : Colors.black.withValues(alpha: 0.72);
-    final activeFg = isDark ? Colors.white : Colors.black87;
+    final activeFg = isDark
+        ? Colors.white
+        : Colors.black.withValues(alpha: 0.87);
     final iconColor = isActive
         ? const Color(0xFF3B82F6)
-        : (isDark ? Colors.white54 : Colors.black45);
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.54)
+            : Colors.black.withValues(alpha: 0.45));
+    final bgColor = isActive
+        ? activeBg
+        : (_hovering ? hoverBg : Colors.transparent);
 
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: isMobileStyle ? 2 : 1),
-      child: Material(
-        color: isActive ? activeBg : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: onTap,
-          child: Stack(
-            children: [
-              Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: isMobileStyle ? 10 : 8,
+      padding: EdgeInsets.symmetric(vertical: widget.isMobileStyle ? 2 : 1),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovering = true),
+        onExit: (_) => setState(() => _hovering = false),
+        child: GestureDetector(
+          onTap: widget.onTap,
+          child: Container(
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Stack(
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: widget.isMobileStyle ? 10 : 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        widget.icon,
+                        size: widget.isMobileStyle ? 20 : 18,
+                        color: iconColor,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          widget.label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: widget.isMobileStyle ? 16 : 14,
+                            fontWeight:
+                                isActive ? FontWeight.w600 : FontWeight.w500,
+                            color: isActive ? activeFg : normalFg,
+                            letterSpacing: 0.1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
-                  children: [
-                    Icon(
-                      icon,
-                      size: isMobileStyle ? 20 : 18,
-                      color: iconColor,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: isMobileStyle ? 16 : 14,
-                          fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
-                          color: isActive ? activeFg : normalFg,
-                          letterSpacing: 0.1,
+                if (isActive)
+                  Positioned(
+                    left: 0,
+                    top: widget.isMobileStyle ? 10 : 8,
+                    bottom: widget.isMobileStyle ? 10 : 8,
+                    child: Container(
+                      width: 3,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF3B82F6),
+                        borderRadius: BorderRadius.horizontal(
+                          right: Radius.circular(3),
                         ),
                       ),
                     ),
-                  ],
-                ),
-              ),
-              if (isActive)
-                Positioned(
-                  left: 0,
-                  top: isMobileStyle ? 10 : 8,
-                  bottom: isMobileStyle ? 10 : 8,
-                  child: Container(
-                    width: 3,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3B82F6),
-                      borderRadius: const BorderRadius.horizontal(
-                        right: Radius.circular(3),
-                      ),
-                    ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

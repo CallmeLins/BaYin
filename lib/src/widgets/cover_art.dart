@@ -2,12 +2,16 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+
+import '../providers/providers.dart';
+import '../theme/bayin_tokens.dart';
 
 enum CoverArtSize { small, mid }
 
-class CoverArt extends StatelessWidget {
+class CoverArt extends ConsumerWidget {
   const CoverArt({
     super.key,
     required this.width,
@@ -36,7 +40,8 @@ class CoverArt extends StatelessWidget {
   final BoxFit fit;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final network = _normalizeUrl(streamCoverUrl) ??
         _normalizeUrl(_extractCoverUrlFromStreamInfo(streamInfo));
     final localPath = _pathForCoverHash(coverHash, size);
@@ -44,23 +49,23 @@ class CoverArt extends StatelessWidget {
     Widget child;
     if (network != null) {
       if (network.startsWith('data:image')) {
-        child = _buildDataImage(network, context);
+        child = _buildDataImage(network, tokens);
       } else {
         child = CachedNetworkImage(
           imageUrl: network,
           fit: fit,
-          errorWidget: (context, imageUrl, error) => _placeholder(context),
-          placeholder: (context, imageUrl) => _placeholder(context),
+          errorWidget: (context, imageUrl, error) => _placeholder(tokens),
+          placeholder: (context, imageUrl) => _placeholder(tokens),
         );
       }
     } else if (localPath != null) {
       child = Image.file(
         File(localPath),
         fit: fit,
-        errorBuilder: (context, error, stackTrace) => _placeholder(context),
+        errorBuilder: (context, error, stackTrace) => _placeholder(tokens),
       );
     } else {
-      child = _placeholder(context);
+      child = _placeholder(tokens);
     }
 
     return SizedBox(
@@ -70,20 +75,20 @@ class CoverArt extends StatelessWidget {
     );
   }
 
-  Widget _buildDataImage(String dataUrl, BuildContext context) {
+  Widget _buildDataImage(String dataUrl, BayinTokens tokens) {
     try {
       final comma = dataUrl.indexOf(',');
       if (comma <= 0 || comma >= dataUrl.length - 1) {
-        return _placeholder(context);
+        return _placeholder(tokens);
       }
       final bytes = base64Decode(dataUrl.substring(comma + 1));
       return Image.memory(
         bytes,
         fit: fit,
-        errorBuilder: (context, error, stackTrace) => _placeholder(context),
+        errorBuilder: (context, error, stackTrace) => _placeholder(tokens),
       );
     } catch (_) {
-      return _placeholder(context);
+      return _placeholder(tokens);
     }
   }
 
@@ -97,15 +102,17 @@ class CoverArt extends StatelessWidget {
     );
   }
 
-  Widget _placeholder(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget _placeholder(BayinTokens tokens) {
+    final bgColor = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
     return Container(
-      color: scheme.surfaceContainerHighest,
+      color: bgColor,
       alignment: Alignment.center,
       child: Icon(
         placeholderIcon ?? PhosphorIcons.musicNote(),
         size: placeholderIconSize,
-        color: scheme.onSurfaceVariant,
+        color: tokens.textSecondary,
       ),
     );
   }

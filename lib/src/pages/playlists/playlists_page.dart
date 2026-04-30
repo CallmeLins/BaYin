@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -18,7 +18,7 @@ class PlaylistsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncServers = ref.watch(streamServersProvider);
     return asyncServers.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: ProgressRing()),
       error: (error, _) => Center(
         child: SelectableText('Failed to load stream servers\n$error'),
       ),
@@ -27,10 +27,12 @@ class PlaylistsPage extends ConsumerWidget {
           children: [
             BayinPageHeader(
               title: const Text('Playlists'),
-              right: IconButton(
-                icon: Icon(PhosphorIcons.cloud()),
-                tooltip: 'Configure',
-                onPressed: () => context.go('/stream-config'),
+              right: Tooltip(
+                message: 'Configure',
+                child: IconButton(
+                  icon: Icon(PhosphorIcons.cloud()),
+                  onPressed: () => context.go('/stream-config'),
+                ),
               ),
             ),
             Expanded(
@@ -39,20 +41,32 @@ class PlaylistsPage extends ConsumerWidget {
                 children: [
                   _SectionHeader(
                     title: 'Local playlists',
-                    trailing: TextButton.icon(
-                      icon: Icon(PhosphorIcons.plus()),
-                      label: const Text('New'),
+                    trailing: Button(
                       onPressed: null,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(PhosphorIcons.plus()),
+                          const SizedBox(width: 8),
+                          const Text('New'),
+                        ],
+                      ),
                     ),
                   ),
                   const _LocalPlaylistsPlaceholder(),
                   const SizedBox(height: 24),
                   _SectionHeader(
                     title: 'Stream servers',
-                    trailing: TextButton.icon(
-                      icon: Icon(PhosphorIcons.cloud()),
-                      label: const Text('Configure'),
+                    trailing: Button(
                       onPressed: () => context.go('/stream-config'),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(PhosphorIcons.cloud()),
+                          const SizedBox(width: 8),
+                          const Text('Configure'),
+                        ],
+                      ),
                     ),
                   ),
                   if (servers.isEmpty)
@@ -73,19 +87,19 @@ class PlaylistsPage extends ConsumerWidget {
   }
 }
 
-class _SectionHeader extends StatelessWidget {
+class _SectionHeader extends ConsumerWidget {
   const _SectionHeader({required this.title, this.trailing});
 
   final String title;
   final Widget? trailing;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleLarge),
+          Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600)),
           const Spacer(),
           ...[trailing].nonNulls,
         ],
@@ -94,21 +108,22 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
-class _LocalPlaylistsPlaceholder extends StatelessWidget {
+class _LocalPlaylistsPlaceholder extends ConsumerWidget {
   const _LocalPlaylistsPlaceholder();
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final isDark = tokens.isDark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: dark
+        color: isDark
             ? Colors.white.withValues(alpha: 0.05)
             : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: dark
+          color: isDark
               ? Colors.white.withValues(alpha: 0.07)
               : Colors.black.withValues(alpha: 0.06),
           width: 0.6,
@@ -118,14 +133,14 @@ class _LocalPlaylistsPlaceholder extends StatelessWidget {
         children: [
           Icon(
             PhosphorIcons.playlist(),
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: tokens.textSecondary,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'No local playlists yet. User-created playlists land with the Phase 3 follow-up.',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ),
@@ -135,21 +150,22 @@ class _LocalPlaylistsPlaceholder extends StatelessWidget {
   }
 }
 
-class _NoStreamServersPlaceholder extends StatelessWidget {
+class _NoStreamServersPlaceholder extends ConsumerWidget {
   const _NoStreamServersPlaceholder();
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final isDark = tokens.isDark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: dark
+        color: isDark
             ? Colors.white.withValues(alpha: 0.05)
             : Colors.black.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: dark
+          color: isDark
               ? Colors.white.withValues(alpha: 0.07)
               : Colors.black.withValues(alpha: 0.06),
           width: 0.6,
@@ -159,14 +175,14 @@ class _NoStreamServersPlaceholder extends StatelessWidget {
         children: [
           Icon(
             PhosphorIcons.cloudSlash(),
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
+            color: tokens.textSecondary,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               'No stream servers configured. Add a Subsonic/Jellyfin server in Phase 6.',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ),
@@ -183,6 +199,7 @@ class _StreamServerBlock extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final asyncPlaylists = ref.watch(streamPlaylistsProvider(server.id));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,7 +216,7 @@ class _StreamServerBlock extends ConsumerWidget {
             Text(
               '(${server.serverType})',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
                 fontSize: 12,
               ),
             ),
@@ -207,10 +224,10 @@ class _StreamServerBlock extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         asyncPlaylists.when(
-          loading: () => const LinearProgressIndicator(minHeight: 2),
+          loading: () => const ProgressBar(),
           error: (error, _) => Text(
             'Failed to load playlists: $error',
-            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            style: TextStyle(color: Colors.red),
           ),
           data: (playlists) {
             if (playlists.isEmpty) {
@@ -219,7 +236,7 @@ class _StreamServerBlock extends ConsumerWidget {
                 child: Text(
                   'No cached playlists for this server.',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: tokens.textSecondary,
                   ),
                 ),
               );
@@ -240,7 +257,7 @@ class _StreamServerBlock extends ConsumerWidget {
   }
 }
 
-class _StreamPlaylistRow extends StatelessWidget {
+class _StreamPlaylistRow extends ConsumerWidget {
   const _StreamPlaylistRow({
     required this.playlist,
     required this.serverId,
@@ -250,42 +267,39 @@ class _StreamPlaylistRow extends StatelessWidget {
   final String serverId;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => context.go(
-          '/stream-playlists/${Uri.encodeComponent(serverId)}'
-          '/${Uri.encodeComponent(playlist.id)}',
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(22, 6, 10, 6),
-          child: Row(
-            children: [
-              Icon(
-                PhosphorIcons.playlist(),
-                size: 18,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    return GestureDetector(
+      onTap: () => context.go(
+        '/stream-playlists/${Uri.encodeComponent(serverId)}'
+        '/${Uri.encodeComponent(playlist.id)}',
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(22, 6, 10, 6),
+        child: Row(
+          children: [
+            Icon(
+              PhosphorIcons.playlist(),
+              size: 18,
+              color: tokens.textSecondary,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                playlist.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  playlist.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 13),
-                ),
+            ),
+            Text(
+              '${playlist.songCount} tracks',
+              style: TextStyle(
+                fontSize: 11,
+                color: tokens.textSecondary,
               ),
-              Text(
-                '${playlist.songCount} tracks',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

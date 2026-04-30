@@ -3,7 +3,8 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show showModalBottomSheet;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -480,7 +481,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     PlayerControllerState player,
     PlayerController controller,
   ) {
-    return showModalBottomSheet<void>(
+    return mat.showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -513,7 +514,7 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
     required ValueChanged<bool> onPureModeChanged,
     required ValueChanged<SpectrumMode> onSpectrumModeChanged,
   }) {
-    return showModalBottomSheet<void>(
+    return mat.showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -579,14 +580,14 @@ class _PlayerPageState extends ConsumerState<PlayerPage> {
   }
 }
 
-class _EmptyPlayer extends StatelessWidget {
+class _EmptyPlayer extends ConsumerWidget {
   const _EmptyPlayer({required this.onBack});
 
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -594,23 +595,29 @@ class _EmptyPlayer extends StatelessWidget {
           Icon(
             PhosphorIcons.musicNotes(),
             size: 56,
-            color: scheme.onSurfaceVariant,
+            color: tokens.textSecondary,
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Nothing is playing',
-            style: Theme.of(context).textTheme.titleLarge,
+            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 8),
           Text(
             'Pick a song from your library to start playback.',
-            style: TextStyle(color: scheme.onSurfaceVariant),
+            style: TextStyle(color: tokens.textSecondary),
           ),
           const SizedBox(height: 16),
-          FilledButton.icon(
+          FilledButton(
             onPressed: onBack,
-            icon: const Icon(Icons.arrow_back),
-            label: const Text('Back'),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(PhosphorIcons.arrowLeft()),
+                const SizedBox(width: 6),
+                const Text('Back'),
+              ],
+            ),
           ),
         ],
       ),
@@ -786,21 +793,21 @@ class _PlayerTopBar extends StatelessWidget {
           children: [
             _topBarButton(
               onPressed: onBack,
-              icon: Icons.keyboard_arrow_down_rounded,
+              icon: PhosphorIcons.caretDown(),
               iconSize: 28,
               tooltip: 'Back',
             ),
             const Spacer(),
             _topBarButton(
               onPressed: onOpenQueue,
-              icon: Icons.queue_music_rounded,
+              icon: PhosphorIcons.queue(),
               tooltip: 'Queue',
             ),
             if (showViewSettings) ...[
               const SizedBox(width: 8),
               _topBarButton(
                 onPressed: onOpenViewSettings,
-                icon: Icons.more_vert_rounded,
+                icon: PhosphorIcons.dotsThreeVertical(),
                 tooltip: 'View settings',
               ),
             ],
@@ -816,14 +823,11 @@ class _PlayerTopBar extends StatelessWidget {
     double iconSize = 20,
     required String tooltip,
   }) {
-    return IconButton(
-      onPressed: onPressed,
-      tooltip: tooltip,
-      icon: Icon(icon, size: iconSize),
-      style: IconButton.styleFrom(
-        foregroundColor: Colors.white,
-        minimumSize: const Size(42, 42),
-        overlayColor: Colors.white.withValues(alpha: 0.12),
+    return Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: iconSize, color: Colors.white),
       ),
     );
   }
@@ -1191,19 +1195,19 @@ class _PhoneLandscapeBody extends StatelessWidget {
           children: [
             _glassButton(
               onPressed: onBack,
-              icon: Icons.keyboard_arrow_down_rounded,
+              icon: PhosphorIcons.caretDown(),
               iconSize: 26,
               tooltip: 'Back',
             ),
             if (showViewSettings)
               _glassButton(
                 onPressed: onOpenViewSettings,
-                icon: Icons.more_vert_rounded,
+                icon: PhosphorIcons.dotsThreeVertical(),
                 tooltip: 'View settings',
               ),
             _glassButton(
               onPressed: onOpenQueue,
-              icon: Icons.queue_music_rounded,
+              icon: PhosphorIcons.queue(),
               tooltip: 'Queue',
             ),
           ],
@@ -1287,30 +1291,27 @@ class _TransportPanel extends StatelessWidget {
               if (showLyricsToggle)
                 IconButton(
                   onPressed: onToggleLyrics,
-                  tooltip: showLyrics ? 'Show cover' : 'Show lyrics',
                   icon: Icon(
-                    showLyrics ? Icons.album_rounded : Icons.lyrics_rounded,
+                    showLyrics ? PhosphorIcons.disc() : PhosphorIcons.textT(),
                     color: Colors.white.withValues(alpha: 0.9),
                   ),
                 ),
             ],
           ),
           const SizedBox(height: 10),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 3.2,
-              activeTrackColor: Colors.white,
-              inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
-              thumbColor: Colors.white,
-              overlayColor: Colors.white.withValues(alpha: 0.2),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-            ),
-            child: Slider(
-              min: 0,
-              max: max,
-              value: clampedProgress,
-              onChanged: onProgressChanged,
-              onChangeEnd: onProgressChangeEnd,
+          Slider(
+            min: 0,
+            max: max,
+            value: clampedProgress,
+            onChanged: onProgressChanged,
+            onChangeEnd: onProgressChangeEnd,
+            style: SliderThemeData(
+              trackHeight: const WidgetStatePropertyAll(3.2),
+              activeColor: const WidgetStatePropertyAll(Colors.white),
+              inactiveColor:
+                  WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.24)),
+              thumbColor: const WidgetStatePropertyAll(Colors.white),
+              thumbRadius: const WidgetStatePropertyAll(6.0),
             ),
           ),
           Row(
@@ -1349,7 +1350,6 @@ class _TransportPanel extends StatelessWidget {
             children: [
               IconButton(
                 onPressed: onTogglePlayMode,
-                tooltip: 'Play mode',
                 icon: Icon(
                   _playModeIcon(player.mode),
                   color: Colors.white.withValues(alpha: 0.72),
@@ -1363,22 +1363,24 @@ class _TransportPanel extends StatelessWidget {
                   color: Colors.white,
                   size: 28,
                 ),
-                tooltip: 'Previous',
               ),
               const SizedBox(width: 6),
-              IconButton.filled(
-                onPressed: controller.togglePlayPause,
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  minimumSize: const Size(58, 58),
+              Container(
+                width: 58,
+                height: 58,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
                 ),
-                icon: Icon(
-                  player.isPlaying
-                      ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
-                      : PhosphorIcons.play(PhosphorIconsStyle.fill),
+                child: IconButton(
+                  onPressed: controller.togglePlayPause,
+                  icon: Icon(
+                    player.isPlaying
+                        ? PhosphorIcons.pause(PhosphorIconsStyle.fill)
+                        : PhosphorIcons.play(PhosphorIconsStyle.fill),
+                    color: Colors.black,
+                  ),
                 ),
-                tooltip: player.isPlaying ? 'Pause' : 'Play',
               ),
               const SizedBox(width: 6),
               IconButton(
@@ -1388,14 +1390,12 @@ class _TransportPanel extends StatelessWidget {
                   color: Colors.white,
                   size: 28,
                 ),
-                tooltip: 'Next',
               ),
               const Spacer(),
               IconButton(
                 onPressed: onOpenSongMenu,
-                tooltip: 'More',
                 icon: Icon(
-                  Icons.more_vert_rounded,
+                  PhosphorIcons.dotsThreeVertical(),
                   color: Colors.white.withValues(alpha: 0.72),
                 ),
               ),
@@ -1440,7 +1440,7 @@ class _LyricsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (lyricsAsync.isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ProgressRing());
     }
     if (lyricLines.isEmpty) {
       return Center(
@@ -1497,9 +1497,9 @@ class _LyricsPanel extends StatelessWidget {
               alignment: Alignment.center,
               transformAlignment: _alignToAlignment(lyricAlign),
               transform: Matrix4.identity()
-                ..scale(active ? 1.0 : 0.98, active ? 1.0 : 0.98),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(10),
+                ..scaleByDouble(
+                    active ? 1.0 : 0.98, active ? 1.0 : 0.98, 1, 1),
+              child: GestureDetector(
                 onTap: lyricSelectable ? null : () => onLyricTap(line.startMs),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
@@ -1688,7 +1688,7 @@ class _QueueSheet extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  TextButton(
+                  Button(
                     onPressed: () => unawaited(onClear()),
                     child: const Text('Clear'),
                   ),
@@ -1711,43 +1711,59 @@ class _QueueSheet extends StatelessWidget {
                       itemBuilder: (context, index) {
                         final song = queue[index];
                         final active = player.currentIndex == index;
-                        return ListTile(
+                        return GestureDetector(
                           onTap: () => onJumpTo(index),
-                          leading: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: CoverArt(
-                              width: 44,
-                              height: 44,
-                              coverHash: song.coverHash,
-                              streamInfo: song.streamInfo,
-                              size: CoverArtSize.small,
-                            ),
-                          ),
-                          title: Text(
-                            song.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: active
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.86),
-                              fontWeight:
-                                  active ? FontWeight.w700 : FontWeight.w500,
-                            ),
-                          ),
-                          subtitle: Text(
-                            song.artist,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          trailing: IconButton(
-                            onPressed: () => onRemove(index),
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: Colors.white.withValues(alpha: 0.5),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: CoverArt(
+                                    width: 44,
+                                    height: 44,
+                                    coverHash: song.coverHash,
+                                    streamInfo: song.streamInfo,
+                                    size: CoverArtSize.small,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        song.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: active
+                                              ? Colors.white
+                                              : Colors.white.withValues(alpha: 0.86),
+                                          fontWeight:
+                                              active ? FontWeight.w700 : FontWeight.w500,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        song.artist,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: Colors.white.withValues(alpha: 0.6),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => onRemove(index),
+                                  icon: Icon(
+                                    PhosphorIcons.x(),
+                                    color: Colors.white.withValues(alpha: 0.5),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -1853,38 +1869,58 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
             ),
             const SizedBox(height: 10),
             if (widget.showDesktopSplitToggle)
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Split View',
-                  style: TextStyle(color: Colors.white),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Split View',
+                              style: TextStyle(color: Colors.white)),
+                          Text('Desktop two-column layout',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.58))),
+                        ],
+                      ),
+                    ),
+                    ToggleSwitch(
+                      checked: _splitViewEnabled,
+                      onChanged: (value) {
+                        setState(() => _splitViewEnabled = value);
+                        widget.onSplitViewChanged(value);
+                      },
+                    ),
+                  ],
                 ),
-                subtitle: Text(
-                  'Desktop two-column layout',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.58)),
-                ),
-                value: _splitViewEnabled,
-                onChanged: (value) {
-                  setState(() => _splitViewEnabled = value);
-                  widget.onSplitViewChanged(value);
-                },
               ),
             if (widget.pureModeFeatureEnabled)
-              SwitchListTile.adaptive(
-                contentPadding: EdgeInsets.zero,
-                title: const Text(
-                  'Pure Mode',
-                  style: TextStyle(color: Colors.white),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pure Mode',
+                              style: TextStyle(color: Colors.white)),
+                          Text('Hide lyrics and controls for minimalist stage',
+                              style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.58))),
+                        ],
+                      ),
+                    ),
+                    ToggleSwitch(
+                      checked: _pureModeActive,
+                      onChanged: (value) {
+                        setState(() => _pureModeActive = value);
+                        widget.onPureModeChanged(value);
+                      },
+                    ),
+                  ],
                 ),
-                subtitle: Text(
-                  'Hide lyrics and controls for minimalist stage',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.58)),
-                ),
-                value: _pureModeActive,
-                onChanged: (value) {
-                  setState(() => _pureModeActive = value);
-                  widget.onPureModeChanged(value);
-                },
               ),
             if (widget.proSpectrumActive) ...[
               const SizedBox(height: 10),
@@ -1901,8 +1937,7 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
               for (final item in SpectrumMode.values)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(12),
+                  child: GestureDetector(
                     onTap: () {
                       if (_selectedMode == item) return;
                       setState(() => _selectedMode = item);
@@ -1942,8 +1977,8 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
                           ),
                           Icon(
                             _selectedMode == item
-                                ? Icons.check_rounded
-                                : Icons.circle_outlined,
+                                ? PhosphorIcons.checkCircle(PhosphorIconsStyle.fill)
+                                : PhosphorIcons.circle(),
                             size: 18,
                             color: _selectedMode == item
                                 ? const Color(0xFF60A5FA)
@@ -1968,14 +2003,11 @@ Widget _glassButton({
   double iconSize = 20,
   required String tooltip,
 }) {
-  return IconButton(
-    onPressed: onPressed,
-    tooltip: tooltip,
-    icon: Icon(icon, size: iconSize),
-    style: IconButton.styleFrom(
-      foregroundColor: Colors.white,
-      minimumSize: const Size(42, 42),
-      overlayColor: Colors.white.withValues(alpha: 0.12),
+  return Tooltip(
+    message: tooltip,
+    child: IconButton(
+      onPressed: onPressed,
+      icon: Icon(icon, size: iconSize, color: Colors.white),
     ),
   );
 }
@@ -1983,11 +2015,11 @@ Widget _glassButton({
 IconData _playModeIcon(PlayMode mode) {
   switch (mode) {
     case PlayMode.sequence:
-      return Icons.repeat_rounded;
+      return PhosphorIcons.repeat();
     case PlayMode.shuffle:
-      return Icons.shuffle_rounded;
+      return PhosphorIcons.shuffle();
     case PlayMode.repeatOne:
-      return Icons.repeat_one_rounded;
+      return PhosphorIcons.repeatOnce();
   }
 }
 

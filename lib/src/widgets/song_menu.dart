@@ -1,11 +1,12 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show showModalBottomSheet;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../models/models.dart';
 import '../providers/providers.dart';
-import '../theme/bayin_tokens.dart';
+import '../utils/info_bar_helper.dart';
 
 /// Long-press / right-click action sheet for a [Song].
 ///
@@ -16,7 +17,7 @@ class SongMenu {
   const SongMenu._();
 
   static Future<void> show(BuildContext context, {required Song song}) {
-    return showModalBottomSheet<void>(
+    return mat.showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -42,8 +43,7 @@ class _SongMenuSheetState extends ConsumerState<_SongMenuSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final tokens = Theme.of(context).extension<BayinTokens>();
+    final tokens = ref.watch(bayinTokensProvider);
     final mq = MediaQuery.of(context);
 
     return SafeArea(
@@ -54,9 +54,9 @@ class _SongMenuSheetState extends ConsumerState<_SongMenuSheet> {
           constraints: BoxConstraints(maxHeight: mq.size.height * 0.82),
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
-            color: tokens?.popoverBg ?? scheme.surface,
+            color: tokens.popoverBg,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: scheme.outlineVariant, width: 0.5),
+            border: Border.all(color: tokens.separatorSoftColor, width: 0.5),
             boxShadow: const [
               BoxShadow(
                 color: Color(0x40000000),
@@ -96,7 +96,7 @@ class _MainView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -104,7 +104,9 @@ class _MainView extends ConsumerWidget {
           song: song,
           onClose: () => Navigator.of(context).maybePop(),
         ),
-        Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        Container(
+            height: 1,
+            color: tokens.separatorSoftColor.withValues(alpha: 0.4)),
         Flexible(
           child: ListView(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -179,44 +181,30 @@ class _MainView extends ConsumerWidget {
 
   void _notYet(BuildContext context, String message) {
     Navigator.of(context).maybePop();
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger?.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
-      ),
-    );
+    showInfoMessage(context, message, duration: const Duration(seconds: 2));
   }
 
   void _enqueueNext(BuildContext context, WidgetRef ref) {
     ref.read(playerControllerProvider.notifier).enqueueNext(song);
     Navigator.of(context).maybePop();
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger?.showSnackBar(
-      const SnackBar(
-        content: Text('Added to play next'),
-        behavior: SnackBarBehavior.floating,
-        duration: Duration(seconds: 2),
-      ),
-    );
+    showInfoMessage(context, 'Added to play next', duration: const Duration(seconds: 2));
   }
 }
 
-class _InfoView extends StatelessWidget {
+class _InfoView extends ConsumerWidget {
   const _InfoView({required this.song, required this.onBack});
 
   final Song song;
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         _SubHeader(title: 'Song info', onBack: onBack),
-        Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+        Container(height: 1, color: tokens.separatorSoftColor.withValues(alpha: 0.4)),
         Flexible(
           child: ListView(
             padding: const EdgeInsets.all(16),
@@ -256,15 +244,15 @@ class _InfoView extends StatelessWidget {
   }
 }
 
-class _SongHeader extends StatelessWidget {
+class _SongHeader extends ConsumerWidget {
   const _SongHeader({required this.song, required this.onClose});
 
   final Song song;
   final VoidCallback onClose;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 8, 12),
       child: Row(
@@ -273,14 +261,14 @@ class _SongHeader extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: scheme.surfaceContainerHighest,
+              color: (tokens.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
               borderRadius: BorderRadius.circular(8),
             ),
             alignment: Alignment.center,
             child: Icon(
               PhosphorIcons.musicNote(),
               size: 22,
-              color: scheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
           ),
           const SizedBox(width: 12),
@@ -305,16 +293,18 @@ class _SongHeader extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: scheme.onSurfaceVariant,
+                    color: tokens.textSecondary,
                   ),
                 ),
               ],
             ),
           ),
-          IconButton(
-            onPressed: onClose,
-            icon: Icon(PhosphorIcons.x()),
-            tooltip: 'Close',
+          Tooltip(
+            message: 'Close',
+            child: IconButton(
+              onPressed: onClose,
+              icon: Icon(PhosphorIcons.x()),
+            ),
           ),
         ],
       ),
@@ -322,22 +312,24 @@ class _SongHeader extends StatelessWidget {
   }
 }
 
-class _SubHeader extends StatelessWidget {
+class _SubHeader extends ConsumerWidget {
   const _SubHeader({required this.title, required this.onBack});
 
   final String title;
   final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
       child: Row(
         children: [
-          IconButton(
-            onPressed: onBack,
-            icon: Icon(PhosphorIcons.caretLeft()),
-            tooltip: 'Back',
+          Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: onBack,
+              icon: Icon(PhosphorIcons.caretLeft()),
+            ),
           ),
           const SizedBox(width: 4),
           Text(
@@ -350,7 +342,7 @@ class _SubHeader extends StatelessWidget {
   }
 }
 
-class _MenuRow extends StatelessWidget {
+class _MenuRow extends ConsumerWidget {
   const _MenuRow({
     required this.icon,
     required this.label,
@@ -364,10 +356,10 @@ class _MenuRow extends StatelessWidget {
   final bool danger;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final color = danger ? scheme.error : scheme.onSurface;
-    return InkWell(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final color = danger ? Colors.red : tokens.textPrimary;
+    return GestureDetector(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -392,28 +384,28 @@ class _MenuRow extends StatelessWidget {
   }
 }
 
-class _SongHero extends StatelessWidget {
+class _SongHero extends ConsumerWidget {
   const _SongHero({required this.song});
 
   final Song song;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Row(
       children: [
         Container(
           width: 64,
           height: 64,
           decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
+            color: (tokens.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
             borderRadius: BorderRadius.circular(10),
           ),
           alignment: Alignment.center,
           child: Icon(
             PhosphorIcons.musicNote(),
             size: 28,
-            color: scheme.onSurfaceVariant,
+            color: tokens.textSecondary,
           ),
         ),
         const SizedBox(width: 14),
@@ -438,7 +430,7 @@ class _SongHero extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
-                  color: scheme.onSurfaceVariant,
+                  color: tokens.textSecondary,
                 ),
               ),
             ],
@@ -449,15 +441,15 @@ class _SongHero extends StatelessWidget {
   }
 }
 
-class _InfoRow extends StatelessWidget {
+class _InfoRow extends ConsumerWidget {
   const _InfoRow({required this.label, required this.value});
 
   final String label;
   final String value;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -469,12 +461,12 @@ class _InfoRow extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 12,
-                color: scheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ),
           Expanded(
-            child: SelectableText(
+            child: Text(
               value,
               style: const TextStyle(fontSize: 12.5),
             ),
@@ -485,20 +477,20 @@ class _InfoRow extends StatelessWidget {
   }
 }
 
-class _PathBlock extends StatelessWidget {
+class _PathBlock extends ConsumerWidget {
   const _PathBlock({required this.filePath, required this.sourceType});
 
   final String filePath;
   final String sourceType;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final parsed = _sanitizePath(filePath);
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHighest.withValues(alpha: 0.6),
+        color: (tokens.isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)).withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
@@ -508,12 +500,12 @@ class _PathBlock extends StatelessWidget {
             parsed.isRemote ? 'Source' : 'File path',
             style: TextStyle(
               fontSize: 11,
-              color: scheme.onSurfaceVariant,
+              color: tokens.textSecondary,
               fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 4),
-          SelectableText(
+          Text(
             parsed.display,
             style: const TextStyle(fontSize: 12),
           ),

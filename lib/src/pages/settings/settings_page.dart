@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -20,10 +20,12 @@ class SettingsPage extends ConsumerWidget {
       children: [
         BayinPageHeader(
           title: Text(t.nav.settings),
-          right: IconButton(
-            tooltip: 'About',
-            onPressed: () => context.go('/about'),
-            icon: Icon(PhosphorIcons.info()),
+          right: Tooltip(
+            message: 'About',
+            child: IconButton(
+              onPressed: () => context.go('/about'),
+              icon: Icon(PhosphorIcons.info()),
+            ),
           ),
         ),
         Expanded(
@@ -107,7 +109,7 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
-class _SummaryCard extends StatelessWidget {
+class _SummaryCard extends ConsumerWidget {
   const _SummaryCard({
     required this.themeMode,
     required this.localeLabel,
@@ -119,46 +121,52 @@ class _SummaryCard extends StatelessWidget {
   final bool eqEnabled;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final isDark = tokens.isDark;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
         children: [
-          _pill(context, 'Theme: $themeMode'),
-          _pill(context, 'Language: $localeLabel'),
-          _pill(context, 'EQ: ${eqEnabled ? 'On' : 'Off'}'),
+          _pill('Theme: $themeMode', isDark),
+          _pill('Language: $localeLabel', isDark),
+          _pill('EQ: ${eqEnabled ? 'On' : 'Off'}', isDark),
         ],
       ),
     );
   }
 
-  Widget _pill(BuildContext context, String label) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget _pill(String label, bool isDark) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: scheme.secondaryContainer,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: 12,
-          color: scheme.onSecondaryContainer,
+          color: isDark
+              ? const Color(0xFFF3F3F3)
+              : const Color(0xFF0A0A0A),
         ),
       ),
     );
   }
 }
 
-class _GroupCard extends StatelessWidget {
+class _GroupCard extends ConsumerWidget {
   const _GroupCard({
     required this.title,
     required this.tiles,
@@ -168,11 +176,14 @@ class _GroupCard extends StatelessWidget {
   final List<_SettingsTileData> tiles;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final isDark = tokens.isDark;
     return Container(
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -183,13 +194,16 @@ class _GroupCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: tokens.textPrimary,
+                  ),
                 ),
               ],
             ),
           ),
           for (var i = 0; i < tiles.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: scheme.outlineVariant),
+            if (i > 0) Container(height: 1, color: tokens.separatorColor),
             _SettingsTile(data: tiles[i]),
           ],
         ],
@@ -212,43 +226,40 @@ class _SettingsTileData {
   final String route;
 }
 
-class _SettingsTile extends StatelessWidget {
+class _SettingsTile extends ConsumerWidget {
   const _SettingsTile({required this.data});
 
   final _SettingsTileData data;
 
   @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: () => context.go(data.route),
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Row(
-            children: [
-              Icon(data.icon, size: 18),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(data.title),
-                    const SizedBox(height: 2),
-                    Text(
-                      data.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    return GestureDetector(
+      onTap: () => context.go(data.route),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Row(
+          children: [
+            Icon(data.icon, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(data.title),
+                  const SizedBox(height: 2),
+                  Text(
+                    data.subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: tokens.textSecondary,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-              Icon(PhosphorIcons.caretRight(), size: 16),
-            ],
-          ),
+            ),
+            Icon(PhosphorIcons.caretRight(), size: 16),
+          ],
         ),
       ),
     );

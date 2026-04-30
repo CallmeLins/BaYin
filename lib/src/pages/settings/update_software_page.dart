@@ -1,21 +1,23 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-class UpdateSoftwarePage extends StatefulWidget {
+class UpdateSoftwarePage extends ConsumerStatefulWidget {
   const UpdateSoftwarePage({super.key});
 
   @override
-  State<UpdateSoftwarePage> createState() => _UpdateSoftwarePageState();
+  ConsumerState<UpdateSoftwarePage> createState() => _UpdateSoftwarePageState();
 }
 
-class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
+class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
   static final Uri _releasePage = Uri.parse('https://bayin.app');
 
   bool _checking = false;
@@ -30,20 +32,23 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Update Software'),
-          left: IconButton(
-            tooltip: 'Back',
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/settings');
-              }
-            },
-            icon: Icon(PhosphorIcons.caretLeft()),
+          left: Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/settings');
+                }
+              },
+              icon: Icon(PhosphorIcons.caretLeft()),
+            ),
           ),
         ),
         Expanded(
@@ -64,25 +69,31 @@ class _UpdateSoftwarePageState extends State<UpdateSoftwarePage> {
           ),
         ),
         const SizedBox(height: 10),
-        FilledButton.icon(
+        FilledButton(
           onPressed: _checking ? null : _checkUpdates,
-          icon: _checking
-              ? const SizedBox(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_checking)
+                const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(
+                  child: ProgressRing(
                     strokeWidth: 2,
-                    color: Colors.white,
                   ),
                 )
-              : const Icon(Icons.system_update),
-          label: Text(_checking ? 'Checking...' : 'Check for updates'),
+              else
+                Icon(PhosphorIcons.downloadSimple(), size: 18),
+              const SizedBox(width: 8),
+              Text(_checking ? 'Checking...' : 'Check for updates'),
+            ],
+          ),
         ),
         if (_status != null) ...[
           const SizedBox(height: 10),
           Text(
             _status!,
-            style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+            style: TextStyle(color: tokens.textSecondary),
           ),
         ],
             ],

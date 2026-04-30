@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show SelectableText;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -24,7 +25,7 @@ class MusicLibraryPage extends ConsumerWidget {
     final albums = albumsAsync.valueOrNull;
     final artists = artistsAsync.valueOrNull;
     if (songs == null || albums == null || artists == null) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(child: ProgressRing());
     }
 
     final metrics = _buildMetrics(songs);
@@ -78,7 +79,7 @@ class MusicLibraryPage extends ConsumerWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
+class _StatCard extends ConsumerWidget {
   const _StatCard({
     required this.icon,
     required this.label,
@@ -90,12 +91,18 @@ class _StatCard extends StatelessWidget {
   final String value;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final surfaceColor = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+    final iconBgColor = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.black.withValues(alpha: 0.06);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
-        color: scheme.surfaceContainerHigh,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -104,10 +111,10 @@ class _StatCard extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: scheme.secondaryContainer,
+              color: iconBgColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(icon, size: 18, color: scheme.onSecondaryContainer),
+            child: Icon(icon, size: 18, color: tokens.textPrimary),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -131,7 +138,7 @@ class _StatCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    color: scheme.onSurfaceVariant,
+                    color: tokens.textSecondary,
                   ),
                 ),
               ],
@@ -143,13 +150,14 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _ErrorState extends StatelessWidget {
+class _ErrorState extends ConsumerWidget {
   const _ErrorState({required this.error});
 
   final Object error;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -159,18 +167,22 @@ class _ErrorState extends StatelessWidget {
             Icon(
               PhosphorIcons.warningCircle(),
               size: 40,
-              color: Theme.of(context).colorScheme.error,
+              color: Colors.red,
             ),
             const SizedBox(height: 10),
             Text(
               'Failed to load library stats',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: tokens.textPrimary,
+              ),
             ),
             const SizedBox(height: 6),
-            SelectableText(
+            mat.SelectableText(
               '$error',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+              style: TextStyle(color: tokens.textSecondary),
             ),
           ],
         ),

@@ -3,7 +3,10 @@
     "allow": [
       "Bash(cargo check:*)",
       "Bash(flutter --version)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "WebFetch(domain:pub.dev)",
+      "WebSearch",
+      "Bash(flutter pub *)"
     ]
   }
 }

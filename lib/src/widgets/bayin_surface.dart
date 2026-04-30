@@ -1,6 +1,9 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class BayinGlassCard extends StatelessWidget {
+import '../providers/providers.dart';
+
+class BayinGlassCard extends ConsumerWidget {
   const BayinGlassCard({
     super.key,
     required this.child,
@@ -15,18 +18,19 @@ class BayinGlassCard extends StatelessWidget {
   final double borderRadius;
 
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final isDark = tokens.isDark;
     return Container(
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: dark
+        color: isDark
             ? Colors.white.withValues(alpha: 0.04)
             : Colors.black.withValues(alpha: 0.02),
         borderRadius: BorderRadius.circular(borderRadius),
         border: Border.all(
-          color: dark
+          color: isDark
               ? Colors.white.withValues(alpha: 0.07)
               : Colors.black.withValues(alpha: 0.06),
           width: 0.6,
@@ -36,4 +40,3 @@ class BayinGlassCard extends StatelessWidget {
     );
   }
 }
-

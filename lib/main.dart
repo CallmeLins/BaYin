@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -92,7 +92,7 @@ class BaYinApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);
 
-    return MaterialApp.router(
+    return FluentApp.router(
       title: 'BaYin',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
@@ -101,14 +101,10 @@ class BaYinApp extends ConsumerWidget {
       locale: locale ?? TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
-        GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig: router,
       builder: (context, child) {
-        // Keep the responsiveLayoutProvider in sync with the live MediaQuery
-        // so Riverpod consumers don't need to touch MediaQuery directly.
         return _ResponsiveSync(child: child ?? const SizedBox.shrink());
       },
     );
@@ -123,8 +119,6 @@ class _ResponsiveSync extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final size = MediaQuery.sizeOf(context);
-    // Schedule after build; updating a Notifier during build would trigger
-    // the "setState during build" assertion.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(responsiveLayoutProvider.notifier).update(size);
     });

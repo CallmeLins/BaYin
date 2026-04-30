@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -27,9 +27,10 @@ class _SongsPageState extends ConsumerState<SongsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = ref.watch(bayinTokensProvider);
     final asyncSongs = ref.watch(librarySongsProvider);
     return asyncSongs.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: ProgressRing()),
       error: (error, stack) => _ErrorState(error: error),
       data: (songs) {
         if (songs.isEmpty) {
@@ -55,22 +56,26 @@ class _SongsPageState extends ConsumerState<SongsPage> {
                     '${songs.length}',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: tokens.textSecondary,
                     ),
                   ),
                 ],
               ),
               right: Row(
                 children: [
-                  IconButton(
-                    tooltip: 'Search',
-                    onPressed: () => context.go('/search'),
-                    icon: Icon(PhosphorIcons.magnifyingGlass()),
+                  Tooltip(
+                    message: 'Search',
+                    child: IconButton(
+                      onPressed: () => context.go('/search'),
+                      icon: Icon(PhosphorIcons.magnifyingGlass()),
+                    ),
                   ),
-                  IconButton(
-                    tooltip: 'Scan',
-                    onPressed: () => context.go('/scan'),
-                    icon: Icon(PhosphorIcons.folderSimple()),
+                  Tooltip(
+                    message: 'Scan',
+                    child: IconButton(
+                      onPressed: () => context.go('/scan'),
+                      icon: Icon(PhosphorIcons.folderSimple()),
+                    ),
                   ),
                 ],
               ),
@@ -79,12 +84,12 @@ class _SongsPageState extends ConsumerState<SongsPage> {
               child: Container(
                 margin: EdgeInsets.zero,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).brightness == Brightness.dark
+                  color: tokens.isDark
                       ? Colors.white.withValues(alpha: 0.04)
                       : Colors.black.withValues(alpha: 0.02),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: Theme.of(context).brightness == Brightness.dark
+                    color: tokens.isDark
                         ? Colors.white.withValues(alpha: 0.07)
                         : Colors.black.withValues(alpha: 0.06),
                     width: 0.6,
@@ -138,7 +143,7 @@ class _EmptyLibraryState extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -148,29 +153,41 @@ class _EmptyLibraryState extends ConsumerWidget {
             Icon(
               PhosphorIcons.musicNotes(),
               size: 48,
-              color: scheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
               'Your library is empty',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 6),
             Text(
               'Scan a folder to get started.',
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: TextStyle(color: tokens.textSecondary),
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
-              icon: Icon(PhosphorIcons.folderSimple()),
-              label: const Text('Scan music'),
+            FilledButton(
               onPressed: () => context.go('/scan'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(PhosphorIcons.folderSimple()),
+                  const SizedBox(width: 8),
+                  const Text('Scan music'),
+                ],
+              ),
             ),
             const SizedBox(height: 8),
-            TextButton.icon(
-              icon: Icon(PhosphorIcons.bug()),
-              label: const Text('Open FFI debug'),
+            HyperlinkButton(
               onPressed: () => context.go('/debug'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(PhosphorIcons.bug()),
+                  const SizedBox(width: 8),
+                  const Text('Open FFI debug'),
+                ],
+              ),
             ),
           ],
         ),
@@ -179,13 +196,14 @@ class _EmptyLibraryState extends ConsumerWidget {
   }
 }
 
-class _ErrorState extends StatelessWidget {
+class _ErrorState extends ConsumerWidget {
   const _ErrorState({required this.error});
 
   final Object error;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -195,18 +213,18 @@ class _ErrorState extends StatelessWidget {
             Icon(
               PhosphorIcons.warning(),
               size: 40,
-              color: Theme.of(context).colorScheme.error,
+              color: Colors.red,
             ),
             const SizedBox(height: 12),
             Text(
               'Failed to load library',
-              style: Theme.of(context).textTheme.titleMedium,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
             const SizedBox(height: 6),
             SelectableText(
               '$error',
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),

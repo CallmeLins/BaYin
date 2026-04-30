@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -101,7 +101,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ),
         Expanded(
           child: asyncSongs.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
+            loading: () => const Center(child: ProgressRing()),
             error: (error, _) => Center(
               child: SelectableText('Failed to load library\n$error'),
             ),
@@ -128,7 +128,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
   }
 }
 
-class _SearchBar extends StatelessWidget {
+class _SearchBar extends ConsumerWidget {
   const _SearchBar({
     required this.controller,
     required this.focusNode,
@@ -140,8 +140,8 @@ class _SearchBar extends StatelessWidget {
   final VoidCallback onClear;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinPageHeader(
       layout: BayinPageHeaderLayout.fluid,
       margin: const EdgeInsets.only(bottom: 6),
@@ -149,7 +149,9 @@ class _SearchBar extends StatelessWidget {
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: scheme.surfaceContainerHighest,
+          color: tokens.isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -157,20 +159,15 @@ class _SearchBar extends StatelessWidget {
             Icon(
               PhosphorIcons.magnifyingGlass(),
               size: 18,
-              color: scheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: TextField(
+              child: TextBox(
                 controller: controller,
                 focusNode: focusNode,
                 autofocus: true,
-                textInputAction: TextInputAction.search,
-                decoration: const InputDecoration(
-                  border: InputBorder.none,
-                  isDense: true,
-                  hintText: 'Search songs, artists, albums...',
-                ),
+                placeholder: 'Search songs, artists, albums...',
                 style: const TextStyle(fontSize: 14),
               ),
             ),
@@ -178,18 +175,19 @@ class _SearchBar extends StatelessWidget {
               valueListenable: controller,
               builder: (context, value, _) {
                 if (value.text.isEmpty) return const SizedBox.shrink();
-                return IconButton(
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onClear,
-                  icon: Icon(PhosphorIcons.x(), size: 16),
-                  tooltip: 'Clear',
+                return Tooltip(
+                  message: 'Clear',
+                  child: IconButton(
+                    onPressed: onClear,
+                    icon: Icon(PhosphorIcons.x(), size: 16),
+                  ),
                 );
               },
             ),
           ],
         ),
       ),
-      right: TextButton(
+      right: Button(
         onPressed: () {
           if (context.canPop()) {
             context.pop();
@@ -218,7 +216,7 @@ class _ResultsView extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
+    final tokens = ref.watch(bayinTokensProvider);
     final sorted = [...songs]
       ..sort((a, b) {
         final la = firstPinyinLetter(a.title);
@@ -248,7 +246,7 @@ class _ResultsView extends ConsumerWidget {
               '${sorted.length} result${sorted.length == 1 ? '' : 's'}',
               style: TextStyle(
                 fontSize: 12,
-                color: scheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ),
@@ -257,12 +255,12 @@ class _ResultsView extends ConsumerWidget {
           child: Container(
             margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
             decoration: BoxDecoration(
-              color: Theme.of(context).brightness == Brightness.dark
+              color: tokens.isDark
                   ? Colors.white.withValues(alpha: 0.04)
                   : Colors.black.withValues(alpha: 0.02),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: Theme.of(context).brightness == Brightness.dark
+                color: tokens.isDark
                     ? Colors.white.withValues(alpha: 0.07)
                     : Colors.black.withValues(alpha: 0.06),
                 width: 0.6,
@@ -308,12 +306,12 @@ class _ResultsView extends ConsumerWidget {
   }
 }
 
-class _PromptState extends StatelessWidget {
+class _PromptState extends ConsumerWidget {
   const _PromptState();
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -323,12 +321,12 @@ class _PromptState extends StatelessWidget {
             Icon(
               PhosphorIcons.magnifyingGlass(),
               size: 48,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.6),
+              color: tokens.textSecondary.withValues(alpha: 0.6),
             ),
             const SizedBox(height: 12),
             Text(
               'Start typing to search your library',
-              style: TextStyle(color: scheme.onSurfaceVariant),
+              style: TextStyle(color: tokens.textSecondary),
             ),
           ],
         ),
@@ -337,14 +335,14 @@ class _PromptState extends StatelessWidget {
   }
 }
 
-class _EmptyResults extends StatelessWidget {
+class _EmptyResults extends ConsumerWidget {
   const _EmptyResults({required this.query});
 
   final String query;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -354,7 +352,7 @@ class _EmptyResults extends StatelessWidget {
             Icon(
               PhosphorIcons.smileyMeh(),
               size: 40,
-              color: scheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
             const SizedBox(height: 12),
             Text(
@@ -366,7 +364,7 @@ class _EmptyResults extends StatelessWidget {
               'Try a different keyword.',
               style: TextStyle(
                 fontSize: 12,
-                color: scheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ],
@@ -375,4 +373,3 @@ class _EmptyResults extends StatelessWidget {
     );
   }
 }
-

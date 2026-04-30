@@ -1,11 +1,14 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart' as mat show showModalBottomSheet;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../providers/providers.dart';
 import '../../rust/rust_api.dart';
 
-class FolderBrowser extends StatefulWidget {
+class FolderBrowser extends ConsumerStatefulWidget {
   const FolderBrowser({
     super.key,
     required this.initialPath,
@@ -17,7 +20,7 @@ class FolderBrowser extends StatefulWidget {
     BuildContext context, {
     required String initialPath,
   }) {
-    return showModalBottomSheet<String>(
+    return mat.showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
@@ -29,10 +32,10 @@ class FolderBrowser extends StatefulWidget {
   }
 
   @override
-  State<FolderBrowser> createState() => _FolderBrowserState();
+  ConsumerState<FolderBrowser> createState() => _FolderBrowserState();
 }
 
-class _FolderBrowserState extends State<FolderBrowser> {
+class _FolderBrowserState extends ConsumerState<FolderBrowser> {
   late final TextEditingController _pathController;
   late String _currentPath;
   List<RustDirectoryEntry> _entries = const <RustDirectoryEntry>[];
@@ -55,6 +58,7 @@ class _FolderBrowserState extends State<FolderBrowser> {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = ref.watch(bayinTokensProvider);
     return SafeArea(
       child: Column(
         children: [
@@ -63,21 +67,16 @@ class _FolderBrowserState extends State<FolderBrowser> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: TextBox(
                     controller: _pathController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      isDense: true,
-                      hintText: 'Folder path',
-                    ),
-                    onSubmitted: _load,
+                    placeholder: 'Folder path',
+                    onSubmitted: (value) => _load(value),
                   ),
                 ),
                 const SizedBox(width: 8),
-                IconButton.filled(
+                FilledButton(
                   onPressed: () => _load(_pathController.text.trim()),
-                  icon: const Icon(Icons.arrow_forward),
-                  tooltip: 'Go',
+                  child: Icon(PhosphorIcons.arrowRight()),
                 ),
               ],
             ),
@@ -86,10 +85,16 @@ class _FolderBrowserState extends State<FolderBrowser> {
             padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
             child: Row(
               children: [
-                OutlinedButton.icon(
+                OutlinedButton(
                   onPressed: _goParent,
-                  icon: Icon(PhosphorIcons.arrowUp()),
-                  label: const Text('Up'),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(PhosphorIcons.arrowUp()),
+                      const SizedBox(width: 4),
+                      const Text('Up'),
+                    ],
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -97,9 +102,7 @@ class _FolderBrowserState extends State<FolderBrowser> {
                     _currentPath,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                    style: TextStyle(color: tokens.textSecondary),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -110,13 +113,13 @@ class _FolderBrowserState extends State<FolderBrowser> {
               ],
             ),
           ),
-          if (_isLoading) const LinearProgressIndicator(minHeight: 2),
+          if (_isLoading) const ProgressBar(),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               child: Text(
                 _error!,
-                style: TextStyle(color: Theme.of(context).colorScheme.error),
+                style: TextStyle(color: Colors.red),
               ),
             ),
           Expanded(
@@ -124,17 +127,32 @@ class _FolderBrowserState extends State<FolderBrowser> {
               itemCount: _entries.length,
               itemBuilder: (context, index) {
                 final entry = _entries[index];
-                return ListTile(
-                  dense: true,
-                  leading: Icon(PhosphorIcons.folder()),
-                  title: Text(entry.name),
-                  subtitle: Text(
-                    entry.path,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  trailing: Icon(PhosphorIcons.caretRight()),
+                return GestureDetector(
                   onTap: () => _load(entry.path),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        Icon(PhosphorIcons.folder()),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(entry.name),
+                              Text(
+                                entry.path,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(PhosphorIcons.caretRight()),
+                      ],
+                    ),
+                  ),
                 );
               },
             ),

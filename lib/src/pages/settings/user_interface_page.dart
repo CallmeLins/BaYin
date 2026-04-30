@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -22,7 +22,6 @@ class UserInterfacePage extends ConsumerWidget {
         BayinPageHeader(
           title: const Text('User Interface'),
           left: IconButton(
-            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -38,70 +37,53 @@ class UserInterfacePage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
             children: [
               const SizedBox(height: 10),
+              _SectionCard(
+                title: 'Theme',
+                child: Row(
+                  children: [
+                    _themeChip('System', ThemeMode.system, themeMode, themeController.setThemeMode),
+                    const SizedBox(width: 8),
+                    _themeChip('Light', ThemeMode.light, themeMode, themeController.setThemeMode),
+                    const SizedBox(width: 8),
+                    _themeChip('Dark', ThemeMode.dark, themeMode, themeController.setThemeMode),
+                  ],
+                ),
+              ),
               const SizedBox(height: 10),
-        _SectionCard(
-          title: 'Theme',
-          child: SegmentedButton<ThemeMode>(
-            segments: const [
-              ButtonSegment(value: ThemeMode.system, label: Text('System')),
-              ButtonSegment(value: ThemeMode.light, label: Text('Light')),
-              ButtonSegment(value: ThemeMode.dark, label: Text('Dark')),
-            ],
-            selected: <ThemeMode>{themeMode},
-            onSelectionChanged: (value) {
-              if (value.isNotEmpty) {
-                themeController.setThemeMode(value.first);
-              }
-            },
-          ),
-        ),
-        const SizedBox(height: 10),
-        _SectionCard(
-          title: 'Language',
-          child: DropdownButtonFormField<Locale?>(
-            initialValue: locale,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem<Locale?>(
-                value: null,
-                child: Text('System'),
+              _SectionCard(
+                title: 'Language',
+                child: ComboBox<Locale?>(
+                  value: locale,
+                  items: const [
+                    ComboBoxItem<Locale?>(value: null, child: Text('System')),
+                    ComboBoxItem<Locale?>(value: Locale('en'), child: Text('English')),
+                    ComboBoxItem<Locale?>(
+                        value: Locale('zh', 'CN'), child: Text('Chinese (Simplified)')),
+                  ],
+                  onChanged: localeController.setLocale,
+                ),
               ),
-              DropdownMenuItem<Locale?>(
-                value: Locale('en'),
-                child: Text('English'),
+              const SizedBox(height: 10),
+              _SwitchTileCard(
+                title: 'Show cover in lists',
+                subtitle: 'Display song art in row lists when available.',
+                value: app.showCoverInList,
+                onChanged: appController.setShowCoverInList,
               ),
-              DropdownMenuItem<Locale?>(
-                value: Locale('zh', 'CN'),
-                child: Text('Chinese (Simplified)'),
+              const SizedBox(height: 10),
+              _SwitchTileCard(
+                title: 'Visualizer enabled',
+                subtitle: 'Enable audio visualizer rendering pipeline.',
+                value: app.visualizerEnabled,
+                onChanged: appController.setVisualizerEnabled,
               ),
-            ],
-            onChanged: localeController.setLocale,
-          ),
-        ),
-        const SizedBox(height: 10),
-        _SwitchTileCard(
-          title: 'Show cover in lists',
-          subtitle: 'Display song art in row lists when available.',
-          value: app.showCoverInList,
-          onChanged: appController.setShowCoverInList,
-        ),
-        const SizedBox(height: 10),
-        _SwitchTileCard(
-          title: 'Visualizer enabled',
-          subtitle: 'Enable audio visualizer rendering pipeline.',
-          value: app.visualizerEnabled,
-          onChanged: appController.setVisualizerEnabled,
-        ),
-        const SizedBox(height: 10),
-        _SwitchTileCard(
-          title: 'Bass effect',
-          subtitle: 'Enable stronger low-frequency visual response.',
-          value: app.bassEffectEnabled,
-          onChanged: appController.setBassEffectEnabled,
-        ),
+              const SizedBox(height: 10),
+              _SwitchTileCard(
+                title: 'Bass effect',
+                subtitle: 'Enable stronger low-frequency visual response.',
+                value: app.bassEffectEnabled,
+                onChanged: appController.setBassEffectEnabled,
+              ),
             ],
           ),
         ),
@@ -110,11 +92,36 @@ class UserInterfacePage extends ConsumerWidget {
   }
 }
 
+Widget _themeChip(
+  String label,
+  ThemeMode value,
+  ThemeMode selected,
+  Future<void> Function(ThemeMode) onSelected,
+) {
+  final active = selected == value;
+  return GestureDetector(
+    onTap: () => onSelected(value),
+    child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: active
+            ? const Color(0xFF3B82F6)
+            : const Color(0x0A000000),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: active ? Colors.white : null,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    ),
+  );
+}
+
 class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.child,
-  });
+  const _SectionCard({required this.title, required this.child});
 
   final String title;
   final Widget child;
@@ -126,10 +133,7 @@ class _SectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
+          Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
           child,
         ],
@@ -154,11 +158,23 @@ class _SwitchTileCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return BayinGlassCard(
-      child: SwitchListTile.adaptive(
-        value: value,
-        onChanged: (v) => onChanged(v),
-        title: Text(title),
-        subtitle: Text(subtitle),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            ToggleSwitch(checked: value, onChanged: onChanged),
+          ],
+        ),
       ),
     );
   }

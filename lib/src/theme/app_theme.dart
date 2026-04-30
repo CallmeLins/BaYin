@@ -1,128 +1,44 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 
-import 'bayin_tokens.dart';
-
-/// Light / dark ThemeData plus the ported BayinTokens (see src-ui/src/index.css).
+/// Light / dark FluentThemeData for BaYin.
 ///
-/// Shadcn-style tokens map onto `ColorScheme` where natural; glass-material
-/// tokens live on `BayinTokens` (a ThemeExtension). Consumers read them via
-/// `Theme.of(context).colorScheme.xxx` or
-/// `Theme.of(context).extension<BayinTokens>()!.xxx`.
+/// BayinTokens are exposed via [bayinTokensProvider] (Riverpod).
 class AppTheme {
   const AppTheme._();
 
-  static ThemeData light() => _buildTheme(_lightScheme, _lightTokens, Brightness.light);
-  static ThemeData dark() => _buildTheme(_darkScheme, _darkTokens, Brightness.dark);
+  static FluentThemeData light() => _buildTheme(Brightness.light);
+  static FluentThemeData dark() => _buildTheme(Brightness.dark);
 
-  static ThemeData _buildTheme(
-    ColorScheme scheme,
-    BayinTokens tokens,
-    Brightness brightness,
-  ) {
-    return ThemeData(
-      useMaterial3: true,
+  static FluentThemeData _buildTheme(Brightness brightness) {
+    final isLight = brightness == Brightness.light;
+    return FluentThemeData(
       brightness: brightness,
-      colorScheme: scheme,
-      scaffoldBackgroundColor: tokens.windowBg,
-      canvasColor: tokens.windowBg,
-      dividerColor: tokens.separatorColor,
-      dividerTheme: DividerThemeData(
-        color: tokens.separatorColor,
-        thickness: 0.5,
-        space: 0,
-      ),
-      extensions: <ThemeExtension<dynamic>>[tokens],
+      accentColor: isLight ? _lightAccent : _darkAccent,
+      scaffoldBackgroundColor: isLight
+          ? const Color(0xFFFFFFFF)
+          : const Color(0xFF050508),
+      activeColor: const Color(0xFF3B82F6),
+      visualDensity: VisualDensity.standard,
     );
   }
 }
 
-// ── Shadcn-equivalent light scheme ──────────────────────────────────────────
-// Values lifted verbatim from src-ui/src/index.css `:root, :host` block.
-final ColorScheme _lightScheme = ColorScheme(
-  brightness: Brightness.light,
-  primary: hslColor(240, 5.9, 10),
-  onPrimary: hslColor(0, 0, 98),
-  primaryContainer: hslColor(240, 4.8, 95.9),
-  onPrimaryContainer: hslColor(240, 5.9, 10),
-  secondary: hslColor(240, 4.8, 95.9),
-  onSecondary: hslColor(240, 5.9, 10),
-  secondaryContainer: hslColor(240, 4.8, 95.9),
-  onSecondaryContainer: hslColor(240, 5.9, 10),
-  tertiary: hslColor(240, 4.8, 95.9),
-  onTertiary: hslColor(240, 5.9, 10),
-  tertiaryContainer: hslColor(240, 4.8, 95.9),
-  onTertiaryContainer: hslColor(240, 5.9, 10),
-  error: hslColor(0, 84.2, 60.2),
-  onError: hslColor(0, 0, 98),
-  errorContainer: hslColor(0, 84.2, 60.2),
-  onErrorContainer: hslColor(0, 0, 98),
-  surface: hslColor(0, 0, 100),
-  onSurface: hslColor(240, 10, 3.9),
-  surfaceContainerHighest: hslColor(240, 4.8, 95.9),
-  onSurfaceVariant: hslColor(240, 3.8, 46.1),
-  outline: hslColor(240, 5.9, 90),
-  outlineVariant: hslColor(240, 5.9, 90),
-  shadow: Colors.black,
-  scrim: Colors.black,
-  inverseSurface: hslColor(240, 10, 3.9),
-  onInverseSurface: hslColor(0, 0, 98),
-  inversePrimary: hslColor(240, 5.9, 10),
-);
+final _lightAccent = AccentColor('normal', <String, Color>{
+  'normal': const Color(0xFF3B82F6),
+  'darkest': const Color(0xFF1E3A5F),
+  'darker': const Color(0xFF1D4ED8),
+  'dark': const Color(0xFF2563EB),
+  'light': const Color(0xFFBFDBFE),
+  'lighter': const Color(0xFFDBEAFE),
+  'lightest': const Color(0xFFEFF6FF),
+});
 
-final ColorScheme _darkScheme = ColorScheme(
-  brightness: Brightness.dark,
-  primary: hslColor(0, 0, 98),
-  onPrimary: hslColor(240, 5.9, 10),
-  primaryContainer: hslColor(240, 3.7, 15.9),
-  onPrimaryContainer: hslColor(0, 0, 98),
-  secondary: hslColor(240, 3.7, 15.9),
-  onSecondary: hslColor(0, 0, 98),
-  secondaryContainer: hslColor(240, 3.7, 15.9),
-  onSecondaryContainer: hslColor(0, 0, 98),
-  tertiary: hslColor(240, 3.7, 15.9),
-  onTertiary: hslColor(0, 0, 98),
-  tertiaryContainer: hslColor(240, 3.7, 15.9),
-  onTertiaryContainer: hslColor(0, 0, 98),
-  error: hslColor(0, 62.8, 30.6),
-  onError: hslColor(0, 0, 98),
-  errorContainer: hslColor(0, 62.8, 30.6),
-  onErrorContainer: hslColor(0, 0, 98),
-  surface: hslColor(240, 10, 3.9),
-  onSurface: hslColor(0, 0, 98),
-  surfaceContainerHighest: hslColor(240, 3.7, 15.9),
-  onSurfaceVariant: hslColor(240, 5, 64.9),
-  outline: hslColor(240, 3.7, 15.9),
-  outlineVariant: hslColor(240, 3.7, 15.9),
-  shadow: Colors.black,
-  scrim: Colors.black,
-  inverseSurface: hslColor(0, 0, 98),
-  onInverseSurface: hslColor(240, 10, 3.9),
-  inversePrimary: hslColor(0, 0, 98),
-);
-
-// ── BaYin glass-material tokens ─────────────────────────────────────────────
-final BayinTokens _lightTokens = BayinTokens(
-  windowBg: hslColor(0, 0, 100),
-  titlebarBg: hslColor(240, 4.8, 96),
-  sidebarBg: hslColor(240, 4.8, 96),
-  barBg: hslColor(0, 0, 100),
-  popoverBg: hslColor(0, 0, 100),
-  playerBg: hslColor(240, 6, 7),
-  separator: hslColor(240, 5.9, 90),
-  separatorAlpha: 0.35,
-  separatorSoftAlpha: 0.28,
-  highlight: hslColor(0, 0, 100),
-);
-
-final BayinTokens _darkTokens = BayinTokens(
-  windowBg: hslColor(240, 4, 2),
-  titlebarBg: hslColor(240, 5, 4),
-  sidebarBg: hslColor(240, 5, 5),
-  barBg: hslColor(240, 5, 6),
-  popoverBg: hslColor(240, 5, 8),
-  playerBg: hslColor(240, 4, 2),
-  separator: hslColor(0, 0, 100),
-  separatorAlpha: 0.05,
-  separatorSoftAlpha: 0.03,
-  highlight: hslColor(0, 0, 100),
-);
+final _darkAccent = AccentColor('normal', <String, Color>{
+  'normal': const Color(0xFF60A5FA),
+  'darkest': const Color(0xFFDBEAFE),
+  'darker': const Color(0xFFBFDBFE),
+  'dark': const Color(0xFF93C5FD),
+  'light': const Color(0xFF1E3A5F),
+  'lighter': const Color(0xFF172554),
+  'lightest': const Color(0xFF0F172A),
+});

@@ -1,11 +1,10 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
-import '../../widgets/cover_art.dart';
 import '../../widgets/widgets.dart';
 
 /// Phase 3 — local album grid.
@@ -14,9 +13,10 @@ class AlbumsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     final asyncAlbums = ref.watch(libraryAlbumsProvider);
     return asyncAlbums.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => const Center(child: ProgressRing()),
       error: (error, _) => Center(
         child: SelectableText('Failed to load albums\n$error'),
       ),
@@ -28,7 +28,6 @@ class AlbumsPage extends ConsumerWidget {
             subtitle: 'Scan music to populate the library.',
           );
         }
-        final isDark = Theme.of(context).brightness == Brightness.dark;
         return Column(
           children: [
             BayinPageHeader(
@@ -41,15 +40,17 @@ class AlbumsPage extends ConsumerWidget {
                     '${albums.length}',
                     style: TextStyle(
                       fontSize: 13,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: tokens.textSecondary,
                     ),
                   ),
                 ],
               ),
-              right: IconButton(
-                tooltip: 'Search',
-                onPressed: () => context.go('/search'),
-                icon: Icon(PhosphorIcons.magnifyingGlass()),
+              right: Tooltip(
+                message: 'Search',
+                child: IconButton(
+                  onPressed: () => context.go('/search'),
+                  icon: Icon(PhosphorIcons.magnifyingGlass()),
+                ),
               ),
             ),
             Expanded(
@@ -58,12 +59,12 @@ class AlbumsPage extends ConsumerWidget {
                 child: Container(
                   padding: const EdgeInsets.fromLTRB(10, 12, 10, 8),
                   decoration: BoxDecoration(
-                    color: isDark
+                    color: tokens.isDark
                         ? Colors.white.withValues(alpha: 0.04)
                         : Colors.black.withValues(alpha: 0.02),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: isDark
+                      color: tokens.isDark
                           ? Colors.white.withValues(alpha: 0.07)
                           : Colors.black.withValues(alpha: 0.06),
                       width: 0.6,
@@ -91,60 +92,56 @@ class AlbumsPage extends ConsumerWidget {
   }
 }
 
-class _AlbumCard extends StatelessWidget {
+class _AlbumCard extends ConsumerWidget {
   const _AlbumCard({required this.album});
 
   final Album album;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(10),
-        onTap: () => context.go('/albums/${Uri.encodeComponent(album.id)}'),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 1,
-              child: CoverArt(
-                width: double.infinity,
-                height: double.infinity,
-                coverHash: album.coverHash,
-                streamCoverUrl: album.streamCoverUrl,
-                size: CoverArtSize.mid,
-                borderRadius: BorderRadius.circular(8),
-                placeholderIcon: PhosphorIcons.vinylRecord(),
-                placeholderIconSize: 40,
-              ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    return GestureDetector(
+      onTap: () => context.go('/albums/${Uri.encodeComponent(album.id)}'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 1,
+            child: CoverArt(
+              width: double.infinity,
+              height: double.infinity,
+              coverHash: album.coverHash,
+              streamCoverUrl: album.streamCoverUrl,
+              size: CoverArtSize.mid,
+              borderRadius: BorderRadius.circular(8),
+              placeholderIcon: PhosphorIcons.vinylRecord(),
+              placeholderIconSize: 40,
             ),
-            const SizedBox(height: 8),
-            Text(
-              album.name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            album.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            album.artist,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              color: tokens.textSecondary,
             ),
-            const SizedBox(height: 2),
-            Text(
-              album.artist,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                color: scheme.onSurfaceVariant,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _EmptyState extends StatelessWidget {
+class _EmptyState extends ConsumerWidget {
   const _EmptyState({
     required this.icon,
     required this.title,
@@ -156,7 +153,8 @@ class _EmptyState extends StatelessWidget {
   final String subtitle;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -166,15 +164,15 @@ class _EmptyState extends StatelessWidget {
             Icon(
               icon,
               size: 48,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
             const SizedBox(height: 12),
-            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
             const SizedBox(height: 6),
             Text(
               subtitle,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: tokens.textSecondary,
               ),
             ),
           ],

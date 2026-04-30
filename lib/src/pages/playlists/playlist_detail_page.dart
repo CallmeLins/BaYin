@@ -1,28 +1,33 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-class PlaylistDetailPage extends StatelessWidget {
+class PlaylistDetailPage extends ConsumerWidget {
   const PlaylistDetailPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Playlist detail'),
-          left: IconButton(
-            tooltip: 'Back',
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/playlists');
-              }
-            },
-            icon: Icon(PhosphorIcons.caretLeft()),
+          left: Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/playlists');
+                }
+              },
+              icon: Icon(PhosphorIcons.caretLeft()),
+            ),
           ),
         ),
         Expanded(
@@ -33,7 +38,7 @@ class PlaylistDetailPage extends StatelessWidget {
               child: Text(
                 'Local playlist detail is not wired yet in Flutter. This route is reserved for parity with Tauri playlist detail.',
                 style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  color: tokens.textSecondary,
                 ),
               ),
             ),

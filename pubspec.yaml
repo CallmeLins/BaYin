@@ -25,6 +25,7 @@ dependencies:
   slang_flutter: ^4.0.0
   window_manager: ^0.4.3
   macos_ui: ^2.2.2
+  fluent_ui: ^4.10.1
   phosphor_flutter: ^2.1.0
   lpinyin: ^2.0.3
   audio_service: ^0.18.18

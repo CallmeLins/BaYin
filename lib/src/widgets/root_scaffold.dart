@@ -1,9 +1,10 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../providers/providers.dart';
 import '../rust/rust_api.dart';
@@ -21,8 +22,7 @@ class RootScaffold extends ConsumerStatefulWidget {
   ConsumerState<RootScaffold> createState() => _RootScaffoldState();
 }
 
-class _RootScaffoldState extends ConsumerState<RootScaffold>
-{
+class _RootScaffoldState extends ConsumerState<RootScaffold> {
   bool _overlayOpen = false;
   ProviderSubscription<AsyncValue<List<RustFileWatchEvent>>>?
       _watchEventsSubscription;
@@ -57,7 +57,7 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
   @override
   Widget build(BuildContext context) {
     final layout = ref.watch(responsiveLayoutProvider);
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
+    final tokens = ref.watch(bayinTokensProvider);
     final location = GoRouterState.of(context).uri.path;
 
     final isPlayer = location == '/player' || location.startsWith('/player/');
@@ -72,9 +72,9 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
       });
     }
 
-    return Scaffold(
-      backgroundColor: tokens.windowBg,
-      body: Column(
+    return Container(
+      color: tokens.windowBg,
+      child: Column(
         children: [
           if (_isDesktop) const AppTitlebar(),
           Expanded(
@@ -112,6 +112,7 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
                                   : null,
                               child: _BodySurface(
                                 isPlayer: isPlayer,
+                                tokens: tokens,
                                 onRequestOpenSidebar:
                                     sidebarOverlayCapable
                                         ? () => setState(() => _overlayOpen = true)
@@ -138,18 +139,19 @@ class _RootScaffoldState extends ConsumerState<RootScaffold>
 class _BodySurface extends StatelessWidget {
   const _BodySurface({
     required this.isPlayer,
+    required this.tokens,
     required this.onRequestOpenSidebar,
     required this.child,
   });
 
   final bool isPlayer;
+  final BayinTokens tokens;
   final VoidCallback? onRequestOpenSidebar;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = Theme.of(context).extension<BayinTokens>()!;
-    return Material(
+    return Container(
       color: isPlayer ? tokens.playerBg : tokens.windowBg,
       child: Stack(
         children: [
@@ -160,13 +162,8 @@ class _BodySurface extends StatelessWidget {
               left: 8,
               child: SafeArea(
                 child: IconButton(
-                  tooltip: 'Open sidebar',
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.08),
-                    foregroundColor: Theme.of(context).colorScheme.onSurface,
-                  ),
-                  icon: const Icon(Icons.menu_rounded),
                   onPressed: onRequestOpenSidebar,
+                  icon: Icon(PhosphorIcons.list()),
                 ),
               ),
             ),

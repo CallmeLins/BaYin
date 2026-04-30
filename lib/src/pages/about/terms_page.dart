@@ -1,20 +1,21 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
+import '../../providers/providers.dart';
 import '../../widgets/widgets.dart';
 
-class TermsPage extends StatelessWidget {
+class TermsPage extends ConsumerWidget {
   const TermsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Terms'),
           left: IconButton(
-            tooltip: 'Back',
             onPressed: () {
               if (context.canPop()) {
                 context.pop();
@@ -55,7 +56,7 @@ class TermsPage extends StatelessWidget {
   }
 }
 
-class _TermCard extends StatelessWidget {
+class _TermCard extends ConsumerWidget {
   const _TermCard({
     required this.title,
     required this.content,
@@ -65,8 +66,8 @@ class _TermCard extends StatelessWidget {
   final String content;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
     return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -79,7 +80,7 @@ class _TermCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             content,
-            style: TextStyle(color: scheme.onSurfaceVariant),
+            style: TextStyle(color: tokens.textSecondary),
           ),
         ],
       ),

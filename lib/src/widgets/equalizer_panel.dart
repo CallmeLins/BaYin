@@ -1,7 +1,11 @@
-import 'package:flutter/material.dart';
+import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-class EqualizerPanel extends StatelessWidget {
+import '../providers/providers.dart';
+import '../theme/bayin_tokens.dart';
+
+class EqualizerPanel extends ConsumerWidget {
   const EqualizerPanel({
     super.key,
     required this.enabled,
@@ -14,16 +18,8 @@ class EqualizerPanel extends StatelessWidget {
   });
 
   static const List<String> bands = [
-    '31Hz',
-    '62Hz',
-    '125Hz',
-    '250Hz',
-    '500Hz',
-    '1kHz',
-    '2kHz',
-    '4kHz',
-    '8kHz',
-    '16kHz',
+    '31Hz', '62Hz', '125Hz', '250Hz', '500Hz',
+    '1kHz', '2kHz', '4kHz', '8kHz', '16kHz',
   ];
 
   final bool enabled;
@@ -35,19 +31,38 @@ class EqualizerPanel extends StatelessWidget {
   final VoidCallback onReset;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = ref.watch(bayinTokensProvider);
+    final surfaceColor = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+
     return Column(
       children: [
         Container(
+          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            color: surfaceColor,
             borderRadius: BorderRadius.circular(12),
           ),
-          child: SwitchListTile.adaptive(
-            value: enabled,
-            onChanged: onEnabledChanged,
-            title: const Text('Enable equalizer'),
-            subtitle: const Text('Apply EQ gains during playback'),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Enable equalizer', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    Text('Apply EQ gains during playback',
+                        style: TextStyle(fontSize: 12, color: tokens.textSecondary)),
+                  ],
+                ),
+              ),
+              ToggleSwitch(
+                checked: enabled,
+                onChanged: onEnabledChanged,
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 10),
@@ -55,11 +70,12 @@ class EqualizerPanel extends StatelessWidget {
           selected: selectedPreset,
           onChanged: onPresetChanged,
           onReset: onReset,
+          tokens: tokens,
         ),
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh,
+            color: surfaceColor,
             borderRadius: BorderRadius.circular(12),
           ),
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
@@ -70,6 +86,7 @@ class EqualizerPanel extends StatelessWidget {
                   label: bands[i],
                   value: gains[i],
                   onChanged: (value) => onBandGainChanged(i, value),
+                  tokens: tokens,
                 ),
             ],
           ),
@@ -84,17 +101,23 @@ class _PresetRow extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     required this.onReset,
+    required this.tokens,
   });
 
   final String selected;
   final ValueChanged<String> onChanged;
   final VoidCallback onReset;
+  final BayinTokens tokens;
 
   @override
   Widget build(BuildContext context) {
+    final surfaceColor = tokens.isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.04);
+
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHigh,
+        color: surfaceColor,
         borderRadius: BorderRadius.circular(12),
       ),
       padding: const EdgeInsets.all(10),
@@ -115,9 +138,8 @@ class _PresetRow extends StatelessWidget {
             ),
           ),
           IconButton(
-            icon: Icon(PhosphorIcons.arrowCounterClockwise()),
-            tooltip: 'Reset',
             onPressed: onReset,
+            icon: Icon(PhosphorIcons.arrowCounterClockwise()),
           ),
         ],
       ),
@@ -130,10 +152,20 @@ class _PresetRow extends StatelessWidget {
     String selected,
     ValueChanged<String> onChanged,
   ) {
-    return ChoiceChip(
-      label: Text(label),
-      selected: selected == id,
-      onSelected: (_) => onChanged(id),
+    final active = selected == id;
+    final isDark = tokens.isDark;
+    return GestureDetector(
+      onTap: () => onChanged(id),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active
+              ? (isDark ? Colors.white.withValues(alpha: 0.16) : Colors.black.withValues(alpha: 0.10))
+              : (isDark ? Colors.white.withValues(alpha: 0.06) : Colors.black.withValues(alpha: 0.04)),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 13)),
+      ),
     );
   }
 }
@@ -143,11 +175,13 @@ class _BandRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    required this.tokens,
   });
 
   final String label;
   final double value;
   final Future<void> Function(double) onChanged;
+  final BayinTokens tokens;
 
   @override
   Widget build(BuildContext context) {
@@ -174,7 +208,7 @@ class _BandRow extends StatelessWidget {
             textAlign: TextAlign.right,
             style: TextStyle(
               fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              color: tokens.textSecondary,
             ),
           ),
         ),
