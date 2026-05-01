@@ -83,9 +83,15 @@ class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Current channel: stable', style: TextStyle(fontSize: 14)),
-                        const SizedBox(height: 8),
-                        Text('Current app version: $_versionLabel', style: const TextStyle(fontSize: 14)),
+                        Text(
+                          'Current channel: stable',
+                          style: FlatTypography.bodySmall(brightness),
+                        ),
+                        const SizedBox(height: FlatSpacing.sm),
+                        Text(
+                          'Current app version: $_versionLabel',
+                          style: FlatTypography.bodySmall(brightness),
+                        ),
                       ],
                     ),
                   ),
@@ -97,12 +103,12 @@ class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
                   FilledButton.icon(
                     onPressed: _checking ? null : _checkUpdates,
                     icon: _checking
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 14,
                             height: 14,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: FlatColors.onPrimary(brightness),
                             ),
                           )
                         : Icon(PhosphorIcons.downloadSimple(), size: 18),
@@ -116,10 +122,7 @@ class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
                   padding: const EdgeInsets.symmetric(horizontal: FlatSpacing.md),
                   child: Text(
                     _status!,
-                    style: TextStyle(
-                      color: FlatColors.textSecondary(brightness),
-                      fontSize: 13,
-                    ),
+                    style: FlatTypography.caption(brightness),
                   ),
                 ),
               ],

@@ -129,7 +129,7 @@ class _SummaryCard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(FlatSpacing.md),
       decoration: BoxDecoration(
-        color: FlatColors.muted(brightness),
+        color: FlatColors.surfaceContainerHigh(brightness),
         borderRadius: BorderRadius.circular(FlatRadius.md),
       ),
       child: Wrap(

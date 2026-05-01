@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class CreatorsPage extends ConsumerWidget {
@@ -71,26 +71,26 @@ class _CreatorCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
     return BayinGlassCard(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(FlatSpacing.smPlus),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             name,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            style: FlatTypography.headingCompact(brightness),
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: FlatSpacing.xs),
           Text(
             role,
-            style: TextStyle(
-              fontSize: 12,
-              color: tokens.textSecondary,
-            ),
+            style: FlatTypography.caption(brightness),
           ),
-          const SizedBox(height: 8),
-          Text(description),
+          const SizedBox(height: FlatSpacing.sm),
+          Text(
+            description,
+            style: FlatTypography.bodySmall(brightness),
+          ),
         ],
       ),
     );

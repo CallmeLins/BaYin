@@ -51,7 +51,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
         : 0.0;
 
     return Container(
-      color: tokens.barBg.withValues(alpha: 0.86),
+      color: tokens.barBg,
       child: SizedBox(
         height: height,
         child: Stack(
@@ -134,11 +134,16 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
     PlayerControllerState player,
     PlayerController controller,
   ) {
+    final tokens = ref.read(bayinTokensProvider);
+    final brightness = tokens.isDark ? Brightness.dark : Brightness.light;
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.42),
+      barrierColor: FlatColors.stateLayer(
+        Brightness.light,
+        FlatStateIntensity.pressed,
+      ),
       builder: (_) {
         final queue = player.queue;
         return SafeArea(
@@ -146,33 +151,32 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
           child: Container(
             height: MediaQuery.sizeOf(context).height * 0.7,
             decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1D).withValues(alpha: 0.94),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(FlatRadius.lg * 2)),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              color: FlatColors.surfaceContainerHigh(brightness),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(FlatRadius.lg),
+              ),
             ),
             child: Column(
               children: [
-                const SizedBox(height: 10),
+                const SizedBox(height: FlatSpacing.smPlus - 2),
                 Container(
                   width: 44,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.24),
+                    color: FlatColors.textTertiary(brightness),
                     borderRadius: BorderRadius.circular(FlatRadius.circle),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: FlatSpacing.smPlus),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: FlatSpacing.md),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: FlatSpacing.md,
+                  ),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'Playing Next',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: FlatTypography.heading3(brightness),
                       ),
                       const Spacer(),
                       if (queue.isNotEmpty)
@@ -183,20 +187,25 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: FlatSpacing.xs + 2),
                 Expanded(
                   child: queue.isEmpty
                       ? Center(
                           child: Text(
                             'Queue is empty',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.62),
+                            style: FlatTypography.body(brightness).copyWith(
+                              color: FlatColors.textSecondary(brightness),
                             ),
                           ),
                         )
                       : ListView.builder(
                           itemCount: queue.length,
-                          padding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+                          padding: const EdgeInsets.fromLTRB(
+                            FlatSpacing.smPlus - 2,
+                            0,
+                            FlatSpacing.smPlus - 2,
+                            FlatSpacing.smPlus,
+                          ),
                           itemBuilder: (context, index) {
                             final item = queue[index];
                             final active = player.currentIndex == index;
@@ -208,17 +217,26 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                   unawaited(controller.jumpTo(index));
                                 },
                                 child: Container(
-                                  padding: const EdgeInsets.all(10),
+                                  padding: const EdgeInsets.all(
+                                    FlatSpacing.smPlus - 2,
+                                  ),
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(FlatRadius.md + 4),
+                                    borderRadius: BorderRadius.circular(
+                                      FlatRadius.md,
+                                    ),
                                     color: active
-                                        ? Colors.white.withValues(alpha: 0.10)
+                                        ? FlatColors.stateLayer(
+                                            brightness,
+                                            FlatStateIntensity.emphasized,
+                                          )
                                         : Colors.transparent,
                                   ),
                                   child: Row(
                                     children: [
                                       ClipRRect(
-                                        borderRadius: BorderRadius.circular(FlatRadius.md),
+                                        borderRadius: BorderRadius.circular(
+                                          FlatRadius.sm,
+                                        ),
                                         child: CoverArt(
                                           width: 42,
                                           height: 42,
@@ -227,19 +245,26 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                           size: CoverArtSize.small,
                                         ),
                                       ),
-                                      const SizedBox(width: 10),
+                                      const SizedBox(
+                                        width: FlatSpacing.smPlus - 2,
+                                      ),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
                                               item.title,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
+                                              style: FlatTypography.bodySmall(
+                                                brightness,
+                                              ).copyWith(
                                                 color: active
-                                                    ? FlatColors.primaryDark
-                                                    : Colors.white,
+                                                    ? FlatColors.primary(
+                                                        brightness,
+                                                      )
+                                                    : null,
                                                 fontWeight: FontWeight.w600,
                                               ),
                                             ),
@@ -248,20 +273,22 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                               item.artist,
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                color: Colors.white.withValues(alpha: 0.56),
-                                                fontSize: 12,
+                                              style: FlatTypography.caption(
+                                                brightness,
                                               ),
                                             ),
                                           ],
                                         ),
                                       ),
                                       IconButton(
-                                        onPressed: () =>
-                                            unawaited(controller.removeFromQueue(index)),
+                                        onPressed: () => unawaited(
+                                          controller.removeFromQueue(index),
+                                        ),
                                         icon: Icon(
                                           PhosphorIcons.x(),
-                                          color: Colors.white.withValues(alpha: 0.35),
+                                          color: FlatColors.textTertiary(
+                                            brightness,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -296,7 +323,10 @@ class _ProgressScrubBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final trackBg = FlatColors.overlayOnDark(brightness);
+    final trackBg = FlatColors.stateLayer(
+      brightness,
+      FlatStateIntensity.emphasized,
+    );
 
     double calc(Offset global, BuildContext ctx) {
       final box = ctx.findRenderObject() as RenderBox?;
@@ -358,6 +388,7 @@ class _SongSlotState extends State<_SongSlot> {
     final title = widget.song?.title ?? 'Not playing';
     final subtitle = widget.song?.artist ?? 'Select a song';
     final canExpand = widget.song != null;
+    final brightness = Theme.of(context).brightness;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -371,29 +402,32 @@ class _SongSlotState extends State<_SongSlot> {
             child: Stack(
               children: [
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(FlatRadius.sm),
                   child: CoverArt(
                     width: 48,
                     height: 48,
                     coverHash: widget.song?.coverHash,
                     streamInfo: widget.song?.streamInfo,
                     size: CoverArtSize.small,
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(FlatRadius.sm),
                     placeholderIcon: PhosphorIcons.musicNotes(),
                     placeholderIconSize: 18,
                   ),
                 ),
                 if (_hovering && canExpand)
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(FlatRadius.sm),
                     child: Container(
                       width: 48,
                       height: 48,
-                      color: Colors.black.withValues(alpha: 0.45),
+                      color: FlatColors.stateLayer(
+                        Brightness.light,
+                        FlatStateIntensity.pressed,
+                      ),
                       child: Center(
                         child: Icon(
                           PhosphorIcons.arrowsOut(),
-                          color: Colors.white,
+                          color: FlatColors.foregroundDark,
                           size: 20,
                         ),
                       ),
@@ -403,7 +437,7 @@ class _SongSlotState extends State<_SongSlot> {
             ),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: FlatSpacing.smPlus - 2),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -413,8 +447,7 @@ class _SongSlotState extends State<_SongSlot> {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 14,
+                style: FlatTypography.bodySmall(brightness).copyWith(
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -423,10 +456,7 @@ class _SongSlotState extends State<_SongSlot> {
                 subtitle,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: widget.tokens.textSecondary,
-                ),
+                style: FlatTypography.caption(brightness),
               ),
             ],
           ),
@@ -457,10 +487,9 @@ class _TransportCluster extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final playBg = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.white;
-    final playFg = isDark ? Colors.white : Colors.black;
+    // Spotify-flat: high-contrast play button (inverse of foreground).
+    final playBg = isDark ? Colors.white : Colors.black;
+    final playFg = isDark ? Colors.black : Colors.white;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -475,7 +504,7 @@ class _TransportCluster extends StatelessWidget {
           height: 44,
           decoration: BoxDecoration(
             color: playBg,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(FlatRadius.md),
           ),
           child: IconButton(
             onPressed: canControl ? onToggle : null,
@@ -522,6 +551,7 @@ class _RightActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final muted = volume <= 0.001;
+    final brightness = Theme.of(context).brightness;
 
     void setFromGlobal(Offset global) {
       final ctx = volumeKey.currentContext;
@@ -548,10 +578,11 @@ class _RightActions extends StatelessWidget {
                 Container(
                   height: 4,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : Colors.black.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(999),
+                    color: FlatColors.stateLayer(
+                      brightness,
+                      FlatStateIntensity.emphasized,
+                    ),
+                    borderRadius: BorderRadius.circular(FlatRadius.circle),
                   ),
                 ),
                 FractionallySizedBox(
@@ -559,10 +590,8 @@ class _RightActions extends StatelessWidget {
                   child: Container(
                     height: 4,
                     decoration: BoxDecoration(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.58)
-                          : Colors.black.withValues(alpha: 0.45),
-                      borderRadius: BorderRadius.circular(999),
+                      color: FlatColors.foreground(brightness),
+                      borderRadius: BorderRadius.circular(FlatRadius.circle),
                     ),
                   ),
                 ),
@@ -581,7 +610,7 @@ class _RightActions extends StatelessWidget {
           onPressed: onQueue,
           icon: Icon(
             PhosphorIcons.queue(),
-            color: queueCount > 0 ? FlatColors.primary(Theme.of(context).brightness) : null,
+            color: queueCount > 0 ? FlatColors.primary(brightness) : null,
           ),
         ),
         if (!isCompact) ...[

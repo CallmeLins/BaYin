@@ -11,14 +11,12 @@ class BayinPageHeader extends ConsumerWidget {
     required this.title,
     this.left,
     this.right,
-    this.layout = BayinPageHeaderLayout.centered,
     this.margin = const EdgeInsets.only(bottom: FlatSpacing.sm),
   });
 
   final Widget title;
   final Widget? left;
   final Widget? right;
-  final BayinPageHeaderLayout layout;
   final EdgeInsetsGeometry margin;
 
   @override
@@ -27,14 +25,14 @@ class BayinPageHeader extends ConsumerWidget {
     final isCompact = responsive.breakpoint == Breakpoint.compact;
     final brightness = Theme.of(context).brightness;
 
-    final hPad = isCompact ? FlatSpacing.sm + 4 : FlatSpacing.sm + 4;
-    final vPad = isCompact ? FlatSpacing.sm + 6 : FlatSpacing.sm;
+    final hPad = FlatSpacing.smPlus;
+    final vPad = isCompact ? FlatSpacing.smPlus + 2 : FlatSpacing.sm;
 
     return Container(
       margin: margin,
       padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad),
       decoration: BoxDecoration(
-        color: FlatColors.muted(brightness),
+        color: FlatColors.surfaceContainer(brightness),
         border: Border(
           bottom: BorderSide(
             color: FlatColors.border(brightness),
@@ -52,9 +50,7 @@ class BayinPageHeader extends ConsumerWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: DefaultTextStyle(
-                  style: FlatTypography.heading3(brightness).copyWith(
-                    fontSize: FlatSpacing.md,
-                  ),
+                  style: FlatTypography.headingCompact(brightness),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
                   child: title,
@@ -68,9 +64,4 @@ class BayinPageHeader extends ConsumerWidget {
       ),
     );
   }
-}
-
-enum BayinPageHeaderLayout {
-  centered,
-  fluid,
 }

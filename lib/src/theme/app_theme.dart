@@ -64,6 +64,8 @@ final class AppTheme {
     final onPrimary = FlatColors.onPrimary(brightness);
     final secondary = FlatColors.secondary(brightness);
     final muted = FlatColors.muted(brightness);
+    final surfaceContainer = FlatColors.surfaceContainer(brightness);
+    final surfaceContainerHigh = FlatColors.surfaceContainerHigh(brightness);
     final border = FlatColors.border(brightness);
     final error = FlatColors.error(brightness);
 
@@ -120,7 +122,7 @@ final class AppTheme {
 
       // ── AppBar (flat) ──────────────────────────────────────────────
       appBarTheme: AppBarTheme(
-        backgroundColor: muted,
+        backgroundColor: surfaceContainer,
         foregroundColor: fg,
         elevation: 0,
         shadowColor: Colors.transparent,
@@ -192,7 +194,10 @@ final class AppTheme {
       iconButtonTheme: IconButtonThemeData(
         style: IconButton.styleFrom(
           foregroundColor: fg,
-          hoverColor: FlatColors.overlayOnMuted(brightness),
+          hoverColor: FlatColors.stateLayer(
+            brightness,
+            FlatStateIntensity.standard,
+          ),
           minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(FlatRadius.md),
@@ -202,7 +207,7 @@ final class AppTheme {
 
       // ── Cards — no elevation ──────────────────────────────────────
       cardTheme: CardThemeData(
-        color: bg,
+        color: surfaceContainerHigh,
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -215,7 +220,7 @@ final class AppTheme {
       // ── Inputs — flat background, border on focus ─────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: muted,
+        fillColor: surfaceContainerHigh,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: FlatSpacing.md,
           vertical: FlatSpacing.sm + 4,
@@ -307,7 +312,7 @@ final class AppTheme {
 
       // ── Bottom sheets — flat ──────────────────────────────────────
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: bg,
+        backgroundColor: surfaceContainerHigh,
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
@@ -320,7 +325,7 @@ final class AppTheme {
 
       // ── Dialog — flat ─────────────────────────────────────────────
       dialogTheme: DialogThemeData(
-        backgroundColor: bg,
+        backgroundColor: surfaceContainerHigh,
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,

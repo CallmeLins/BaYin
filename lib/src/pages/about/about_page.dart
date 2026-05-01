@@ -104,7 +104,7 @@ class _IntroCard extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(FlatSpacing.md),
       decoration: BoxDecoration(
-        color: FlatColors.muted(brightness),
+        color: FlatColors.surfaceContainerHigh(brightness),
         borderRadius: BorderRadius.circular(FlatRadius.md),
       ),
       child: Column(
@@ -112,16 +112,12 @@ class _IntroCard extends ConsumerWidget {
         children: [
           Text(
             'BaYin 0.1.0',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: FlatColors.foreground(brightness),
-            ),
+            style: FlatTypography.headingCompact(brightness),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: FlatSpacing.xs + 2),
           Text(
             description,
-            style: TextStyle(
+            style: FlatTypography.bodySmall(brightness).copyWith(
               color: FlatColors.textSecondary(brightness),
             ),
           ),

@@ -32,14 +32,15 @@ abstract final class FlatColors {
   static const Color onAccentLight = Color(0xFF111827);
   static const Color mutedLight = Color(0xFFF3F4F6);
   static const Color mutedHoverLight = Color(0xFFE5E7EB);
-  static const Color surfaceAltLight = Color(0xFFF9FAFB);
   static const Color borderLight = Color(0xFFE5E7EB);
   static const Color errorLight = Color(0xFFEF4444);
   static const Color onErrorLight = Color(0xFFFFFFFF);
 
   // ── Dark palette ───────────────────────────────────────────────────────
 
-  static const Color backgroundDark = Color(0xFF0A0B0F);
+  // backgroundDark slightly raised from 0xFF0A0B0F to give surfaceContainer/-High
+  // tiers room to step lighter without losing depth on OLED displays.
+  static const Color backgroundDark = Color(0xFF0F1014);
   static const Color foregroundDark = Color(0xFFF3F4F6);
   static const Color primaryDark = Color(0xFF60A5FA);
   static const Color primaryHoverDark = Color(0xFF3B82F6);
@@ -52,10 +53,25 @@ abstract final class FlatColors {
   static const Color onAccentDark = Color(0xFF111827);
   static const Color mutedDark = Color(0xFF1A1D24);
   static const Color mutedHoverDark = Color(0xFF2D3139);
-  static const Color surfaceAltDark = Color(0xFF13151A);
   static const Color borderDark = Color(0xFF2D3139);
   static const Color errorDark = Color(0xFFF87171);
   static const Color onErrorDark = Color(0xFF0A0B0F);
+
+  // ── Surface tier (Spotify-flat) — three solid tones for hierarchy ───────
+  //
+  // surface              = window background (deepest)
+  // surfaceContainer     = sidebar / titlebar / chrome (one tier up)
+  // surfaceContainerHigh = player bar / cards / popover / input fill (two up)
+  //
+  // Hierarchy through tone, not shadow/blur. This is the Spotify-flat core.
+
+  static const Color surfaceLight = backgroundLight;
+  static const Color surfaceContainerLight = Color(0xFFF4F5F7);
+  static const Color surfaceContainerHighLight = Color(0xFFECEDEF);
+
+  static const Color surfaceDark = backgroundDark;
+  static const Color surfaceContainerDark = Color(0xFF181A1F);
+  static const Color surfaceContainerHighDark = Color(0xFF22252B);
 
   // ── Brightness-aware accessors ─────────────────────────────────────────
 
@@ -85,14 +101,37 @@ abstract final class FlatColors {
       b == Brightness.light ? mutedLight : mutedDark;
   static Color mutedHover(Brightness b) =>
       b == Brightness.light ? mutedHoverLight : mutedHoverDark;
-  static Color surfaceAlt(Brightness b) =>
-      b == Brightness.light ? surfaceAltLight : surfaceAltDark;
   static Color border(Brightness b) =>
       b == Brightness.light ? borderLight : borderDark;
   static Color error(Brightness b) =>
       b == Brightness.light ? errorLight : errorDark;
   static Color onError(Brightness b) =>
       b == Brightness.light ? onErrorLight : onErrorDark;
+
+  // ── Surface tier accessors ────────────────────────────────────────────
+
+  static Color surface(Brightness b) =>
+      b == Brightness.light ? surfaceLight : surfaceDark;
+  static Color surfaceContainer(Brightness b) =>
+      b == Brightness.light ? surfaceContainerLight : surfaceContainerDark;
+  static Color surfaceContainerHigh(Brightness b) => b == Brightness.light
+      ? surfaceContainerHighLight
+      : surfaceContainerHighDark;
+
+  /// Unified state-layer overlay for hover / active / pressed states.
+  /// Use over any surface to express interaction without bespoke alpha values.
+  static Color stateLayer(Brightness b, FlatStateIntensity intensity) {
+    final base = b == Brightness.light
+        ? const Color(0xFF000000)
+        : const Color(0xFFFFFFFF);
+    final alpha = switch (intensity) {
+      FlatStateIntensity.subtle => 0.04,
+      FlatStateIntensity.standard => 0.08,
+      FlatStateIntensity.emphasized => 0.12,
+      FlatStateIntensity.pressed => 0.16,
+    };
+    return base.withValues(alpha: alpha);
+  }
 
   /// Text secondary (muted) color for a given brightness.
   static Color textSecondary(Brightness b) =>
@@ -105,17 +144,6 @@ abstract final class FlatColors {
       b == Brightness.light
           ? const Color(0x66000000) // 40% black
           : const Color(0x66FFFFFF); // 40% white
-
-  /// Subtle overlay for hover/pressed states on colored backgrounds.
-  static Color overlayOnDark(Brightness b) =>
-      b == Brightness.light
-          ? const Color(0x0A000000) // ~4% black
-          : const Color(0x0AFFFFFF); // ~4% white
-
-  static Color overlayOnMuted(Brightness b) =>
-      b == Brightness.light
-          ? const Color(0x0F000000) // ~6% black
-          : const Color(0x0FFFFFFF); // ~6% white
 }
 
 // =============================================================================
@@ -159,6 +187,18 @@ abstract final class FlatTypography {
         fontSize: 20,
         fontWeight: FontWeight.w600,
         letterSpacing: -0.01 * 20,
+        height: 1.25,
+        color: FlatColors.foreground(brightness),
+      );
+
+  /// Compact heading — 16sp, weight 700, tight tracking.
+  /// For inline page headers and section titles where heading3 (20sp) is too
+  /// large but body text feels too quiet.
+  static TextStyle headingCompact(Brightness brightness) => TextStyle(
+        fontFamily: _fontFamily,
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.01 * 16,
         height: 1.25,
         color: FlatColors.foreground(brightness),
       );
@@ -221,7 +261,16 @@ abstract final class FlatSpacing {
 
   static const double xs = 4;
   static const double sm = 8;
+
+  /// 12dp — between sm (8) and md (16). Use for row/list-item internal gaps
+  /// instead of `sm + 4` patches.
+  static const double smPlus = 12;
+
   static const double md = 16;
+
+  /// 20dp — between md (16) and lg (24). Use for card padding / section gaps.
+  static const double mdPlus = 20;
+
   static const double lg = 24;
   static const double xl = 32;
   static const double xxl = 48;
@@ -343,6 +392,21 @@ abstract final class FlatBorder {
 
   /// Outline buttons, selected cards.
   static const double emphasis = 4.0;
+}
+
+/// Intensity tiers for [FlatColors.stateLayer]. Maps to alpha 4/8/12/16%.
+enum FlatStateIntensity {
+  /// 4% — hover on quiet/secondary surfaces.
+  subtle,
+
+  /// 8% — hover on chrome / standard interactive surfaces.
+  standard,
+
+  /// 12% — active state, selected indicators.
+  emphasized,
+
+  /// 16% — pressed / dragging.
+  pressed,
 }
 
 // =============================================================================

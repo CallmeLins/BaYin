@@ -7,6 +7,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
 import '../../rust/rust_api.dart';
+import '../../theme/design_tokens.dart';
 
 class FolderBrowser extends ConsumerStatefulWidget {
   const FolderBrowser({
@@ -59,11 +60,17 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
   @override
   Widget build(BuildContext context) {
     final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
     return SafeArea(
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+            padding: const EdgeInsets.fromLTRB(
+              FlatSpacing.smPlus,
+              FlatSpacing.sm,
+              FlatSpacing.smPlus,
+              FlatSpacing.sm,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -76,7 +83,7 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
                     onSubmitted: (value) => _load(value),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: FlatSpacing.sm),
                 FilledButton(
                   onPressed: () => _load(_pathController.text.trim()),
                   child: Icon(PhosphorIcons.arrowRight()),
@@ -85,7 +92,12 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+            padding: const EdgeInsets.fromLTRB(
+              FlatSpacing.smPlus,
+              0,
+              FlatSpacing.smPlus,
+              FlatSpacing.sm,
+            ),
             child: Row(
               children: [
                 OutlinedButton(
@@ -94,21 +106,23 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(PhosphorIcons.arrowUp()),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: FlatSpacing.xs),
                       const Text('Up'),
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: FlatSpacing.sm),
                 Expanded(
                   child: Text(
                     _currentPath,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: tokens.textSecondary),
+                    style: FlatTypography.caption(brightness).copyWith(
+                      color: tokens.textSecondary,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: FlatSpacing.sm),
                 FilledButton(
                   onPressed: () => Navigator.of(context).pop(_currentPath),
                   child: const Text('Select'),
@@ -119,10 +133,17 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
           if (_isLoading) const LinearProgressIndicator(),
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              padding: const EdgeInsets.fromLTRB(
+                FlatSpacing.smPlus,
+                FlatSpacing.sm,
+                FlatSpacing.smPlus,
+                FlatSpacing.sm,
+              ),
               child: Text(
                 _error!,
-                style: TextStyle(color: Colors.red),
+                style: FlatTypography.bodySmall(brightness).copyWith(
+                  color: FlatColors.error(brightness),
+                ),
               ),
             ),
           Expanded(
@@ -133,21 +154,27 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
                 return GestureDetector(
                   onTap: () => _load(entry.path),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: FlatSpacing.smPlus,
+                      vertical: FlatSpacing.sm,
+                    ),
                     child: Row(
                       children: [
                         Icon(PhosphorIcons.folder()),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: FlatSpacing.smPlus),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(entry.name),
+                              Text(
+                                entry.name,
+                                style: FlatTypography.bodySmall(brightness),
+                              ),
                               Text(
                                 entry.path,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12),
+                                style: FlatTypography.caption(brightness),
                               ),
                             ],
                           ),

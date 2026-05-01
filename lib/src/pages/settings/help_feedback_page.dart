@@ -129,13 +129,10 @@ class _InfoCard extends ConsumerWidget {
             children: [
               for (final line in children)
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
+                  padding: const EdgeInsets.only(bottom: FlatSpacing.xs + 2),
                   child: Text(
                     line,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: FlatColors.foreground(brightness),
-                    ),
+                    style: FlatTypography.bodySmall(brightness),
                   ),
                 ),
             ],

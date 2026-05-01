@@ -34,13 +34,13 @@ class Sidebar extends ConsumerWidget {
 
     final useMobileSidebarStyle = isOverlay && !layout.isTablet;
     final isDark = tokens.isDark;
-    final sectionBg = FlatColors.muted(brightness);
+    final sectionBg = FlatColors.surfaceContainerHigh(brightness);
 
     Widget sectionWrap({required Widget child}) {
       if (!useMobileSidebarStyle) return child;
       return Container(
-        margin: const EdgeInsets.only(bottom: FlatSpacing.sm + 4),
-        padding: const EdgeInsets.all(FlatSpacing.sm + 2),
+        margin: const EdgeInsets.only(bottom: FlatSpacing.smPlus),
+        padding: const EdgeInsets.all(FlatSpacing.smPlus - 2),
         decoration: BoxDecoration(
           color: sectionBg,
           borderRadius: BorderRadius.circular(FlatRadius.md),
@@ -58,10 +58,10 @@ class Sidebar extends ConsumerWidget {
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(
-                FlatSpacing.sm + 4,
-                useMobileSidebarStyle ? FlatSpacing.sm + 4 : FlatSpacing.sm,
-                FlatSpacing.sm + 4,
-                useMobileSidebarStyle ? FlatSpacing.sm : FlatSpacing.sm - 2,
+                FlatSpacing.smPlus,
+                useMobileSidebarStyle ? FlatSpacing.smPlus : FlatSpacing.sm,
+                FlatSpacing.smPlus,
+                useMobileSidebarStyle ? FlatSpacing.sm : FlatSpacing.xs + 2,
               ),
               child: _TopActions(
                 mobileCardStyle: useMobileSidebarStyle,
@@ -93,7 +93,7 @@ class Sidebar extends ConsumerWidget {
             ),
             if (!useMobileSidebarStyle)
               Padding(
-                padding: const EdgeInsets.fromLTRB(FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.sm + 4),
+                padding: const EdgeInsets.fromLTRB(FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.smPlus),
                 child: Divider(
                   color: tokens.separatorSoftColor,
                   height: FlatBorder.structural,
@@ -220,7 +220,7 @@ class _TopActions extends StatelessWidget {
     }
 
     final brightness = Theme.of(context).brightness;
-    final cardBg = FlatColors.muted(brightness);
+    final cardBg = FlatColors.surfaceContainerHigh(brightness);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(FlatSpacing.sm),
@@ -265,7 +265,7 @@ class _ActionButtonState extends State<_ActionButton> {
         : FlatColors.textSecondary(brightness);
     final hoverBg = widget.danger
         ? FlatColors.error(brightness).withValues(alpha: 0.10)
-        : FlatColors.overlayOnMuted(brightness);
+        : FlatColors.stateLayer(brightness, FlatStateIntensity.standard);
     final radius = widget.mobileCardStyle ? FlatRadius.sm + 2 : FlatRadius.md;
 
     return Tooltip(
@@ -393,13 +393,10 @@ class _NavListTileState extends State<_NavListTile> {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final isDark = widget.isDark;
     final isActive = widget.isActive;
     final primary = FlatColors.primary(brightness);
-    final hoverBg = FlatColors.overlayOnDark(brightness);
-    final activeBg = isDark
-        ? Colors.white.withValues(alpha: 0.10)
-        : FlatColors.muted(brightness);
+    final hoverBg = FlatColors.stateLayer(brightness, FlatStateIntensity.subtle);
+    final activeBg = FlatColors.stateLayer(brightness, FlatStateIntensity.emphasized);
     final normalFg = FlatColors.textSecondary(brightness);
     final activeFg = FlatColors.foreground(brightness);
     final iconColor = isActive
@@ -428,9 +425,9 @@ class _NavListTileState extends State<_NavListTile> {
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: FlatSpacing.sm + 4,
+                    horizontal: FlatSpacing.smPlus,
                     vertical: widget.isMobileStyle
-                        ? FlatSpacing.sm + 2
+                        ? FlatSpacing.smPlus - 2
                         : FlatSpacing.sm,
                   ),
                   child: Row(
@@ -440,7 +437,7 @@ class _NavListTileState extends State<_NavListTile> {
                         size: widget.isMobileStyle ? 20 : 18,
                         color: iconColor,
                       ),
-                      const SizedBox(width: FlatSpacing.sm + 4),
+                      const SizedBox(width: FlatSpacing.smPlus),
                       Expanded(
                         child: Text(
                           widget.label,
@@ -462,10 +459,10 @@ class _NavListTileState extends State<_NavListTile> {
                   Positioned(
                     left: 0,
                     top: widget.isMobileStyle
-                        ? FlatSpacing.sm + 2
+                        ? FlatSpacing.smPlus - 2
                         : FlatSpacing.sm,
                     bottom: widget.isMobileStyle
-                        ? FlatSpacing.sm + 2
+                        ? FlatSpacing.smPlus - 2
                         : FlatSpacing.sm,
                     child: Container(
                       width: FlatBorder.structural + 1,

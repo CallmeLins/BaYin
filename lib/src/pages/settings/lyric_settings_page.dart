@@ -86,23 +86,25 @@ class LyricSettingsPage extends ConsumerWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Lyrics position',
-                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                        style: FlatTypography.bodySmall(brightness).copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       SegmentedButton<String>(
                         segments: const [
                           ButtonSegment<String>(
                             value: 'left',
-                            label: Text('Left', style: TextStyle(fontSize: 13)),
+                            label: Text('Left'),
                           ),
                           ButtonSegment<String>(
                             value: 'center',
-                            label: Text('Center', style: TextStyle(fontSize: 13)),
+                            label: Text('Center'),
                           ),
                           ButtonSegment<String>(
                             value: 'right',
-                            label: Text('Right', style: TextStyle(fontSize: 13)),
+                            label: Text('Right'),
                           ),
                         ],
                         selected: {app.lyricsPosition},
@@ -232,14 +234,13 @@ class _SliderTile extends ConsumerWidget {
             children: [
               Text(
                 title,
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                style: FlatTypography.bodySmall(brightness).copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
               ),
               Text(
                 label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: FlatColors.textSecondary(brightness),
-                ),
+                style: FlatTypography.caption(brightness),
               ),
             ],
           ),
@@ -289,7 +290,9 @@ class _SwitchTileCard extends ConsumerWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                    style: FlatTypography.bodySmall(brightness).copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(

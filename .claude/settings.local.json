@@ -6,7 +6,9 @@
       "Bash(flutter analyze *)",
       "WebFetch(domain:pub.dev)",
       "WebSearch",
-      "Bash(flutter pub *)"
+      "Bash(flutter pub *)",
+      "Read(//d/Learn/RustLearn/src-ui/**)",
+      "Read(//d/Learn/RustLearn/src-ui/src/**)"
     ]
   }
 }

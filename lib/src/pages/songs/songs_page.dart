@@ -80,9 +80,9 @@ class _SongsPageState extends ConsumerState<SongsPage> {
               child: Container(
                 margin: EdgeInsets.zero,
                 decoration: BoxDecoration(
-                  color: tokens.isDark
-                      ? FlatColors.surfaceAltDark
-                      : FlatColors.mutedLight,
+                  color: FlatColors.surfaceContainer(
+                    tokens.isDark ? Brightness.dark : Brightness.light,
+                  ),
                   borderRadius: BorderRadius.circular(FlatRadius.md),
                   border: Border.all(
                     color: tokens.isDark

@@ -8,6 +8,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../theme/bayin_tokens.dart';
+import '../../theme/design_tokens.dart';
 import '../../utils/info_bar_helper.dart';
 import '../../rust/rust_api.dart';
 import '../../services/file_watcher_service.dart';
@@ -64,11 +65,10 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
     final scanner = ref.watch(scannerProvider);
     final config = ref.watch(scanConfigProvider);
     final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
     _applyConfigOnce(config);
 
-    final surfaceBg = tokens.isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.04);
+    final surfaceBg = FlatColors.surfaceContainerHigh(brightness);
 
     return Column(
       children: [
@@ -77,7 +77,12 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(
+              FlatSpacing.smPlus,
+              0,
+              FlatSpacing.smPlus,
+              FlatSpacing.smPlus - 2,
+            ),
             children: [
               const SizedBox(height: 2),
               _DirectoriesCard(
@@ -89,7 +94,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
                 onBrowse: _browseFolder,
                 onRemove: _removeDirectory,
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: FlatSpacing.smPlus - 2),
               _ScanOptionsCard(
                 skipShort: _skipShort,
                 minDuration: _minDuration,
@@ -97,7 +102,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
                 onSkipShortChanged: (value) => setState(() => _skipShort = value),
                 onMinDurationChanged: (value) => setState(() => _minDuration = value),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: FlatSpacing.smPlus - 2),
               _ActionCard(
                 scanDisabled: scanner.isLoading || _directories.isEmpty,
                 backfillDisabled: scanner.isLoading,
@@ -108,10 +113,10 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
                 onBackfillCovers: _backfillCovers,
               ),
               if (scanner.isLoading) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: FlatSpacing.smPlus - 2),
                 const LinearProgressIndicator(),
               ],
-              const SizedBox(height: 10),
+              const SizedBox(height: FlatSpacing.smPlus - 2),
               _ResultCard(
                 scannedCount: scanner.results.length,
                 directories: scanner.directories,
@@ -126,7 +131,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
                 lastWatchEventKind: _lastWatchEventKind,
               ),
               if (scanner.results.isNotEmpty) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: FlatSpacing.smPlus - 2),
                 _PreviewSongsCard(scanner.results, surfaceBg: surfaceBg, tokens: tokens),
               ],
             ],
@@ -276,17 +281,23 @@ class _DirectoriesCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(FlatSpacing.smPlus),
       decoration: BoxDecoration(
         color: surfaceBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Folders', style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 8),
+          Text(
+            'Folders',
+            style: FlatTypography.bodySmall(brightness).copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: FlatSpacing.sm),
           Row(
             children: [
               Expanded(
@@ -299,26 +310,28 @@ class _DirectoriesCard extends StatelessWidget {
                   onSubmitted: (value) => onAddTyped(),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: FlatSpacing.sm),
               IconButton(
                 onPressed: onAddTyped,
                 icon: Icon(PhosphorIcons.plus()),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: FlatSpacing.sm),
               IconButton(
                 onPressed: onBrowse,
                 icon: Icon(PhosphorIcons.folderOpen()),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: FlatSpacing.sm),
           if (directories.isEmpty)
-            Text('No folders selected yet.',
-                style: TextStyle(fontSize: 12, color: tokens.textSecondary))
+            Text(
+              'No folders selected yet.',
+              style: FlatTypography.caption(brightness),
+            )
           else
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
+              spacing: FlatSpacing.sm,
+              runSpacing: FlatSpacing.sm,
               children: [
                 for (final path in directories)
                   _PathChip(path: path, onRemove: () => onRemove(path)),
@@ -337,19 +350,27 @@ class _PathChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.only(left: 10, right: 4, top: 6, bottom: 6),
+      padding: const EdgeInsets.only(
+        left: FlatSpacing.smPlus - 2,
+        right: FlatSpacing.xs,
+        top: FlatSpacing.xs + 2,
+        bottom: FlatSpacing.xs + 2,
+      ),
       decoration: BoxDecoration(
-        color: const Color(0x0A000000),
-        borderRadius: BorderRadius.circular(999),
+        color: FlatColors.stateLayer(brightness, FlatStateIntensity.standard),
+        borderRadius: BorderRadius.circular(FlatRadius.circle),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(path,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13)),
-          const SizedBox(width: 4),
+          Text(
+            path,
+            overflow: TextOverflow.ellipsis,
+            style: FlatTypography.bodySmall(brightness),
+          ),
+          const SizedBox(width: FlatSpacing.xs),
           GestureDetector(
             onTap: onRemove,
             child: Icon(PhosphorIcons.x(), size: 16),
@@ -377,11 +398,17 @@ class _ScanOptionsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+      padding: const EdgeInsets.fromLTRB(
+        FlatSpacing.smPlus,
+        FlatSpacing.sm,
+        FlatSpacing.smPlus,
+        FlatSpacing.smPlus - 2,
+      ),
       decoration: BoxDecoration(
         color: surfaceBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,19 +419,29 @@ class _ScanOptionsCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Skip short tracks',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    const Text('Ignore tracks shorter than the minimum duration.',
-                        style: TextStyle(fontSize: 12)),
+                    Text(
+                      'Skip short tracks',
+                      style: FlatTypography.bodySmall(brightness).copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      'Ignore tracks shorter than the minimum duration.',
+                      style: FlatTypography.caption(brightness),
+                    ),
                   ],
                 ),
               ),
               Switch(value: skipShort, onChanged: onSkipShortChanged),
             ],
           ),
-          const SizedBox(height: 6),
-          Text('Minimum duration: ${minDuration.round()}s',
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          const SizedBox(height: FlatSpacing.xs + 2),
+          Text(
+            'Minimum duration: ${minDuration.round()}s',
+            style: FlatTypography.bodySmall(brightness).copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           Slider(
             value: minDuration.clamp(5, 300),
             min: 5,
@@ -441,10 +478,10 @@ class _ActionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(FlatSpacing.smPlus),
       decoration: BoxDecoration(
         color: surfaceBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.lg),
       ),
       child: Column(
         children: [
@@ -456,13 +493,13 @@ class _ActionCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(PhosphorIcons.floppyDisk()),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: FlatSpacing.sm),
                   const Text('Save scan config'),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: FlatSpacing.sm),
           Row(
             children: [
               Expanded(
@@ -472,13 +509,13 @@ class _ActionCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(PhosphorIcons.magnifyingGlass()),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: FlatSpacing.sm),
                       const Text('Preview scan'),
                     ],
                   ),
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: FlatSpacing.sm),
               Expanded(
                 child: FilledButton(
                   onPressed: scanDisabled ? null : onScanAndSave,
@@ -486,7 +523,7 @@ class _ActionCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(PhosphorIcons.database()),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: FlatSpacing.sm),
                       const Text('Scan & save'),
                     ],
                   ),
@@ -494,7 +531,7 @@ class _ActionCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: FlatSpacing.sm),
           SizedBox(
             width: double.infinity,
             child: OutlinedButton(
@@ -503,7 +540,7 @@ class _ActionCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(PhosphorIcons.imageSquare()),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: FlatSpacing.sm),
                   const Text('Backfill covers'),
                 ],
               ),
@@ -544,42 +581,57 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final secondaryStyle = FlatTypography.caption(brightness);
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(FlatSpacing.smPlus),
       decoration: BoxDecoration(
         color: surfaceBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.lg),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Scan status',
-              style: TextStyle(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 6),
-          Text('Preview results: $scannedCount'),
+          Text(
+            'Scan status',
+            style: FlatTypography.bodySmall(brightness).copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: FlatSpacing.xs + 2),
+          Text(
+            'Preview results: $scannedCount',
+            style: FlatTypography.bodySmall(brightness),
+          ),
           if (directories.isNotEmpty)
-            Text('Last run: ${directories.join(', ')}',
-                style: TextStyle(color: tokens.textSecondary)),
+            Text('Last run: ${directories.join(', ')}', style: secondaryStyle),
           if (lastSave != null)
             Text(
-                'Saved: scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
-                style: TextStyle(color: tokens.textSecondary)),
+              'Saved: scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
+              style: secondaryStyle,
+            ),
           Text('Watcher: ${watchRunning ? 'running' : 'stopped'}',
-              style: TextStyle(color: tokens.textSecondary)),
+              style: secondaryStyle),
           Text(
-              'Watcher events: $watchEventCount (pending: $watchPendingEvents)',
-              style: TextStyle(color: tokens.textSecondary)),
+            'Watcher events: $watchEventCount (pending: $watchPendingEvents)',
+            style: secondaryStyle,
+          ),
           if (lastWatchEventPath != null && lastWatchEventPath!.isNotEmpty)
             Text(
               'Last watcher event: ${lastWatchEventKind ?? 'unknown'} - $lastWatchEventPath',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: tokens.textSecondary),
+              style: secondaryStyle,
             ),
           if (error != null)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text('Error: $error', style: TextStyle(color: Colors.red)),
+              padding: const EdgeInsets.only(top: FlatSpacing.xs + 2),
+              child: Text(
+                'Error: $error',
+                style: FlatTypography.bodySmall(brightness).copyWith(
+                  color: FlatColors.error(brightness),
+                ),
+              ),
             ),
         ],
       ),
@@ -597,46 +649,63 @@ class _PreviewSongsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     final maxCount = results.length > 20 ? 20 : results.length;
     return Container(
       decoration: BoxDecoration(
         color: surfaceBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.lg),
       ),
       child: Column(
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(12, 10, 12, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              FlatSpacing.smPlus,
+              FlatSpacing.smPlus - 2,
+              FlatSpacing.smPlus,
+              FlatSpacing.sm,
+            ),
             child: Row(
               children: [
-                Text('Preview songs',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  'Preview songs',
+                  style: FlatTypography.bodySmall(brightness).copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
           for (var i = 0; i < maxCount; i++)
             Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              padding: const EdgeInsets.symmetric(
+                horizontal: FlatSpacing.smPlus,
+                vertical: FlatSpacing.xs + 2,
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(results[i].title,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text('${results[i].artist} - ${results[i].album}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12)),
+                  Text(
+                    results[i].title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FlatTypography.bodySmall(brightness),
+                  ),
+                  Text(
+                    '${results[i].artist} - ${results[i].album}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: FlatTypography.caption(brightness),
+                  ),
                 ],
               ),
             ),
           if (results.length > maxCount)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: FlatSpacing.smPlus - 2),
               child: Text(
                 '...and ${results.length - maxCount} more',
-                style: TextStyle(
-                    fontSize: 12, color: tokens.textSecondary),
+                style: FlatTypography.caption(brightness),
               ),
             ),
         ],

@@ -186,8 +186,7 @@ class _SwitchTileCard extends ConsumerWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: FlatTypography.bodySmall(brightness).copyWith(
                       fontWeight: FontWeight.w500,
                     ),
                   ),

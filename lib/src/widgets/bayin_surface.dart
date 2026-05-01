@@ -62,7 +62,7 @@ class BayinMutedSurface extends ConsumerWidget {
       padding: padding,
       margin: margin,
       borderRadius: borderRadius,
-      color: FlatColors.muted(brightness),
+      color: FlatColors.surfaceContainerHigh(brightness),
       child: child,
     );
   }
@@ -130,7 +130,7 @@ class BayinGlassCard extends ConsumerWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: FlatColors.muted(brightness),
+        color: FlatColors.surfaceContainerHigh(brightness),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
       child: child,

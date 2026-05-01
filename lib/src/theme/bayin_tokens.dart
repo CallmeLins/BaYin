@@ -74,13 +74,13 @@ class BayinTokens {
       );
 }
 
-/// Light flat surface tokens.
+/// Light flat surface tokens — Spotify-flat three-tier mapping.
 const lightTokens = BayinTokens(
-  windowBg: FlatColors.backgroundLight,
-  titlebarBg: FlatColors.mutedLight,
-  sidebarBg: FlatColors.surfaceAltLight,
-  barBg: FlatColors.backgroundLight,
-  popoverBg: FlatColors.backgroundLight,
+  windowBg: FlatColors.surfaceLight,
+  titlebarBg: FlatColors.surfaceContainerLight,
+  sidebarBg: FlatColors.surfaceContainerLight,
+  barBg: FlatColors.surfaceContainerHighLight,
+  popoverBg: FlatColors.surfaceContainerHighLight,
   playerBg: Color(0xFF060607), // Always-dark player background
   separator: FlatColors.borderLight,
   separatorAlpha: 1.0,
@@ -88,22 +88,16 @@ const lightTokens = BayinTokens(
   highlight: FlatColors.primaryLight,
 );
 
-/// Dark flat surface tokens.
+/// Dark flat surface tokens — Spotify-flat three-tier mapping.
 const darkTokens = BayinTokens(
-  windowBg: FlatColors.backgroundDark,
-  titlebarBg: FlatColors.mutedDark,
-  sidebarBg: FlatColors.surfaceAltDark,
-  barBg: FlatColors.backgroundDark,
-  popoverBg: FlatColors.mutedDark,
+  windowBg: FlatColors.surfaceDark,
+  titlebarBg: FlatColors.surfaceContainerDark,
+  sidebarBg: FlatColors.surfaceContainerDark,
+  barBg: FlatColors.surfaceContainerHighDark,
+  popoverBg: FlatColors.surfaceContainerHighDark,
   playerBg: Color(0xFF060607), // Always-dark player background
   separator: FlatColors.borderDark,
   separatorAlpha: 1.0,
   separatorSoftAlpha: 0.5,
   highlight: FlatColors.primaryDark,
 );
-
-/// Convert CSS-style HSL to Flutter Color. Kept for backward compatibility
-/// with any code still using the old CSS token approach.
-Color hslColor(double h, double s, double l) {
-  return HSLColor.fromAHSL(1.0, h, s / 100.0, l / 100.0).toColor();
-}

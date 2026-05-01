@@ -84,7 +84,7 @@ class _SongRow extends ConsumerWidget {
           vertical: FlatSpacing.xs,
         ),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(FlatRadius.md - 2),
+          borderRadius: BorderRadius.circular(FlatRadius.sm),
         ),
         child: Row(
           children: [
@@ -94,9 +94,7 @@ class _SongRow extends ConsumerWidget {
                 child: Text(
                   '$index',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: FlatColors.textSecondary(brightness),
+                  style: FlatTypography.caption(brightness).copyWith(
                     fontFeatures: const <FontFeature>[
                       FontFeature.tabularFigures(),
                     ],
@@ -112,7 +110,7 @@ class _SongRow extends ConsumerWidget {
               borderRadius: BorderRadius.circular(FlatRadius.sm),
               placeholderIconSize: 16,
             ),
-            const SizedBox(width: FlatSpacing.sm + 2),
+            const SizedBox(width: FlatSpacing.smPlus - 2),
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -123,10 +121,7 @@ class _SongRow extends ConsumerWidget {
                     song.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: FlatTypography.bodySmall(brightness),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -141,9 +136,7 @@ class _SongRow extends ConsumerWidget {
             const SizedBox(width: FlatSpacing.sm),
             Text(
               _formatDuration(song.duration),
-              style: TextStyle(
-                fontSize: 12,
-                color: FlatColors.textSecondary(brightness),
+              style: FlatTypography.caption(brightness).copyWith(
                 fontFeatures: const <FontFeature>[
                   FontFeature.tabularFigures(),
                 ],

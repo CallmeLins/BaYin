@@ -126,7 +126,7 @@ See `../MIGRATION_PLAN.md` checkboxes. When finishing a phase:
 - Touch `../src-tauri/` or `../src-ui/` — they are frozen reference sources
 - Introduce a new audio backend (`just_audio`, `flutter_soloud`, etc.) — **audio is Rust-only**, via pure FFI. Spectrum data, playback, EQ all come from the Rust engine
 - Replace Riverpod with Bloc / Provider / GetX
-- Add Material 3 color scheme as the primary look — we're matching the existing macOS-glass design; use the `bayin-*` color tokens migrated from `src-ui/src/index.css`
+- Add Material 3 color scheme as the primary look. Use the **Spotify-flat three-tier surface tokens** in `lib/src/theme/design_tokens.dart`: `FlatColors.surface` / `surfaceContainer` / `surfaceContainerHigh`. Hierarchy is expressed through tone, not shadow/blur/tint. **Zero shadows. Zero blur. Zero surface tints.** `bayin_tokens.dart` provides semantic surface roles (`windowBg / sidebarBg / barBg / popoverBg / playerBg`) that map onto the three tiers. The original `bayin-*` CSS tokens in `src-ui/` are macOS-glass and **no longer the visual baseline**.
 
 ## When stuck
 

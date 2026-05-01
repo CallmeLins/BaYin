@@ -49,15 +49,15 @@ class UserInterfacePage extends ConsumerWidget {
                     segments: const [
                       ButtonSegment<ThemeMode>(
                         value: ThemeMode.system,
-                        label: Text('System', style: TextStyle(fontSize: 13)),
+                        label: Text('System'),
                       ),
                       ButtonSegment<ThemeMode>(
                         value: ThemeMode.light,
-                        label: Text('Light', style: TextStyle(fontSize: 13)),
+                        label: Text('Light'),
                       ),
                       ButtonSegment<ThemeMode>(
                         value: ThemeMode.dark,
-                        label: Text('Dark', style: TextStyle(fontSize: 13)),
+                        label: Text('Dark'),
                       ),
                     ],
                     selected: {themeMode},
@@ -158,17 +158,20 @@ class _SettingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: FlatSpacing.md,
-        vertical: FlatSpacing.sm + 4,
+        vertical: FlatSpacing.smPlus,
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+            style: FlatTypography.bodySmall(brightness).copyWith(
+              fontWeight: FontWeight.w500,
+            ),
           ),
           child,
         ],
@@ -200,7 +203,7 @@ class _SwitchTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(
           horizontal: FlatSpacing.md,
-          vertical: FlatSpacing.sm + 4,
+          vertical: FlatSpacing.smPlus,
         ),
         child: Row(
           children: [
@@ -210,8 +213,7 @@ class _SwitchTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      fontSize: 14,
+                    style: FlatTypography.bodySmall(brightness).copyWith(
                       fontWeight: FontWeight.w500,
                     ),
                   ),

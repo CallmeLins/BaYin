@@ -143,7 +143,6 @@ class _SearchBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ref.watch(bayinTokensProvider);
     return BayinPageHeader(
-      layout: BayinPageHeaderLayout.fluid,
       margin: const EdgeInsets.only(bottom: 6),
       title: Container(
         height: 38,
