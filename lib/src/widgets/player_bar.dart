@@ -1,7 +1,6 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart';
-import 'package:flutter/material.dart' as mat show showModalBottomSheet;
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -9,6 +8,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
+import '../theme/design_tokens.dart';
 import 'cover_art.dart';
 
 const double kPlayerBarWideHeight = 72;
@@ -134,7 +134,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
     PlayerControllerState player,
     PlayerController controller,
   ) {
-    return mat.showModalBottomSheet<void>(
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -147,7 +147,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
             height: MediaQuery.sizeOf(context).height * 0.7,
             decoration: BoxDecoration(
               color: const Color(0xFF1A1A1D).withValues(alpha: 0.94),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(FlatRadius.lg * 2)),
               border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: Column(
@@ -158,12 +158,12 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                   height: 4,
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.24),
-                    borderRadius: BorderRadius.circular(999),
+                    borderRadius: BorderRadius.circular(FlatRadius.circle),
                   ),
                 ),
                 const SizedBox(height: 12),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: FlatSpacing.md),
                   child: Row(
                     children: [
                       const Text(
@@ -176,7 +176,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                       ),
                       const Spacer(),
                       if (queue.isNotEmpty)
-                        Button(
+                        TextButton(
                           onPressed: () => unawaited(controller.clearQueue()),
                           child: const Text('Clear'),
                         ),
@@ -210,7 +210,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                 child: Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12),
+                                    borderRadius: BorderRadius.circular(FlatRadius.md + 4),
                                     color: active
                                         ? Colors.white.withValues(alpha: 0.10)
                                         : Colors.transparent,
@@ -218,7 +218,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                   child: Row(
                                     children: [
                                       ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(FlatRadius.md),
                                         child: CoverArt(
                                           width: 42,
                                           height: 42,
@@ -238,7 +238,7 @@ class _PlayerBarState extends ConsumerState<PlayerBar> {
                                               overflow: TextOverflow.ellipsis,
                                               style: TextStyle(
                                                 color: active
-                                                    ? const Color(0xFF60A5FA)
+                                                    ? FlatColors.primaryDark
                                                     : Colors.white,
                                                 fontWeight: FontWeight.w600,
                                               ),
@@ -295,9 +295,8 @@ class _ProgressScrubBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trackBg = isDark
-        ? Colors.white.withValues(alpha: 0.10)
-        : Colors.black.withValues(alpha: 0.10);
+    final brightness = Theme.of(context).brightness;
+    final trackBg = FlatColors.overlayOnDark(brightness);
 
     double calc(Offset global, BuildContext ctx) {
       final box = ctx.findRenderObject() as RenderBox?;
@@ -323,7 +322,7 @@ class _ProgressScrubBar extends StatelessWidget {
                     widthFactor: progressPercent,
                     child: Container(
                       height: 2,
-                      color: const Color(0xFF3B82F6),
+                      color: FlatColors.primary(brightness),
                     ),
                   ),
                 ],
@@ -582,7 +581,7 @@ class _RightActions extends StatelessWidget {
           onPressed: onQueue,
           icon: Icon(
             PhosphorIcons.queue(),
-            color: queueCount > 0 ? const Color(0xFF3B82F6) : null,
+            color: queueCount > 0 ? FlatColors.primary(Theme.of(context).brightness) : null,
           ),
         ),
         if (!isCompact) ...[

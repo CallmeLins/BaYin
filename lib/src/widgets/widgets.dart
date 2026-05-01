@@ -1,16 +1,20 @@
-/// Reusable widgets (non-route-level).
+/// Reusable widgets for BaYin (flat design system).
 ///
-/// Directory layout will grow as phases progress:
-/// - `root_scaffold.dart` (Phase 2): shell with titlebar + sidebar + player_bar
-/// - `sidebar.dart` (Phase 2): navigation drawer
-/// - `player_bar.dart` (Phase 2): bottom playback strip
-/// - `page_header.dart` (Phase 2): sticky page header with drag region
-/// - `song_list.dart` (Phase 3): virtualized song list
-/// - `alphabet_scroller.dart` (Phase 3): pinyin index scrubber
-/// - `player_stage.dart` (Phase 5): cover + spectrum composite
-/// - `karaoke_line.dart` (Phase 5): per-word highlighting
-/// - `spectrum/*.dart` (Phase 5): 8 CustomPainter modes
-/// - `equalizer_panel.dart` (Phase 7): 10-band EQ sliders
+/// Key structural widgets:
+/// - `root_scaffold.dart` — app shell with titlebar + sidebar + player_bar
+/// - `sidebar.dart` — navigation drawer
+/// - `player_bar.dart` — bottom playback strip
+/// - `page_header.dart` — flat page header with structural border
+/// - `titlebar.dart` — custom window titlebar (desktop only)
+///
+/// Content widgets:
+/// - `song_list.dart` — virtualized song list
+/// - `player_stage.dart` — cover + spectrum composite
+/// - `bayin_surface.dart` — flat surface cards (no glass, no shadows)
+/// - `cover_art.dart` — album cover art widget
+/// - `equalizer_panel.dart` — 10-band EQ sliders
+/// - `karaoke_line.dart` — per-word karaoke highlighting
+/// - `alphabet_scroller.dart` — pinyin index scrubber
 library;
 
 export 'alphabet_scroller.dart';

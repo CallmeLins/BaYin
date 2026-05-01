@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +8,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
+import '../theme/design_tokens.dart';
 
 const double kSidebarDockedWidth = 256;
 const double kSidebarOverlayWidthFraction = 0.6;
@@ -29,30 +30,27 @@ class Sidebar extends ConsumerWidget {
     final layout = ref.watch(responsiveLayoutProvider);
     final themeMode = ref.watch(themeModeProvider);
     final currentPath = GoRouterState.of(context).uri.path;
+    final brightness = Theme.of(context).brightness;
 
     final useMobileSidebarStyle = isOverlay && !layout.isTablet;
     final isDark = tokens.isDark;
-    final sectionBg = isDark
-        ? Colors.white.withValues(alpha: 0.05)
-        : Colors.black.withValues(alpha: 0.04);
+    final sectionBg = FlatColors.muted(brightness);
 
     Widget sectionWrap({required Widget child}) {
       if (!useMobileSidebarStyle) return child;
       return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(10),
+        margin: const EdgeInsets.only(bottom: FlatSpacing.sm + 4),
+        padding: const EdgeInsets.all(FlatSpacing.sm + 2),
         decoration: BoxDecoration(
           color: sectionBg,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(FlatRadius.md),
         ),
         child: child,
       );
     }
 
     return Container(
-      color: isOverlay
-          ? tokens.windowBg
-          : tokens.sidebarBg.withValues(alpha: 0.70),
+      color: isOverlay ? tokens.windowBg : tokens.sidebarBg,
       child: SafeArea(
         bottom: false,
         right: false,
@@ -60,10 +58,10 @@ class Sidebar extends ConsumerWidget {
           children: [
             Padding(
               padding: EdgeInsets.fromLTRB(
-                12,
-                useMobileSidebarStyle ? 12 : 8,
-                12,
-                useMobileSidebarStyle ? 8 : 6,
+                FlatSpacing.sm + 4,
+                useMobileSidebarStyle ? FlatSpacing.sm + 4 : FlatSpacing.sm,
+                FlatSpacing.sm + 4,
+                useMobileSidebarStyle ? FlatSpacing.sm : FlatSpacing.sm - 2,
               ),
               child: _TopActions(
                 mobileCardStyle: useMobileSidebarStyle,
@@ -76,9 +74,7 @@ class Sidebar extends ConsumerWidget {
                 },
                 onExit: () async {
                   onNavigate?.call();
-                  if (kIsWeb) {
-                    return;
-                  }
+                  if (kIsWeb) return;
                   final isDesktop = switch (defaultTargetPlatform) {
                     TargetPlatform.windows => true,
                     TargetPlatform.linux => true,
@@ -97,23 +93,15 @@ class Sidebar extends ConsumerWidget {
             ),
             if (!useMobileSidebarStyle)
               Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-                child: Container(
-                  height: 1,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        tokens.separatorColor,
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
+                padding: const EdgeInsets.fromLTRB(FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.sm + 4),
+                child: Divider(
+                  color: tokens.separatorSoftColor,
+                  height: FlatBorder.structural,
                 ),
               ),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                padding: const EdgeInsets.fromLTRB(FlatSpacing.sm, FlatSpacing.sm, FlatSpacing.sm, 0),
                 children: [
                   sectionWrap(
                     child: _NavSection(
@@ -215,7 +203,7 @@ class _TopActions extends StatelessWidget {
           isDark: isDark,
           mobileCardStyle: mobileCardStyle,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: FlatSpacing.sm),
         _ActionButton(
           icon: PhosphorIcons.signOut(),
           onTap: () => onExit(),
@@ -231,15 +219,14 @@ class _TopActions extends StatelessWidget {
       return content;
     }
 
-    final cardBg = isDark
-        ? Colors.white.withValues(alpha: 0.05)
-        : Colors.black.withValues(alpha: 0.05);
+    final brightness = Theme.of(context).brightness;
+    final cardBg = FlatColors.muted(brightness);
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(FlatSpacing.sm),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(FlatRadius.md),
       ),
       child: content,
     );
@@ -272,23 +259,21 @@ class _ActionButtonState extends State<_ActionButton> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     final fg = widget.danger
-        ? (widget.isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626))
-        : (widget.isDark
-            ? Colors.white.withValues(alpha: 0.70)
-            : Colors.black.withValues(alpha: 0.54));
+        ? FlatColors.error(brightness)
+        : FlatColors.textSecondary(brightness);
     final hoverBg = widget.danger
-        ? const Color(0xFFEF4444).withValues(alpha: 0.10)
-        : (widget.isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.black.withValues(alpha: 0.06));
-    final radius = widget.mobileCardStyle ? 10.0 : 8.0;
+        ? FlatColors.error(brightness).withValues(alpha: 0.10)
+        : FlatColors.overlayOnMuted(brightness);
+    final radius = widget.mobileCardStyle ? FlatRadius.sm + 2 : FlatRadius.md;
 
     return Tooltip(
       message: widget.tooltip,
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovering = true),
         onExit: (_) => setState(() => _hovering = false),
+        cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
           child: Container(
@@ -326,33 +311,24 @@ class _NavSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final titleColor = isDark
-        ? Colors.white.withValues(alpha: 0.45)
-        : Colors.black.withValues(alpha: 0.45);
+    final brightness = Theme.of(context).brightness;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+          padding: const EdgeInsets.fromLTRB(FlatSpacing.xs, 0, FlatSpacing.xs, FlatSpacing.sm),
           child: Row(
             children: [
               Text(
                 title.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: titleColor,
-                  letterSpacing: 0.35,
-                ),
+                style: FlatTypography.label(brightness),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: FlatSpacing.sm),
               Expanded(
-                child: Container(
+                child: Divider(
+                  color: FlatColors.border(brightness),
                   height: 1,
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.08)
-                      : Colors.black.withValues(alpha: 0.08),
                 ),
               ),
             ],
@@ -416,47 +392,46 @@ class _NavListTileState extends State<_NavListTile> {
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
     final isDark = widget.isDark;
     final isActive = widget.isActive;
-    final hoverBg = isDark
-        ? Colors.white.withValues(alpha: 0.04)
-        : Colors.black.withValues(alpha: 0.03);
+    final primary = FlatColors.primary(brightness);
+    final hoverBg = FlatColors.overlayOnDark(brightness);
     final activeBg = isDark
         ? Colors.white.withValues(alpha: 0.10)
-        : Colors.black.withValues(alpha: 0.05);
-    final normalFg = isDark
-        ? Colors.white.withValues(alpha: 0.82)
-        : Colors.black.withValues(alpha: 0.72);
-    final activeFg = isDark
-        ? Colors.white
-        : Colors.black.withValues(alpha: 0.87);
+        : FlatColors.muted(brightness);
+    final normalFg = FlatColors.textSecondary(brightness);
+    final activeFg = FlatColors.foreground(brightness);
     final iconColor = isActive
-        ? const Color(0xFF3B82F6)
-        : (isDark
-            ? Colors.white.withValues(alpha: 0.54)
-            : Colors.black.withValues(alpha: 0.45));
+        ? primary
+        : FlatColors.textSecondary(brightness);
     final bgColor = isActive
         ? activeBg
         : (_hovering ? hoverBg : Colors.transparent);
 
     return Padding(
-      padding: EdgeInsets.symmetric(vertical: widget.isMobileStyle ? 2 : 1),
+      padding: EdgeInsets.symmetric(
+        vertical: widget.isMobileStyle ? FlatSpacing.xs / 2 : 1,
+      ),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hovering = true),
         onExit: (_) => setState(() => _hovering = false),
+        cursor: SystemMouseCursors.click,
         child: GestureDetector(
           onTap: widget.onTap,
           child: Container(
             decoration: BoxDecoration(
               color: bgColor,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(FlatRadius.md),
             ),
             child: Stack(
               children: [
                 Padding(
                   padding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: widget.isMobileStyle ? 10 : 8,
+                    horizontal: FlatSpacing.sm + 4,
+                    vertical: widget.isMobileStyle
+                        ? FlatSpacing.sm + 2
+                        : FlatSpacing.sm,
                   ),
                   child: Row(
                     children: [
@@ -465,14 +440,14 @@ class _NavListTileState extends State<_NavListTile> {
                         size: widget.isMobileStyle ? 20 : 18,
                         color: iconColor,
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: FlatSpacing.sm + 4),
                       Expanded(
                         child: Text(
                           widget.label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: widget.isMobileStyle ? 16 : 14,
+                            fontSize: widget.isMobileStyle ? FlatSpacing.md : 14,
                             fontWeight:
                                 isActive ? FontWeight.w600 : FontWeight.w500,
                             color: isActive ? activeFg : normalFg,
@@ -486,14 +461,18 @@ class _NavListTileState extends State<_NavListTile> {
                 if (isActive)
                   Positioned(
                     left: 0,
-                    top: widget.isMobileStyle ? 10 : 8,
-                    bottom: widget.isMobileStyle ? 10 : 8,
+                    top: widget.isMobileStyle
+                        ? FlatSpacing.sm + 2
+                        : FlatSpacing.sm,
+                    bottom: widget.isMobileStyle
+                        ? FlatSpacing.sm + 2
+                        : FlatSpacing.sm,
                     child: Container(
-                      width: 3,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF3B82F6),
-                        borderRadius: BorderRadius.horizontal(
-                          right: Radius.circular(3),
+                      width: FlatBorder.structural + 1,
+                      decoration: BoxDecoration(
+                        color: primary,
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(FlatRadius.sm),
                         ),
                       ),
                     ),

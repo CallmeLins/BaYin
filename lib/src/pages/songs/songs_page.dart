@@ -1,13 +1,14 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../utils/utils.dart';
 import '../../widgets/widgets.dart';
 
-/// Phase 3 — real local songs list.
+/// Songs list page — the main library view.
 class SongsPage extends ConsumerStatefulWidget {
   const SongsPage({super.key});
 
@@ -29,8 +30,10 @@ class _SongsPageState extends ConsumerState<SongsPage> {
   Widget build(BuildContext context) {
     final tokens = ref.watch(bayinTokensProvider);
     final asyncSongs = ref.watch(librarySongsProvider);
+    final brightness = Theme.of(context).brightness;
+
     return asyncSongs.when(
-      loading: () => const Center(child: ProgressRing()),
+      loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, stack) => _ErrorState(error: error),
       data: (songs) {
         if (songs.isEmpty) {
@@ -51,31 +54,24 @@ class _SongsPageState extends ConsumerState<SongsPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('Songs'),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: FlatSpacing.sm),
                   Text(
                     '${songs.length}',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: tokens.textSecondary,
-                    ),
+                    style: FlatTypography.caption(brightness),
                   ),
                 ],
               ),
               right: Row(
                 children: [
-                  Tooltip(
-                    message: 'Search',
-                    child: IconButton(
-                      onPressed: () => context.go('/search'),
-                      icon: Icon(PhosphorIcons.magnifyingGlass()),
-                    ),
+                  IconButton(
+                    onPressed: () => context.go('/search'),
+                    icon: Icon(PhosphorIcons.magnifyingGlass()),
+                    tooltip: 'Search',
                   ),
-                  Tooltip(
-                    message: 'Scan',
-                    child: IconButton(
-                      onPressed: () => context.go('/scan'),
-                      icon: Icon(PhosphorIcons.folderSimple()),
-                    ),
+                  IconButton(
+                    onPressed: () => context.go('/scan'),
+                    icon: Icon(PhosphorIcons.folderSimple()),
+                    tooltip: 'Scan',
                   ),
                 ],
               ),
@@ -85,14 +81,14 @@ class _SongsPageState extends ConsumerState<SongsPage> {
                 margin: EdgeInsets.zero,
                 decoration: BoxDecoration(
                   color: tokens.isDark
-                      ? Colors.white.withValues(alpha: 0.04)
-                      : Colors.black.withValues(alpha: 0.02),
-                  borderRadius: BorderRadius.circular(12),
+                      ? FlatColors.surfaceAltDark
+                      : FlatColors.mutedLight,
+                  borderRadius: BorderRadius.circular(FlatRadius.md),
                   border: Border.all(
                     color: tokens.isDark
-                        ? Colors.white.withValues(alpha: 0.07)
-                        : Colors.black.withValues(alpha: 0.06),
-                    width: 0.6,
+                        ? FlatColors.borderDark
+                        : FlatColors.borderLight,
+                    width: FlatBorder.structural,
                   ),
                 ),
                 child: Row(
@@ -114,7 +110,7 @@ class _SongsPageState extends ConsumerState<SongsPage> {
                       currentLetter: _activeLetter,
                       onLetterTap: (letter) => _jumpToBucket(letter, buckets),
                     ),
-                    const SizedBox(width: 4),
+                    const SizedBox(width: FlatSpacing.xs),
                   ],
                 ),
               ),
@@ -132,8 +128,8 @@ class _SongsPageState extends ConsumerState<SongsPage> {
     const itemExtent = 52.0;
     _scrollController.animateTo(
       index * itemExtent,
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOut,
+      duration: FlatDurations.standard,
+      curve: FlatDurations.curve,
     );
   }
 }
@@ -146,7 +142,7 @@ class _EmptyLibraryState extends ConsumerWidget {
     final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(FlatSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -155,39 +151,27 @@ class _EmptyLibraryState extends ConsumerWidget {
               size: 48,
               color: tokens.textSecondary,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: FlatSpacing.sm + 4),
             Text(
               'Your library is empty',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: FlatSpacing.xs + 2),
             Text(
               'Scan a folder to get started.',
               style: TextStyle(color: tokens.textSecondary),
             ),
-            const SizedBox(height: 16),
-            FilledButton(
+            const SizedBox(height: FlatSpacing.md),
+            FilledButton.icon(
               onPressed: () => context.go('/scan'),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(PhosphorIcons.folderSimple()),
-                  const SizedBox(width: 8),
-                  const Text('Scan music'),
-                ],
-              ),
+              icon: Icon(PhosphorIcons.folderSimple(), size: 18),
+              label: const Text('Scan music'),
             ),
-            const SizedBox(height: 8),
-            HyperlinkButton(
+            const SizedBox(height: FlatSpacing.sm),
+            TextButton.icon(
               onPressed: () => context.go('/debug'),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(PhosphorIcons.bug()),
-                  const SizedBox(width: 8),
-                  const Text('Open FFI debug'),
-                ],
-              ),
+              icon: Icon(PhosphorIcons.bug(), size: 18),
+              label: const Text('Open FFI debug'),
             ),
           ],
         ),
@@ -206,7 +190,7 @@ class _ErrorState extends ConsumerWidget {
     final tokens = ref.watch(bayinTokensProvider);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(32),
+        padding: const EdgeInsets.all(FlatSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -215,17 +199,15 @@ class _ErrorState extends ConsumerWidget {
               size: 40,
               color: Colors.red,
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: FlatSpacing.sm + 4),
             Text(
               'Failed to load library',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: FlatSpacing.xs + 2),
             SelectableText(
               '$error',
-              style: TextStyle(
-                color: tokens.textSecondary,
-              ),
+              style: TextStyle(color: tokens.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],

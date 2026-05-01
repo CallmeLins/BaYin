@@ -1,10 +1,11 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../i18n/strings.g.dart';
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class SettingsPage extends ConsumerWidget {
@@ -16,31 +17,32 @@ class SettingsPage extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final locale = ref.watch(localeProvider);
     final app = ref.watch(appSettingsProvider);
+
     return Column(
       children: [
         BayinPageHeader(
           title: Text(t.nav.settings),
-          right: Tooltip(
-            message: 'About',
-            child: IconButton(
-              onPressed: () => context.go('/about'),
-              icon: Icon(PhosphorIcons.info()),
-            ),
+          right: IconButton(
+            onPressed: () => context.go('/about'),
+            icon: Icon(PhosphorIcons.info(), size: 20),
+            tooltip: 'About',
           ),
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(
+              FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xl,
+            ),
             children: [
-              const SizedBox(height: 2),
+              const SizedBox(height: FlatSpacing.sm + 4),
               _SummaryCard(
                 themeMode: _themeLabel(themeMode),
                 localeLabel: _localeLabel(locale),
                 eqEnabled: app.eqEnabled,
               ),
-              const SizedBox(height: 12),
-              _GroupCard(
-                title: 'Preferences',
+              const SizedBox(height: FlatSpacing.lg),
+              _SettingsGroup(
+                title: 'PREFERENCES',
                 tiles: [
                   _SettingsTileData(
                     icon: PhosphorIcons.palette(),
@@ -62,9 +64,9 @@ class SettingsPage extends ConsumerWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              _GroupCard(
-                title: 'Product',
+              const SizedBox(height: FlatSpacing.lg),
+              _SettingsGroup(
+                title: 'PRODUCT',
                 tiles: [
                   _SettingsTileData(
                     icon: PhosphorIcons.sparkle(),
@@ -109,6 +111,7 @@ class SettingsPage extends ConsumerWidget {
   }
 }
 
+/// Summary card showing current settings state as pills.
 class _SummaryCard extends ConsumerWidget {
   const _SummaryCard({
     required this.themeMode,
@@ -122,96 +125,58 @@ class _SummaryCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ref.watch(bayinTokensProvider);
-    final isDark = tokens.isDark;
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(FlatSpacing.md),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(12),
+        color: FlatColors.muted(brightness),
+        borderRadius: BorderRadius.circular(FlatRadius.md),
       ),
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
+        spacing: FlatSpacing.sm,
+        runSpacing: FlatSpacing.sm,
         children: [
-          _pill('Theme: $themeMode', isDark),
-          _pill('Language: $localeLabel', isDark),
-          _pill('EQ: ${eqEnabled ? 'On' : 'Off'}', isDark),
+          _Pill(label: 'Theme: $themeMode'),
+          _Pill(label: 'Language: $localeLabel'),
+          _Pill(label: 'EQ: ${eqEnabled ? 'On' : 'Off'}'),
         ],
       ),
     );
   }
+}
 
-  Widget _pill(String label, bool isDark) {
+class _Pill extends ConsumerWidget {
+  const _Pill({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(
+        horizontal: FlatSpacing.sm + 2,
+        vertical: FlatSpacing.xs + 2,
+      ),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : Colors.black.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(999),
+        color: FlatColors.background(brightness),
+        borderRadius: BorderRadius.circular(FlatRadius.md),
+        border: Border.all(
+          color: FlatColors.border(brightness),
+          width: FlatBorder.structural,
+        ),
       ),
       child: Text(
         label,
-        style: TextStyle(
-          fontSize: 12,
-          color: isDark
-              ? const Color(0xFFF3F3F3)
-              : const Color(0xFF0A0A0A),
+        style: FlatTypography.caption(brightness).copyWith(
+          fontWeight: FontWeight.w500,
         ),
       ),
     );
   }
 }
 
-class _GroupCard extends ConsumerWidget {
-  const _GroupCard({
-    required this.title,
-    required this.tiles,
-  });
-
-  final String title;
-  final List<_SettingsTileData> tiles;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ref.watch(bayinTokensProvider);
-    final isDark = tokens.isDark;
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-            child: Row(
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: tokens.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          for (var i = 0; i < tiles.length; i++) ...[
-            if (i > 0) Container(height: 1, color: tokens.separatorColor),
-            _SettingsTile(data: tiles[i]),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
+/// A settings tile data model.
 class _SettingsTileData {
   const _SettingsTileData({
     required this.icon,
@@ -226,6 +191,60 @@ class _SettingsTileData {
   final String route;
 }
 
+/// A group of settings tiles with a section label.
+class _SettingsGroup extends ConsumerWidget {
+  const _SettingsGroup({
+    required this.title,
+    required this.tiles,
+  });
+
+  final String title;
+  final List<_SettingsTileData> tiles;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xs + 2,
+          ),
+          child: Text(
+            title,
+            style: FlatTypography.label(brightness),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: FlatColors.background(brightness),
+            borderRadius: BorderRadius.circular(FlatRadius.md),
+            border: Border.all(
+              color: FlatColors.border(brightness),
+              width: FlatBorder.structural,
+            ),
+          ),
+          child: Column(
+            children: [
+              for (var i = 0; i < tiles.length; i++) ...[
+                if (i > 0)
+                  Divider(
+                    height: FlatBorder.structural,
+                    indent: FlatSpacing.xxl + FlatSpacing.sm,
+                    color: FlatColors.border(brightness),
+                  ),
+                _SettingsTile(data: tiles[i]),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Individual settings tile.
 class _SettingsTile extends ConsumerWidget {
   const _SettingsTile({required this.data});
 
@@ -233,34 +252,28 @@ class _SettingsTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ref.watch(bayinTokensProvider);
-    return GestureDetector(
+    final brightness = Theme.of(context).brightness;
+    return ListTile(
       onTap: () => context.go(data.route),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-        child: Row(
-          children: [
-            Icon(data.icon, size: 18),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(data.title),
-                  const SizedBox(height: 2),
-                  Text(
-                    data.subtitle,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: tokens.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(PhosphorIcons.caretRight(), size: 16),
-          ],
+      leading: Icon(
+        data.icon,
+        size: 20,
+        color: FlatColors.primary(brightness),
+      ),
+      title: Text(
+        data.title,
+        style: FlatTypography.bodySmall(brightness).copyWith(
+          fontWeight: FontWeight.w500,
         ),
+      ),
+      subtitle: Text(
+        data.subtitle,
+        style: FlatTypography.caption(brightness),
+      ),
+      trailing: Icon(
+        PhosphorIcons.caretRight(),
+        size: 16,
+        color: FlatColors.textSecondary(brightness),
       ),
     );
   }

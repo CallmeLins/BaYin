@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 import '../i18n/strings.g.dart';
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
+import '../theme/design_tokens.dart';
 
 const double _winTitlebarHeight = 32;
 const double _macTitlebarHeight = 28;
@@ -78,7 +79,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
           child: DragToMoveArea(
             child: Container(
               color: tokens.titlebarBg,
-              padding: const EdgeInsets.only(left: 72, right: 12),
+              padding: const EdgeInsets.only(left: 72, right: FlatSpacing.sm + 4),
               alignment: Alignment.center,
               child: Text(
                 'BaYin',
@@ -106,7 +107,7 @@ class _AppTitlebarState extends ConsumerState<AppTitlebar> with WindowListener {
                   child: Align(
                     alignment: AlignmentDirectional.centerStart,
                     child: Padding(
-                      padding: const EdgeInsets.only(left: 12),
+                      padding: const EdgeInsets.only(left: FlatSpacing.sm + 4),
                       child: Text(
                         'BaYin',
                         style: TextStyle(
@@ -188,6 +189,7 @@ class _WindowButtonState extends State<_WindowButton> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
+      cursor: SystemMouseCursors.click,
       child: Tooltip(
         message: widget.tooltip,
         child: GestureDetector(

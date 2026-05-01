@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as mat show showModalBottomSheet;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -1299,19 +1299,21 @@ class _TransportPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          Slider(
-            min: 0,
-            max: max,
-            value: clampedProgress,
-            onChanged: onProgressChanged,
-            onChangeEnd: onProgressChangeEnd,
-            style: SliderThemeData(
-              trackHeight: const WidgetStatePropertyAll(3.2),
-              activeColor: const WidgetStatePropertyAll(Colors.white),
-              inactiveColor:
-                  WidgetStatePropertyAll(Colors.white.withValues(alpha: 0.24)),
-              thumbColor: const WidgetStatePropertyAll(Colors.white),
-              thumbRadius: const WidgetStatePropertyAll(6.0),
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 3.2,
+              activeTrackColor: Colors.white,
+              inactiveTrackColor: Colors.white.withValues(alpha: 0.24),
+              thumbColor: Colors.white,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
+              overlayColor: Colors.white.withValues(alpha: 0.12),
+            ),
+            child: Slider(
+              min: 0,
+              max: max,
+              value: clampedProgress,
+              onChanged: onProgressChanged,
+              onChangeEnd: onProgressChangeEnd,
             ),
           ),
           Row(
@@ -1440,7 +1442,7 @@ class _LyricsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (lyricsAsync.isLoading) {
-      return const Center(child: ProgressRing());
+      return const Center(child: CircularProgressIndicator());
     }
     if (lyricLines.isEmpty) {
       return Center(
@@ -1688,7 +1690,7 @@ class _QueueSheet extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  Button(
+                  TextButton(
                     onPressed: () => unawaited(onClear()),
                     child: const Text('Clear'),
                   ),
@@ -1885,8 +1887,8 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
                         ],
                       ),
                     ),
-                    ToggleSwitch(
-                      checked: _splitViewEnabled,
+                    Switch(
+                      value: _splitViewEnabled,
                       onChanged: (value) {
                         setState(() => _splitViewEnabled = value);
                         widget.onSplitViewChanged(value);
@@ -1912,8 +1914,8 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
                         ],
                       ),
                     ),
-                    ToggleSwitch(
-                      checked: _pureModeActive,
+                    Switch(
+                      value: _pureModeActive,
                       onChanged: (value) {
                         setState(() => _pureModeActive = value);
                         widget.onPureModeChanged(value);

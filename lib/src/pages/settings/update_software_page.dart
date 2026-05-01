@@ -1,13 +1,13 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class UpdateSoftwarePage extends ConsumerStatefulWidget {
@@ -32,7 +32,7 @@ class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
     return Column(
       children: [
         BayinPageHeader(
@@ -47,55 +47,82 @@ class _UpdateSoftwarePageState extends ConsumerState<UpdateSoftwarePage> {
                   context.go('/settings');
                 }
               },
-              icon: Icon(PhosphorIcons.caretLeft()),
+              icon: Icon(
+                PhosphorIcons.caretLeft(),
+                size: 20,
+                color: FlatColors.textSecondary(brightness),
+              ),
             ),
           ),
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
-              const SizedBox(height: 10),
               const SizedBox(height: 12),
-        BayinGlassCard(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Current channel: stable'),
-              const SizedBox(height: 6),
-              Text('Current app version: $_versionLabel'),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        FilledButton(
-          onPressed: _checking ? null : _checkUpdates,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_checking)
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: ProgressRing(
-                    strokeWidth: 2,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xs + 2),
+                    child: Text(
+                      'SOFTWARE INFO',
+                      style: FlatTypography.label(brightness),
+                    ),
                   ),
-                )
-              else
-                Icon(PhosphorIcons.downloadSimple(), size: 18),
-              const SizedBox(width: 8),
-              Text(_checking ? 'Checking...' : 'Check for updates'),
-            ],
-          ),
-        ),
-        if (_status != null) ...[
-          const SizedBox(height: 10),
-          Text(
-            _status!,
-            style: TextStyle(color: tokens.textSecondary),
-          ),
-        ],
+                  Container(
+                    padding: const EdgeInsets.all(FlatSpacing.md),
+                    decoration: BoxDecoration(
+                      color: FlatColors.background(brightness),
+                      borderRadius: BorderRadius.circular(FlatRadius.md),
+                      border: Border.all(
+                        color: FlatColors.border(brightness),
+                        width: FlatBorder.structural,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Current channel: stable', style: TextStyle(fontSize: 14)),
+                        const SizedBox(height: 8),
+                        Text('Current app version: $_versionLabel', style: const TextStyle(fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: FlatSpacing.lg),
+              Row(
+                children: [
+                  FilledButton.icon(
+                    onPressed: _checking ? null : _checkUpdates,
+                    icon: _checking
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : Icon(PhosphorIcons.downloadSimple(), size: 18),
+                    label: Text(_checking ? 'Checking...' : 'Check for updates'),
+                  ),
+                ],
+              ),
+              if (_status != null) ...[
+                const SizedBox(height: FlatSpacing.md),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: FlatSpacing.md),
+                  child: Text(
+                    _status!,
+                    style: TextStyle(
+                      color: FlatColors.textSecondary(brightness),
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

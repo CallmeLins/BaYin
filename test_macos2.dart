@@ -1,0 +1,1 @@
+import 'package:macos_ui/macos_ui.dart'; import 'package:flutter/widgets.dart'; void main() { MacosTooltip(message: 'm', child: Container()); }

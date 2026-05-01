@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -18,7 +18,7 @@ class PlaylistsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final asyncServers = ref.watch(streamServersProvider);
     return asyncServers.when(
-      loading: () => const Center(child: ProgressRing()),
+      loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(
         child: SelectableText('Failed to load stream servers\n$error'),
       ),
@@ -41,7 +41,7 @@ class PlaylistsPage extends ConsumerWidget {
                 children: [
                   _SectionHeader(
                     title: 'Local playlists',
-                    trailing: Button(
+                    trailing: FilledButton(
                       onPressed: null,
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -57,7 +57,7 @@ class PlaylistsPage extends ConsumerWidget {
                   const SizedBox(height: 24),
                   _SectionHeader(
                     title: 'Stream servers',
-                    trailing: Button(
+                    trailing: FilledButton(
                       onPressed: () => context.go('/stream-config'),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -224,7 +224,7 @@ class _StreamServerBlock extends ConsumerWidget {
         ),
         const SizedBox(height: 8),
         asyncPlaylists.when(
-          loading: () => const ProgressBar(),
+          loading: () => const LinearProgressIndicator(),
           error: (error, _) => Text(
             'Failed to load playlists: $error',
             style: TextStyle(color: Colors.red),

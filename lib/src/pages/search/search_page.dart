@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -101,7 +101,7 @@ class _SearchPageState extends ConsumerState<SearchPage> {
         ),
         Expanded(
           child: asyncSongs.when(
-            loading: () => const Center(child: ProgressRing()),
+            loading: () => const Center(child: CircularProgressIndicator()),
             error: (error, _) => Center(
               child: SelectableText('Failed to load library\n$error'),
             ),
@@ -163,11 +163,14 @@ class _SearchBar extends ConsumerWidget {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: TextBox(
+              child: TextField(
                 controller: controller,
                 focusNode: focusNode,
                 autofocus: true,
-                placeholder: 'Search songs, artists, albums...',
+                decoration: const InputDecoration(
+                  hintText: 'Search songs, artists, albums...',
+                  border: InputBorder.none,
+                ),
                 style: const TextStyle(fontSize: 14),
               ),
             ),
@@ -187,7 +190,7 @@ class _SearchBar extends ConsumerWidget {
           ],
         ),
       ),
-      right: Button(
+      right: TextButton(
         onPressed: () {
           if (context.canPop()) {
             context.pop();

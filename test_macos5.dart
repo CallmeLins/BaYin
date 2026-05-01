@@ -1,0 +1,1 @@
+import 'package:macos_ui/macos_ui.dart'; void main() { MacosSwitch(value: true, onChanged: (v){}); MacosPopupButton<int>(value: 1, items: [MacosPopupMenuItem(value:1, child: Text('a'))], onChanged: (v){}); }

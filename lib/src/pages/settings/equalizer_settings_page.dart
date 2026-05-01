@@ -1,9 +1,10 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class EqualizerSettingsPage extends ConsumerWidget {
@@ -13,33 +14,43 @@ class EqualizerSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
+
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('Equalizer'),
-          left: IconButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/settings');
-              }
-            },
-            icon: Icon(PhosphorIcons.caretLeft()),
+          left: Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/settings');
+                }
+              },
+              icon: Icon(
+                PhosphorIcons.caretLeft(),
+                size: 20,
+                color: FlatColors.textSecondary(brightness),
+              ),
+            ),
           ),
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
-              const SizedBox(height: 10),
-              const SizedBox(height: 6),
-              Text(
-                '10-band gain profile with Rust engine hook enabled.',
-                style: TextStyle(color: tokens.textSecondary),
-              ),
               const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  '10-band gain profile with Rust engine hook enabled.',
+                  style: TextStyle(color: FlatColors.textSecondary(brightness)),
+                ),
+              ),
+              const SizedBox(height: 24),
               EqualizerPanel(
                 enabled: app.eqEnabled,
                 selectedPreset: app.eqPreset,

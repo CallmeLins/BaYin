@@ -1,8 +1,10 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/providers.dart';
+import '../theme/design_tokens.dart' hide Breakpoint, computeBreakpoint, isWideBreakpoint;
 
+/// Flat page header — solid color block with structural bottom border.
 class BayinPageHeader extends ConsumerWidget {
   const BayinPageHeader({
     super.key,
@@ -10,7 +12,7 @@ class BayinPageHeader extends ConsumerWidget {
     this.left,
     this.right,
     this.layout = BayinPageHeaderLayout.centered,
-    this.margin = const EdgeInsets.only(bottom: 8),
+    this.margin = const EdgeInsets.only(bottom: FlatSpacing.sm),
   });
 
   final Widget title;
@@ -22,25 +24,21 @@ class BayinPageHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final responsive = ref.watch(responsiveLayoutProvider);
-    final tokens = ref.watch(bayinTokensProvider);
     final isCompact = responsive.breakpoint == Breakpoint.compact;
+    final brightness = Theme.of(context).brightness;
+
+    final hPad = isCompact ? FlatSpacing.sm + 4 : FlatSpacing.sm + 4;
+    final vPad = isCompact ? FlatSpacing.sm + 6 : FlatSpacing.sm;
 
     return Container(
       margin: margin,
-      padding: EdgeInsets.fromLTRB(
-        isCompact ? 12 : 12,
-        isCompact ? 14 : 8,
-        isCompact ? 12 : 12,
-        isCompact ? 8 : 8,
-      ),
+      padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad),
       decoration: BoxDecoration(
-        color: isCompact
-            ? tokens.windowBg
-            : tokens.titlebarBg.withValues(alpha: 0.82),
+        color: FlatColors.muted(brightness),
         border: Border(
           bottom: BorderSide(
-            color: tokens.separatorColor,
-            width: 0.5,
+            color: FlatColors.border(brightness),
+            width: FlatBorder.structural,
           ),
         ),
       ),
@@ -49,16 +47,13 @@ class BayinPageHeader extends ConsumerWidget {
         child: Row(
           children: [
             ?left,
-            if (left != null) const SizedBox(width: 8),
+            if (left != null) const SizedBox(width: FlatSpacing.sm),
             Expanded(
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: DefaultTextStyle(
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: tokens.textPrimary,
-                    letterSpacing: -0.1,
+                  style: FlatTypography.heading3(brightness).copyWith(
+                    fontSize: FlatSpacing.md,
                   ),
                   overflow: TextOverflow.ellipsis,
                   maxLines: 1,
@@ -66,7 +61,7 @@ class BayinPageHeader extends ConsumerWidget {
                 ),
               ),
             ),
-            if (right != null) const SizedBox(width: 8),
+            if (right != null) const SizedBox(width: FlatSpacing.sm),
             ?right,
           ],
         ),

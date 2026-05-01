@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -95,17 +96,31 @@ class BaYinApp extends ConsumerWidget {
     return FluentApp.router(
       title: 'BaYin',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.fluentLight(),
+      darkTheme: AppTheme.fluentDark(),
       themeMode: themeMode,
       locale: locale ?? TranslationProvider.of(context).flutterLocale,
       supportedLocales: AppLocaleUtils.supportedLocales,
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[
+        GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
       ],
       routerConfig: router,
       builder: (context, child) {
-        return _ResponsiveSync(child: child ?? const SizedBox.shrink());
+        // Wrap with a Material widget + flat Material ThemeData so that
+        // Material widgets (TextField, FilledButton, Switch, ListTile,
+        // Divider, etc.) have a proper ancestor and pick up flat styling.
+        final brightness = FluentTheme.of(context).brightness;
+        final theme = AppTheme.materialTheme(brightness);
+        return Theme(
+          data: theme,
+          child: Material(
+            type: MaterialType.transparency,
+            textStyle: theme.textTheme.bodyMedium,
+            child: _ResponsiveSync(child: child ?? const SizedBox.shrink()),
+          ),
+        );
       },
     );
   }

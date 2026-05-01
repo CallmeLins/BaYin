@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -64,7 +64,7 @@ class _StreamServerConfigPageState
             padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
             children: [
               asyncServers.when(
-                loading: () => const ProgressBar(),
+                loading: () => const LinearProgressIndicator(),
                 error: (error, _) => _ErrorCard(message: '$error'),
                 data: (servers) => _ServerListCard(
                   servers: servers,
@@ -275,7 +275,7 @@ class _Header extends StatelessWidget {
         },
         icon: Icon(PhosphorIcons.caretLeft()),
       ),
-      right: Button(
+      right: TextButton(
         onPressed: onOpenPlaylists,
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -317,7 +317,7 @@ class _ServerListCard extends ConsumerWidget {
                 const Text('Saved servers',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                 const Spacer(),
-                Button(onPressed: onCreateNew, child: const Text('New')),
+                TextButton(onPressed: onCreateNew, child: const Text('New')),
               ],
             ),
           ),
@@ -385,10 +385,10 @@ class _FormCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          ComboBox<String>(
+          DropdownButton<String>(
             value: serverType,
             items: serverTypes
-                .map((item) => ComboBoxItem<String>(
+                .map((item) => DropdownMenuItem<String>(
                       value: item.value,
                       child: Text(item.label),
                     ))
@@ -399,24 +399,32 @@ class _FormCard extends StatelessWidget {
             },
           ),
           const SizedBox(height: 10),
-          TextBox(
+          TextField(
             controller: serverNameController,
-            placeholder: 'Server name (optional)',
+            decoration: const InputDecoration(
+              hintText: 'Server name (optional)',
+            ),
           ),
           const SizedBox(height: 10),
-          TextBox(
+          TextField(
             controller: serverUrlController,
-            placeholder: 'Server URL',
+            decoration: const InputDecoration(
+              hintText: 'Server URL',
+            ),
           ),
           const SizedBox(height: 10),
-          TextBox(
+          TextField(
             controller: usernameController,
-            placeholder: 'Username',
+            decoration: const InputDecoration(
+              hintText: 'Username',
+            ),
           ),
           const SizedBox(height: 10),
-          TextBox(
+          TextField(
             controller: passwordController,
-            placeholder: 'Password',
+            decoration: const InputDecoration(
+              hintText: 'Password',
+            ),
             obscureText: true,
           ),
         ],
@@ -464,7 +472,7 @@ class _ActionButtons extends StatelessWidget {
                       const Padding(
                         padding: EdgeInsets.only(right: 6),
                         child: SizedBox(
-                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
                       Icon(PhosphorIcons.plugs()),
@@ -485,7 +493,7 @@ class _ActionButtons extends StatelessWidget {
                       const Padding(
                         padding: EdgeInsets.only(right: 6),
                         child: SizedBox(
-                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
                       Icon(PhosphorIcons.floppyDisk()),
@@ -510,7 +518,7 @@ class _ActionButtons extends StatelessWidget {
                       const Padding(
                         padding: EdgeInsets.only(right: 6),
                         child: SizedBox(
-                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
                       Icon(PhosphorIcons.arrowsClockwise()),
@@ -531,7 +539,7 @@ class _ActionButtons extends StatelessWidget {
                       const Padding(
                         padding: EdgeInsets.only(right: 6),
                         child: SizedBox(
-                            width: 14, height: 14, child: ProgressRing(strokeWidth: 2)),
+                            width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
                       Icon(PhosphorIcons.trash()),

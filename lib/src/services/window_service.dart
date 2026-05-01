@@ -5,7 +5,6 @@ import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:macos_ui/macos_ui.dart';
 
 /// Desktop window chrome + state persistence (Windows / Linux / macOS).
 ///
@@ -27,10 +26,6 @@ class WindowService with WindowListener {
     }
     if (kIsWeb) return;
     if (!_isDesktop) return;
-    if (Platform.isMacOS) {
-      await _configureMacosWindow();
-    }
-
     await windowManager.ensureInitialized();
 
     final restored = await _loadState();
@@ -67,15 +62,6 @@ class WindowService with WindowListener {
 
   bool get _isDesktop =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
-
-  Future<void> _configureMacosWindow() async {
-    try {
-      const config = MacosWindowUtilsConfig();
-      await config.apply();
-    } catch (_) {
-      // Best-effort only: keep boot resilient if macOS window utils fail.
-    }
-  }
 
   @override
   void onWindowMove() => _schedulePersist();

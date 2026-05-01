@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:async';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
@@ -109,7 +109,7 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
               ),
               if (scanner.isLoading) ...[
                 const SizedBox(height: 10),
-                const ProgressBar(),
+                const LinearProgressIndicator(),
               ],
               const SizedBox(height: 10),
               _ResultCard(
@@ -290,9 +290,12 @@ class _DirectoriesCard extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: TextBox(
+                child: TextField(
                   controller: pathController,
-                  placeholder: r'Enter a folder path, e.g. D:\Music',
+                  decoration: const InputDecoration(
+                    hintText: r'Enter a folder path, e.g. D:\Music',
+                    border: InputBorder.none,
+                  ),
                   onSubmitted: (value) => onAddTyped(),
                 ),
               ),
@@ -396,7 +399,7 @@ class _ScanOptionsCard extends StatelessWidget {
                   ],
                 ),
               ),
-              ToggleSwitch(checked: skipShort, onChanged: onSkipShortChanged),
+              Switch(value: skipShort, onChanged: onSkipShortChanged),
             ],
           ),
           const SizedBox(height: 6),

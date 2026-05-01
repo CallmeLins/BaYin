@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as mat show SelectableText;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -25,7 +25,7 @@ class MusicLibraryPage extends ConsumerWidget {
     final albums = albumsAsync.valueOrNull;
     final artists = artistsAsync.valueOrNull;
     if (songs == null || albums == null || artists == null) {
-      return const Center(child: ProgressRing());
+      return const Center(child: CircularProgressIndicator());
     }
 
     final metrics = _buildMetrics(songs);

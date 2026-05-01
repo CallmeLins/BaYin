@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/providers.dart';
@@ -109,9 +109,11 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-              TextBox(
+              TextField(
                 controller: _directoryController,
-                placeholder: r'Enter a local music directory, e.g. D:\Music',
+                decoration: InputDecoration(
+                  hintText: r'Enter a local music directory, e.g. D:\Music',
+                ),
               ),
               const SizedBox(height: 8),
               FilledButton(
@@ -144,7 +146,7 @@ class _DebugPageState extends ConsumerState<DebugPage> {
                 child: Text(scanner.isLoading ? 'Working...' : 'Scan & save to DB'),
               ),
               const SizedBox(height: 8),
-              HyperlinkButton(
+              TextButton(
                 onPressed: scanner.isLoading
                     ? null
                     : () => ref.read(scannerProvider.notifier).clearLibrary(),

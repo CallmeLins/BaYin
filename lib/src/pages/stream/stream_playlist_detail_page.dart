@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -7,6 +7,7 @@ import '../../models/models.dart';
 import '../../providers/providers.dart';
 import '../../services/library_service.dart';
 import '../../theme/bayin_tokens.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class StreamPlaylistDetailPage extends ConsumerStatefulWidget {
@@ -29,7 +30,7 @@ class _StreamPlaylistDetailPageState
 
   String? _infoTitle;
   String? _infoMessage;
-  InfoBarSeverity _infoSeverity = InfoBarSeverity.success;
+  bool _infoIsError = false;
 
   @override
   void didChangeDependencies() {
@@ -102,7 +103,7 @@ class _StreamPlaylistDetailPageState
                   ? const SizedBox(
                       width: 16,
                       height: 16,
-                      child: ProgressRing(strokeWidth: 2),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : Icon(PhosphorIcons.arrowsClockwise()),
             ),
@@ -124,10 +125,10 @@ class _StreamPlaylistDetailPageState
         if (_infoTitle != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-            child: InfoBar(
-              title: Text(_infoTitle!),
-              content: _infoMessage != null ? Text(_infoMessage!) : null,
-              severity: _infoSeverity,
+            child: _InfoBanner(
+              title: _infoTitle!,
+              message: _infoMessage,
+              isError: _infoIsError,
               onClose: () => setState(() {
                 _infoTitle = null;
                 _infoMessage = null;
@@ -146,7 +147,7 @@ class _StreamPlaylistDetailPageState
 
   Widget _buildBody(BuildContext context, BayinTokens tokens) {
     if (_isLoading) {
-      return const Center(child: ProgressRing());
+      return const Center(child: CircularProgressIndicator());
     }
     if (_error != null) {
       return Center(
@@ -225,19 +226,97 @@ class _StreamPlaylistDetailPageState
       setState(() {
         _infoTitle = 'Sync Complete';
         _infoMessage = 'Playlists synced.';
-        _infoSeverity = InfoBarSeverity.success;
+        _infoIsError = false;
       });
     } catch (error) {
       if (!mounted) return;
       setState(() {
         _infoTitle = 'Sync Failed';
         _infoMessage = '$error';
-        _infoSeverity = InfoBarSeverity.error;
+        _infoIsError = true;
       });
     } finally {
       if (mounted) {
         setState(() => _isSyncing = false);
       }
     }
+  }
+}
+
+/// Flat info/status banner replacing fluent_ui's InfoBar.
+class _InfoBanner extends StatelessWidget {
+  const _InfoBanner({
+    required this.title,
+    this.message,
+    required this.isError,
+    required this.onClose,
+  });
+
+  final String title;
+  final String? message;
+  final bool isError;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final fg = FlatColors.foreground(brightness);
+    final borderColor = isError
+        ? FlatColors.error(brightness)
+        : FlatColors.secondary(brightness);
+    return Container(
+      padding: const EdgeInsets.all(FlatSpacing.sm + 4),
+      decoration: BoxDecoration(
+        color: (isError
+                ? FlatColors.error(brightness)
+                : FlatColors.secondary(brightness))
+            .withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(FlatRadius.md),
+        border: Border.all(
+          color: borderColor.withValues(alpha: 0.35),
+          width: FlatBorder.structural,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isError ? PhosphorIcons.warningCircle() : PhosphorIcons.checkCircle(),
+            size: 18,
+            color: borderColor,
+          ),
+          const SizedBox(width: FlatSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                    color: fg,
+                  ),
+                ),
+                if (message != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    message!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: FlatColors.textSecondary(brightness),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: onClose,
+            icon: Icon(PhosphorIcons.x(), size: 16),
+          ),
+        ],
+      ),
+    );
   }
 }

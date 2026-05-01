@@ -1,9 +1,10 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class BayinProPage extends ConsumerWidget {
@@ -13,70 +14,87 @@ class BayinProPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
+
     return Column(
       children: [
         BayinPageHeader(
           title: const Text('BaYin Pro'),
-          left: IconButton(
-            onPressed: () {
-              if (context.canPop()) {
-                context.pop();
-              } else {
-                context.go('/settings');
-              }
-            },
-            icon: Icon(PhosphorIcons.caretLeft()),
+          left: Tooltip(
+            message: 'Back',
+            child: IconButton(
+              onPressed: () {
+                if (context.canPop()) {
+                  context.pop();
+                } else {
+                  context.go('/settings');
+                }
+              },
+              icon: Icon(
+                PhosphorIcons.caretLeft(),
+                size: 20,
+                color: FlatColors.textSecondary(brightness),
+              ),
+            ),
           ),
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
             children: [
-              const SizedBox(height: 10),
-              const SizedBox(height: 6),
-              Text(
-                'Feature flags for advanced visuals and focused playback.',
-                style: TextStyle(color: tokens.textSecondary),
-              ),
               const SizedBox(height: 12),
-              _SwitchCard(
-                title: 'Enable Pro',
-                subtitle: 'Master switch for all Pro-only options.',
-                value: app.proEnabled,
-                onChanged: controller.setProEnabled,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Feature flags for advanced visuals and focused playback.',
+                  style: TextStyle(color: FlatColors.textSecondary(brightness)),
+                ),
               ),
-              const SizedBox(height: 10),
-              _SwitchCard(
-                title: 'Desktop glass effect',
-                subtitle: 'Enable translucent desktop surface accents.',
-                value: app.proGlassEnabled,
-                onChanged: app.proEnabled ? controller.setProGlassEnabled : null,
-              ),
-              const SizedBox(height: 10),
-              _SwitchCard(
-                title: 'Colorful spectrum',
-                subtitle: 'Allow richer color rendering for spectrum views.',
-                value: app.proColorSpectrumEnabled,
-                onChanged:
-                    app.proEnabled ? controller.setProColorSpectrumEnabled : null,
-              ),
-              const SizedBox(height: 10),
-              _SwitchCard(
-                title: 'Pure mode feature',
-                subtitle: 'Unlock Pure mode toggle in playback experience.',
-                value: app.proPureModeEnabled,
-                onChanged:
-                    app.proEnabled ? controller.setProPureModeFeatureEnabled : null,
-              ),
-              const SizedBox(height: 10),
-              _SwitchCard(
-                title: 'Pure mode active',
-                subtitle: 'Hide non-essential UI during playback.',
-                value: app.pureModeEnabled,
-                onChanged: app.proEnabled && app.proPureModeEnabled
-                    ? controller.setPureModeEnabled
-                    : null,
+              const SizedBox(height: 24),
+              _SectionGroup(
+                title: 'PRO FEATURES',
+                child: Column(
+                  children: [
+                    _SwitchTileCard(
+                      title: 'Enable Pro',
+                      subtitle: 'Master switch for all Pro-only options.',
+                      value: app.proEnabled,
+                      onChanged: controller.setProEnabled,
+                    ),
+                    _FlatDivider(),
+                    _SwitchTileCard(
+                      title: 'Desktop glass effect',
+                      subtitle: 'Enable translucent desktop surface accents.',
+                      value: app.proGlassEnabled,
+                      onChanged: app.proEnabled ? controller.setProGlassEnabled : null,
+                    ),
+                    _FlatDivider(),
+                    _SwitchTileCard(
+                      title: 'Colorful spectrum',
+                      subtitle: 'Allow richer color rendering for spectrum views.',
+                      value: app.proColorSpectrumEnabled,
+                      onChanged:
+                          app.proEnabled ? controller.setProColorSpectrumEnabled : null,
+                    ),
+                    _FlatDivider(),
+                    _SwitchTileCard(
+                      title: 'Pure mode feature',
+                      subtitle: 'Unlock Pure mode toggle in playback experience.',
+                      value: app.proPureModeEnabled,
+                      onChanged:
+                          app.proEnabled ? controller.setProPureModeFeatureEnabled : null,
+                    ),
+                    _FlatDivider(),
+                    _SwitchTileCard(
+                      title: 'Pure mode active',
+                      subtitle: 'Hide non-essential UI during playback.',
+                      value: app.pureModeEnabled,
+                      onChanged: app.proEnabled && app.proPureModeEnabled
+                          ? controller.setPureModeEnabled
+                          : null,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -86,8 +104,58 @@ class BayinProPage extends ConsumerWidget {
   }
 }
 
-class _SwitchCard extends StatelessWidget {
-  const _SwitchCard({
+/// A structural 2px divider within a section group.
+class _FlatDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Divider(
+      height: FlatBorder.structural,
+      indent: FlatSpacing.md,
+      color: FlatColors.border(brightness),
+    );
+  }
+}
+
+class _SectionGroup extends ConsumerWidget {
+  const _SectionGroup({required this.title, required this.child});
+
+  final String title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xs + 2,
+          ),
+          child: Text(
+            title,
+            style: FlatTypography.label(brightness),
+          ),
+        ),
+        Container(
+          decoration: BoxDecoration(
+            color: FlatColors.background(brightness),
+            borderRadius: BorderRadius.circular(FlatRadius.md),
+            border: Border.all(
+              color: FlatColors.border(brightness),
+              width: FlatBorder.structural,
+            ),
+          ),
+          child: child,
+        ),
+      ],
+    );
+  }
+}
+
+class _SwitchTileCard extends ConsumerWidget {
+  const _SwitchTileCard({
     required this.title,
     required this.subtitle,
     required this.value,
@@ -100,24 +168,39 @@ class _SwitchCard extends StatelessWidget {
   final Future<void> Function(bool)? onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    return BayinGlassCard(
+  Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
+    return InkWell(
+      onTap: onChanged == null ? null : () => onChanged!(!value),
+      borderRadius: BorderRadius.circular(FlatRadius.md),
       child: Padding(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.symmetric(
+          horizontal: FlatSpacing.md,
+          vertical: FlatSpacing.sm + 4,
+        ),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: const TextStyle(fontSize: 12)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: FlatSpacing.xs),
+                  Text(
+                    subtitle,
+                    style: FlatTypography.caption(brightness),
+                  ),
                 ],
               ),
             ),
-            ToggleSwitch(
-              checked: value,
+            Switch(
+              value: value,
               onChanged: onChanged == null ? null : (v) => onChanged!(v),
             ),
           ],

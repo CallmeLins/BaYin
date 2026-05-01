@@ -1,0 +1,1 @@
+- [Flat Design System v1 — Foundation](flat_design_system_v1.md) — Centralized design tokens, flat theme builders, structural widget updates. 36 files await gradual migration.

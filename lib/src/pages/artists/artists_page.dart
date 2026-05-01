@@ -1,4 +1,4 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -16,7 +16,7 @@ class ArtistsPage extends ConsumerWidget {
     final tokens = ref.watch(bayinTokensProvider);
     final asyncArtists = ref.watch(libraryArtistsProvider);
     return asyncArtists.when(
-      loading: () => const Center(child: ProgressRing()),
+      loading: () => const Center(child: CircularProgressIndicator()),
       error: (error, _) => Center(
         child: SelectableText('Failed to load artists\n$error'),
       ),

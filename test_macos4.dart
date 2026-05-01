@@ -1,0 +1,1 @@
+import 'package:flutter/cupertino.dart'; void main() { CupertinoSlidingSegmentedControl<int>(groupValue: 1, children: {1: Text('a'), 2: Text('b')}, onValueChanged: (v) {}); }

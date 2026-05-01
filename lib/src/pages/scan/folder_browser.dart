@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/material.dart' as mat show showModalBottomSheet;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
@@ -67,9 +67,12 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextBox(
+                  child: TextField(
                     controller: _pathController,
-                    placeholder: 'Folder path',
+                    decoration: const InputDecoration(
+                      hintText: 'Folder path',
+                      border: InputBorder.none,
+                    ),
                     onSubmitted: (value) => _load(value),
                   ),
                 ),
@@ -113,7 +116,7 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
               ],
             ),
           ),
-          if (_isLoading) const ProgressBar(),
+          if (_isLoading) const LinearProgressIndicator(),
           if (_error != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),

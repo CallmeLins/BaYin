@@ -1,9 +1,8 @@
-import 'package:fluent_ui/fluent_ui.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/models.dart';
-import '../providers/providers.dart';
-import '../theme/bayin_tokens.dart';
+import '../theme/design_tokens.dart';
 import 'cover_art.dart';
 
 String _formatDuration(double seconds) {
@@ -38,10 +37,13 @@ class SongList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = ref.watch(bayinTokensProvider);
     return ListView.builder(
       controller: scrollController,
-      padding: padding ?? const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: padding ??
+          const EdgeInsets.symmetric(
+            horizontal: FlatSpacing.sm + 4,
+            vertical: FlatSpacing.sm,
+          ),
       itemCount: songs.length,
       itemExtent: 52,
       itemBuilder: (context, index) {
@@ -49,7 +51,6 @@ class SongList extends ConsumerWidget {
         return _SongRow(
           song: song,
           index: showIndex ? index + 1 : null,
-          tokens: tokens,
           onTap: onTap == null ? null : () => onTap!(song),
           onLongPress: onLongPress == null ? null : () => onLongPress!(song),
         );
@@ -58,30 +59,32 @@ class SongList extends ConsumerWidget {
   }
 }
 
-class _SongRow extends StatelessWidget {
+class _SongRow extends ConsumerWidget {
   const _SongRow({
     required this.song,
     required this.index,
-    required this.tokens,
     required this.onTap,
     required this.onLongPress,
   });
 
   final Song song;
   final int? index;
-  final BayinTokens tokens;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        padding: const EdgeInsets.symmetric(
+          horizontal: FlatSpacing.sm,
+          vertical: FlatSpacing.xs,
+        ),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(FlatRadius.md - 2),
         ),
         child: Row(
           children: [
@@ -93,7 +96,7 @@ class _SongRow extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12,
-                    color: tokens.textSecondary,
+                    color: FlatColors.textSecondary(brightness),
                     fontFeatures: const <FontFeature>[
                       FontFeature.tabularFigures(),
                     ],
@@ -106,10 +109,10 @@ class _SongRow extends StatelessWidget {
               coverHash: song.coverHash,
               streamInfo: song.streamInfo,
               size: CoverArtSize.small,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(FlatRadius.sm),
               placeholderIconSize: 16,
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: FlatSpacing.sm + 2),
             Expanded(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -127,23 +130,20 @@ class _SongRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${song.artist} · ${song.album}',
+                    '${song.artist} \u00b7 ${song.album}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: tokens.textSecondary,
-                    ),
+                    style: FlatTypography.caption(brightness),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: FlatSpacing.sm),
             Text(
               _formatDuration(song.duration),
               style: TextStyle(
                 fontSize: 12,
-                color: tokens.textSecondary,
+                color: FlatColors.textSecondary(brightness),
                 fontFeatures: const <FontFeature>[
                   FontFeature.tabularFigures(),
                 ],
