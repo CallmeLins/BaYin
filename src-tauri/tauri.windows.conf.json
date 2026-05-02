@@ -8,6 +8,7 @@
         "width": 800,
         "height": 600,
         "decorations": false,
+        "transparent": true,
         "visible": false
       }
     ]
