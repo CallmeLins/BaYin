@@ -15,7 +15,7 @@ mod watcher;
 mod system_media_android;
 
 use commands::{
-    delete_background_image, get_background_image_data, save_background_image,
+    delete_background_image, get_background_image_data, save_background_image, save_background_image_base64,
     audio_enable_visualization,
     audio_get_state,
     audio_pause,
@@ -286,6 +286,7 @@ pub fn run() {
             // Software update
             // 自定义背景
             save_background_image,
+            save_background_image_base64,
             get_background_image_data,
             delete_background_image,
             // Software update

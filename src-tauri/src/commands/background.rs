@@ -12,6 +12,21 @@ fn mime_from_ext(ext: &str) -> &str {
     }
 }
 
+fn ext_from_data_url(data_url: &str) -> &str {
+    // data:image/jpeg;base64,...  or  data:image/png;base64,...
+    if data_url.contains("image/png") {
+        "png"
+    } else if data_url.contains("image/webp") {
+        "webp"
+    } else if data_url.contains("image/bmp") {
+        "bmp"
+    } else if data_url.contains("image/gif") {
+        "gif"
+    } else {
+        "jpg"
+    }
+}
+
 fn read_as_data_url(path: &std::path::Path) -> Result<String, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let ext = path
@@ -39,6 +54,34 @@ pub fn save_background_image(app: AppHandle, source_path: String) -> Result<Stri
     let dest_path = data_dir.join(format!("background_image.{}", ext));
 
     std::fs::copy(&source_path, &dest_path).map_err(|e| e.to_string())?;
+
+    read_as_data_url(&dest_path)
+}
+
+/// Save a base64 data URL as background image (used by mobile file picker).
+/// Returns the data URL read back from disk.
+#[tauri::command]
+pub fn save_background_image_base64(app: AppHandle, data_url: String) -> Result<String, String> {
+    let ext = ext_from_data_url(&data_url);
+
+    // Strip "data:image/xxx;base64," prefix to get raw base64
+    let b64_data = data_url
+        .split(";base64,")
+        .nth(1)
+        .ok_or_else(|| "Invalid data URL".to_string())?;
+
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(b64_data)
+        .map_err(|e| e.to_string())?;
+
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+
+    let dest_path = data_dir.join(format!("background_image.{}", ext));
+    std::fs::write(&dest_path, &bytes).map_err(|e| e.to_string())?;
 
     read_as_data_url(&dest_path)
 }
