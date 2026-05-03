@@ -1,3 +1,4 @@
+pub mod background;
 pub mod streaming;
 pub mod scanner;
 pub mod db;
@@ -7,6 +8,7 @@ pub mod playback;
 pub mod playlists;
 pub mod update;
 
+pub use background::*;
 pub use streaming::*;
 pub use scanner::*;
 pub use db::*;

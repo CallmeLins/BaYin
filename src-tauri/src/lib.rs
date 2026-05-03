@@ -15,6 +15,7 @@ mod watcher;
 mod system_media_android;
 
 use commands::{
+    delete_background_image, get_background_image_data, save_background_image,
     audio_enable_visualization,
     audio_get_state,
     audio_pause,
@@ -282,6 +283,11 @@ pub fn run() {
             stream_rename_playlist,
             stream_delete_playlist,
             stream_remove_songs_from_playlist,
+            // Software update
+            // 自定义背景
+            save_background_image,
+            get_background_image_data,
+            delete_background_image,
             // Software update
             update_get_latest_release
         ])
