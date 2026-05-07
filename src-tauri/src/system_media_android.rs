@@ -57,13 +57,25 @@ struct DomainChangedPayload {
     track_id: String,
 }
 
+/// Safely lock a mutex, returning an error message on failure
+fn safe_lock<'a, T>(mutex: &'a std::sync::Mutex<T>, name: &str) -> Result<std::sync::MutexGuard<'a, T>, String> {
+    mutex.lock().map_err(|e| {
+        let msg = format!("Failed to lock {}: {}", name, e);
+        log::error!("{}", msg);
+        msg
+    })
+}
+
 fn emit_domain_changed(app: &tauri::AppHandle) {
     let domain = match app.try_state::<PlaybackDomainState>() {
         Some(s) => s,
         None => return,
     };
     let (index, track_id) = {
-        let d = domain.0.lock().unwrap();
+        let d = match safe_lock(&domain.0, "playback domain") {
+            Ok(guard) => guard,
+            Err(_) => return,
+        };
         if d.queue.is_empty() || d.index >= d.queue.len() {
             return;
         }
@@ -79,7 +91,10 @@ fn inflight_set() -> MutexGuard<'static, HashSet<String>> {
     ARTWORK_CACHE_INFLIGHT
         .get_or_init(|| Mutex::new(HashSet::new()))
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| {
+            log::error!("Failed to lock inflight set: {}", e);
+            e.into_inner()
+        })
 }
 
 fn try_mark_artwork_inflight(track_id: &str) -> bool {
@@ -157,9 +172,10 @@ fn spawn_lazy_cache_artwork(app: tauri::AppHandle, track_id: String, artwork_url
 
             // 4) Patch playback domain so subsequent polls can return `artwork_path` without waiting for UI.
             if let Some(domain) = app.try_state::<PlaybackDomainState>() {
-                let mut d = domain.0.lock().unwrap();
-                if let Some(t) = d.queue.iter_mut().find(|t| t.id == track_id) {
-                    t.artwork_ref = Some(hash.clone());
+                if let Ok(mut d) = safe_lock(&domain.0, "playback domain") {
+                    if let Some(t) = d.queue.iter_mut().find(|t| t.id == track_id) {
+                        t.artwork_ref = Some(hash.clone());
+                    }
                 }
             }
 
@@ -183,7 +199,7 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
     let engine = app.try_state::<AudioEngineState>()?;
 
     let (track, queue_len) = {
-        let d = domain.0.lock().unwrap();
+        let d = safe_lock(&domain.0, "playback domain").ok()?;
         let t = d.queue.get(d.index)?.clone();
         (t, d.queue.len())
     };
@@ -207,8 +223,8 @@ fn now_playing_snapshot(app: &tauri::AppHandle) -> Option<AndroidNowPlaying> {
     }
 
     let s = {
-        let engine = engine.lock().unwrap();
-        let s = engine.state.lock().unwrap().clone();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
+        let s = engine.state.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine state: {}", e); e.into_inner() }).clone();
         s
     };
 
@@ -278,16 +294,19 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
 
         // If nothing is loaded yet, kick off playing the current index.
         let st = {
-            let engine = engine.lock().unwrap();
-            let s = engine.state.lock().unwrap().clone();
+            let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
+            let s = engine.state.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine state: {}", e); e.into_inner() }).clone();
             s
         };
         if st.duration_secs <= 0.0 && st.position_secs <= 0.0 {
-            let idx = { domain.0.lock().unwrap().index };
+            let idx = match safe_lock(&domain.0, "playback domain") {
+                Ok(d) => d.index,
+                Err(_) => return,
+            };
             let _ = playback_control::play_index(idx, &domain, &engine);
             emit_domain_changed(app);
         } else {
-            let engine = engine.lock().unwrap();
+            let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
             engine.send(AudioCommand::Resume);
         }
     });
@@ -303,7 +322,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
             Some(s) => s,
             None => return,
         };
-        let engine = engine.lock().unwrap();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
         engine.send(AudioCommand::Pause);
     });
 }
@@ -318,7 +337,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
             Some(s) => s,
             None => return,
         };
-        let engine = engine.lock().unwrap();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
         engine.send(AudioCommand::Resume);
     });
 }
@@ -334,11 +353,11 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
             None => return,
         };
         let st = {
-            let engine = engine.lock().unwrap();
-            let s = engine.state.lock().unwrap().clone();
+            let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
+            let s = engine.state.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine state: {}", e); e.into_inner() }).clone();
             s
         };
-        let engine = engine.lock().unwrap();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
         if st.is_playing {
             engine.send(AudioCommand::Pause);
         } else {
@@ -397,7 +416,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
             Some(s) => s,
             None => return,
         };
-        let engine = engine.lock().unwrap();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
         engine.send(AudioCommand::Seek { position_secs });
     });
 }
@@ -412,7 +431,7 @@ pub extern "system" fn Java_app_tauri_bayin_systemmedia_SystemMediaBridge_native
             Some(s) => s,
             None => return,
         };
-        let engine = engine.lock().unwrap();
+        let engine = engine.lock().unwrap_or_else(|e| { log::error!("Failed to lock engine: {}", e); e.into_inner() });
         engine.send(AudioCommand::RefreshOutput);
     });
 }

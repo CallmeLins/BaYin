@@ -55,7 +55,11 @@ pub(crate) fn play_index(
     engine: &AudioEngineState,
 ) -> bool {
     let file = {
-        let mut d = domain.0.lock().unwrap();
+        // 使用 unwrap_or_else 但避免格式化字符串的开销
+        let mut d = match domain.0.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if d.queue.is_empty() || index >= d.queue.len() {
             return false;
         }
@@ -65,14 +69,20 @@ pub(crate) fn play_index(
         resolved
     };
 
-    let engine = engine.lock().unwrap();
+    let engine = match engine.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     engine.send(AudioCommand::Play { source: file });
     true
 }
 
 pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
     let (cur, mode, len) = {
-        let d = domain.0.lock().unwrap();
+        let d = match domain.0.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if d.queue.is_empty() {
             return false;
         }
@@ -90,7 +100,10 @@ pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) -> b
 
 pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
     let (cur, mode, len) = {
-        let d = domain.0.lock().unwrap();
+        let d = match domain.0.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if d.queue.is_empty() {
             return false;
         }

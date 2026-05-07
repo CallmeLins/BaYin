@@ -1,12 +1,29 @@
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use symphonia::core::io::MediaSource;
+use log::error;
 
 const PRE_BUFFER: usize = 128 * 1024; // 128 KB pre-buffer before playback starts
 const READ_CHUNK: usize = 64 * 1024; // 64 KB per network read
 const MAX_MEMORY_WINDOW: usize = 8 * 1024 * 1024; // 8 MB sliding window
 const WINDOW_TRIM_TARGET: usize = 4 * 1024 * 1024; // Trim to 4 MB when over limit
+
+/// Safely lock a mutex, panicking on poisoned lock with a descriptive message
+fn safe_lock<'a, T>(mutex: &'a Mutex<T>, name: &str) -> MutexGuard<'a, T> {
+    mutex.lock().unwrap_or_else(|e| {
+        error!("Mutex '{}' was poisoned: {}", name, e);
+        e.into_inner()
+    })
+}
+
+/// Safely wait on a condvar, returning the guard or panicking on failure
+fn safe_wait<'a, T>(cvar: &Condvar, guard: MutexGuard<'a, T>, name: &str) -> MutexGuard<'a, T> {
+    cvar.wait(guard).unwrap_or_else(|e| {
+        error!("Condvar wait for '{}' was poisoned: {}", name, e);
+        e.into_inner()
+    })
+}
 
 /// Shared state between the download thread and the reader.
 struct StreamBuffer {
@@ -160,9 +177,9 @@ impl HttpStreamSource {
         // Wait until we have enough data for probing, or download finishes
         {
             let (lock, cvar) = &*shared;
-            let mut buf = lock.lock().unwrap();
+            let mut buf = safe_lock(&lock, "stream_buffer");
             while buf.data.len() < PRE_BUFFER && !buf.done && buf.error.is_none() {
-                buf = cvar.wait(buf).unwrap();
+                buf = safe_wait(&cvar, buf, "stream_buffer");
             }
             if let Some(ref e) = buf.error {
                 return Err(format!("Download error during pre-buffer: {}", e));
@@ -192,7 +209,7 @@ impl HttpStreamSource {
                 loop {
                     // Check abort
                     {
-                        let buf = shared.0.lock().unwrap();
+                        let buf = safe_lock(&shared.0, "shared_buffer");
                         if buf.abort {
                             return;
                         }
@@ -200,7 +217,7 @@ impl HttpStreamSource {
 
                     match resp.read(&mut tmp) {
                         Ok(0) => {
-                            let mut buf = shared.0.lock().unwrap();
+                            let mut buf = safe_lock(&shared.0, "shared_buffer");
                             buf.done = true;
                             shared.1.notify_all();
                             return;
@@ -209,7 +226,7 @@ impl HttpStreamSource {
                             // Write to cache file first (outside mutex for perf)
                             if let Some(ref mut f) = cache {
                                 if let Err(e) = f.write_all(&tmp[..n]) {
-                                    let mut buf = shared.0.lock().unwrap();
+                                    let mut buf = safe_lock(&shared.0, "shared_buffer");
                                     buf.error = Some(format!("Cache write error: {}", e));
                                     buf.done = true;
                                     shared.1.notify_all();
@@ -217,7 +234,7 @@ impl HttpStreamSource {
                                 }
                             }
 
-                            let mut buf = shared.0.lock().unwrap();
+                            let mut buf = safe_lock(&shared.0, "shared_buffer");
                             if buf.abort {
                                 return;
                             }
@@ -235,7 +252,7 @@ impl HttpStreamSource {
                         }
                         Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                         Err(e) => {
-                            let mut buf = shared.0.lock().unwrap();
+                            let mut buf = safe_lock(&shared.0, "shared_buffer");
                             buf.error = Some(e.to_string());
                             buf.done = true;
                             shared.1.notify_all();
@@ -250,8 +267,8 @@ impl HttpStreamSource {
     /// Abort current download, handle seek by either reusing cache or making a new Range request.
     fn reopen_from(&mut self, offset: u64) -> io::Result<()> {
         // Collect info from old buffer
-        let (can_use_cache, old_segment_start, old_downloaded_end, old_done, old_cache_path) = {
-            let buf = self.buf.0.lock().unwrap();
+        let (can_use_cache, old_segment_start, old_downloaded_end, old_done, old_cache_path): (bool, u64, u64, bool, Option<String>) = {
+            let buf = safe_lock(&self.buf.0, "stream_buffer");
             (
                 offset >= buf.segment_start && offset < buf.downloaded_end,
                 buf.segment_start,
@@ -263,7 +280,7 @@ impl HttpStreamSource {
 
         // Signal abort and join download thread
         {
-            let mut buf = self.buf.0.lock().unwrap();
+            let mut buf = safe_lock(&self.buf.0, "stream_buffer");
             buf.abort = true;
         }
         if let Some(handle) = self._download_thread.take() {
@@ -273,7 +290,7 @@ impl HttpStreamSource {
         if can_use_cache {
             // Prevent old buffer Drop from deleting the cache file we're reusing
             {
-                let mut old_buf = self.buf.0.lock().unwrap();
+                let mut old_buf = safe_lock(&self.buf.0, "stream_buffer");
                 old_buf.cache_file.take();
                 old_buf.cache_path.take();
             }
@@ -304,7 +321,7 @@ impl HttpStreamSource {
 
             // Fill in-memory window from cache
             {
-                let mut buf = shared.0.lock().unwrap();
+                let mut buf = safe_lock(&shared.0, "shared_buffer");
                 buf.fill_window_from_cache(offset)?;
             }
 
@@ -321,7 +338,7 @@ impl HttpStreamSource {
 
                 let status = resp.status().as_u16();
                 if status != 206 && status != 200 {
-                    let mut buf = shared.0.lock().unwrap();
+                    let mut buf = safe_lock(&shared.0, "shared_buffer");
                     buf.done = true;
                     None
                 } else {
@@ -384,12 +401,12 @@ impl HttpStreamSource {
         // Wait for pre-buffer
         {
             let (lock, cvar) = &*shared;
-            let mut buf = lock.lock().unwrap();
+            let mut buf = safe_lock(&lock, "stream_buffer");
             while buf.data.len() < PRE_BUFFER && !buf.done && buf.error.is_none() {
-                buf = cvar.wait(buf).unwrap();
+                buf = safe_wait(&cvar, buf, "stream_buffer");
             }
             if let Some(ref e) = buf.error {
-                return Err(io::Error::new(io::ErrorKind::Other, e.clone()));
+                return Err(io::Error::new(io::ErrorKind::Other, e.clone() as String));
             }
         }
 
@@ -400,7 +417,7 @@ impl HttpStreamSource {
 
     /// Reposition the in-memory window from the disk cache (no HTTP request).
     fn reposition_window_from_cache(&mut self, offset: u64) -> io::Result<()> {
-        let mut buf = self.buf.0.lock().unwrap();
+        let mut buf = safe_lock(&self.buf.0, "stream_buffer");
         if offset < buf.segment_start || offset >= buf.downloaded_end {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -420,7 +437,7 @@ impl Read for HttpStreamSource {
         loop {
             let shared = self.buf.clone();
             let (lock, cvar) = &*shared;
-            let mut stream_buf = lock.lock().unwrap();
+            let mut stream_buf = safe_lock(&lock, "stream_buffer");
 
             // Position before our segment — need reopen
             if self.position < stream_buf.segment_start {
@@ -452,10 +469,10 @@ impl Read for HttpStreamSource {
                         && !stream_buf.done
                         && stream_buf.error.is_none()
                     {
-                        stream_buf = cvar.wait(stream_buf).unwrap();
+                        stream_buf = safe_wait(&cvar, stream_buf, "stream_buffer");
                     }
                     if let Some(ref e) = stream_buf.error {
-                        return Err(io::Error::new(io::ErrorKind::Other, e.clone()));
+                        return Err(io::Error::new(io::ErrorKind::Other, e.clone() as String));
                     }
                     if self.position >= stream_buf.data_start + stream_buf.data.len() as u64 {
                         return Ok(0);
@@ -489,9 +506,9 @@ impl Seek for HttpStreamSource {
                 } else {
                     // Unknown length, wait for download to finish
                     let (lock, cvar) = &*self.buf;
-                    let mut buf = lock.lock().unwrap();
+                    let mut buf = safe_lock(&lock, "stream_buffer");
                     while !buf.done {
-                        buf = cvar.wait(buf).unwrap();
+                        buf = safe_wait(&cvar, buf, "stream_buffer");
                     }
                     (buf.downloaded_end) as i64 + offset
                 }
@@ -509,7 +526,7 @@ impl Seek for HttpStreamSource {
         let new_pos = new_pos as u64;
 
         let (segment_start, downloaded_end, is_done, buf_start, buf_end) = {
-            let buf = self.buf.0.lock().unwrap();
+            let buf = safe_lock(&self.buf.0, "stream_buffer");
             (
                 buf.segment_start,
                 buf.downloaded_end,
@@ -542,7 +559,7 @@ impl Seek for HttpStreamSource {
 
 impl Drop for HttpStreamSource {
     fn drop(&mut self) {
-        let mut buf = self.buf.0.lock().unwrap();
+        let mut buf = safe_lock(&self.buf.0, "stream_buffer");
         buf.abort = true;
         // cache file cleanup is handled by StreamBuffer::Drop when Arc refcount reaches 0
     }

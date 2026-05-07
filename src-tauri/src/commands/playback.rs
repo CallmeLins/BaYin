@@ -12,7 +12,10 @@ pub fn playback_set_queue(
     mode: PlayMode,
     domain: State<'_, PlaybackDomainState>,
 ) -> () {
-    let mut d = domain.0.lock().unwrap();
+    let mut d = match domain.0.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     d.queue = tracks;
     d.index = index;
     d.mode = mode;
@@ -20,7 +23,10 @@ pub fn playback_set_queue(
 
 #[tauri::command]
 pub fn playback_set_mode(mode: PlayMode, domain: State<'_, PlaybackDomainState>) -> () {
-    let mut d = domain.0.lock().unwrap();
+    let mut d = match domain.0.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     d.mode = mode;
 }
 

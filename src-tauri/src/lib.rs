@@ -90,12 +90,13 @@ use tauri::{Emitter, Manager};
 use utils::cover::CoverCache;
 
 #[tauri::command]
+#[allow(dead_code)]
 async fn set_tray_language(app: tauri::AppHandle, lang: String) {
-    tray::set_tray_language(&lang);
-    tray::refresh_tray_menu(&app);
+    tray::update_tray_language(&app, &lang);
 }
 
 #[tauri::command]
+#[allow(dead_code)]
 async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
     tray::set_tray_muted(muted);
     tray::refresh_tray_menu(&app);

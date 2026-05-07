@@ -21,7 +21,7 @@ use crate::playback::PlaybackDomainState;
 use crate::playback_control;
 
 const FADE_OUT_MS: f32 = 150.0;
-const FADE_IN_MS: f32 = 200.0;
+const FADE_IN_MS: f32 = 50.0;  // 减少淡入时间到 50ms，加快播放响应
 const PENDING_SAMPLES_MAX: usize = 1_048_576;
 const CMD_CHANNEL_CAP: usize = 256;
 
@@ -57,6 +57,17 @@ pub struct PlaybackState {
     pub position_secs: f64,
     pub duration_secs: f64,
     pub volume: f32,
+}
+
+impl Default for PlaybackState {
+    fn default() -> Self {
+        Self {
+            is_playing: false,
+            position_secs: 0.0,
+            duration_secs: 0.0,
+            volume: 1.0,
+        }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -941,7 +952,13 @@ impl AudioThreadState {
         }
 
         let (index, track_id) = {
-            let d = domain.0.lock().unwrap();
+            let d = match domain.0.lock() {
+                Ok(guard) => guard,
+                Err(e) => {
+                    log::error!("Failed to lock domain: {}", e);
+                    return false;
+                }
+            };
             if d.queue.is_empty() || d.index >= d.queue.len() {
                 (0, String::new())
             } else {
@@ -959,6 +976,7 @@ impl AudioThreadState {
 
     /// Handle the Android auto-advance failure fallback. Returns `true` if `continue` needed.
     #[cfg(target_os = "android")]
+    #[allow(dead_code)]
     fn android_auto_advance_fallback(
         end_pending: &mut bool,
         is_playing: &mut bool,

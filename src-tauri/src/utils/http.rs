@@ -47,5 +47,9 @@ where
             }
         }
     }
-    Err(last_err.unwrap())
+    Err(last_err.unwrap_or_else(|| {
+        // This should never happen since the loop always runs at least once
+        // But we handle it gracefully anyway
+        panic!("with_retry: no error after all attempts failed");
+    }))
 }

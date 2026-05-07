@@ -67,14 +67,32 @@ pub mod desktop {
                 std::thread::sleep(Duration::from_millis(500));
 
                 let should_process = {
-                    let last = last_time_for_debounce.lock().unwrap();
-                    let pending = pending_for_debounce.lock().unwrap();
+                    let last = match last_time_for_debounce.lock() {
+                        Ok(guard) => guard,
+                        Err(e) => {
+                            log::error!("Failed to lock last_event_time: {}", e);
+                            continue;
+                        }
+                    };
+                    let pending = match pending_for_debounce.lock() {
+                        Ok(guard) => guard,
+                        Err(e) => {
+                            log::error!("Failed to lock pending_paths: {}", e);
+                            continue;
+                        }
+                    };
                     !pending.is_empty() && last.elapsed() >= Duration::from_millis(500)
                 };
 
                 if should_process {
                     let paths: Vec<PathBuf> = {
-                        let mut pending = pending_for_debounce.lock().unwrap();
+                        let mut pending = match pending_for_debounce.lock() {
+                            Ok(guard) => guard,
+                            Err(e) => {
+                                log::error!("Failed to lock pending_paths: {}", e);
+                                continue;
+                            }
+                        };
                         let collected: Vec<PathBuf> = pending.drain().collect();
                         collected
                     };
