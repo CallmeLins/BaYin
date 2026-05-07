@@ -2,6 +2,9 @@
 //!
 //! 处理系统托盘图标、菜单和事件
 
+#[cfg(target_os = "macos")]
+mod macos;
+
 #[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -154,11 +157,14 @@ pub fn create_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             _ => {}
         });
 
+    // macOS 使用专用模板图标（自动适配深浅色菜单栏）
     #[cfg(target_os = "macos")]
     {
-        tray_builder = tray_builder
-            .icon(app.default_window_icon().unwrap().clone())
-            .icon_as_template(true);
+        if let Some(icon) = macos::load_tray_icon() {
+            tray_builder = tray_builder.icon(icon).icon_as_template(true);
+        } else if let Some(icon) = app.default_window_icon() {
+            tray_builder = tray_builder.icon(icon.clone());
+        }
     }
 
     #[cfg(not(target_os = "macos"))]
