@@ -7,15 +7,23 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
-import '../../theme/bayin_tokens.dart';
 import '../../theme/design_tokens.dart';
+import '../../theme/macos_design_tokens.dart';
 import '../../utils/info_bar_helper.dart';
 import '../../rust/rust_api.dart';
 import '../../services/file_watcher_service.dart';
 import '../../services/scan_service.dart';
 import '../../widgets/widgets.dart';
+import '../../widgets/glass/glass.dart';
 import 'folder_browser.dart';
 
+/// Scan Music Page — macOS-style glassmorphism UI.
+///
+/// Features:
+/// - Glass material cards with Retina borders
+/// - Traffic lights in header
+/// - Segmented controls for scan options
+/// - Animated progress indicators
 class ScanMusicPage extends ConsumerStatefulWidget {
   const ScanMusicPage({super.key});
 
@@ -64,75 +72,100 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   Widget build(BuildContext context) {
     final scanner = ref.watch(scannerProvider);
     final config = ref.watch(scanConfigProvider);
-    final tokens = ref.watch(bayinTokensProvider);
-    final brightness = Theme.of(context).brightness;
     _applyConfigOnce(config);
-
-    final surfaceBg = FlatColors.surfaceContainerHigh(brightness);
 
     return Column(
       children: [
+        // ── Header ───────────────────────────────────────────────────────
         const BayinPageHeader(
           title: Text('Scan Music'),
         ),
+
+        // ── Content ──────────────────────────────────────────────────────
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              FlatSpacing.smPlus,
-              0,
-              FlatSpacing.smPlus,
-              FlatSpacing.smPlus - 2,
-            ),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             children: [
-              const SizedBox(height: 2),
-              _DirectoriesCard(
-                directories: _directories,
-                pathController: _pathController,
-                surfaceBg: surfaceBg,
-                tokens: tokens,
-                onAddTyped: _addTypedPath,
-                onBrowse: _browseFolder,
-                onRemove: _removeDirectory,
+              const SizedBox(height: 8),
+
+              // ── Folders Card ─────────────────────────────────────────
+              _GlassCard(
+                title: 'Folders',
+                icon: PhosphorIcons.folder(),
+                child: _DirectoriesSection(
+                  directories: _directories,
+                  pathController: _pathController,
+                  onAddTyped: _addTypedPath,
+                  onBrowse: _browseFolder,
+                  onRemove: _removeDirectory,
+                ),
               ),
-              const SizedBox(height: FlatSpacing.smPlus - 2),
-              _ScanOptionsCard(
-                skipShort: _skipShort,
-                minDuration: _minDuration,
-                surfaceBg: surfaceBg,
-                onSkipShortChanged: (value) => setState(() => _skipShort = value),
-                onMinDurationChanged: (value) => setState(() => _minDuration = value),
+
+              const SizedBox(height: 16),
+
+              // ── Scan Options Card ────────────────────────────────────
+              _GlassCard(
+                title: 'Options',
+                icon: PhosphorIcons.gear(),
+                child: _ScanOptionsSection(
+                  skipShort: _skipShort,
+                  minDuration: _minDuration,
+                  onSkipShortChanged: (value) =>
+                      setState(() => _skipShort = value),
+                  onMinDurationChanged: (value) =>
+                      setState(() => _minDuration = value),
+                ),
               ),
-              const SizedBox(height: FlatSpacing.smPlus - 2),
-              _ActionCard(
-                scanDisabled: scanner.isLoading || _directories.isEmpty,
-                backfillDisabled: scanner.isLoading,
-                surfaceBg: surfaceBg,
-                onSaveConfig: _saveConfig,
-                onPreviewScan: _previewScan,
-                onScanAndSave: _scanAndSave,
-                onBackfillCovers: _backfillCovers,
+
+              const SizedBox(height: 16),
+
+              // ── Actions Card ─────────────────────────────────────────
+              _GlassCard(
+                title: 'Actions',
+                icon: PhosphorIcons.playCircle(),
+                child: _ActionsSection(
+                  scanDisabled: scanner.isLoading || _directories.isEmpty,
+                  backfillDisabled: scanner.isLoading,
+                  onSaveConfig: _saveConfig,
+                  onPreviewScan: _previewScan,
+                  onScanAndSave: _scanAndSave,
+                  onBackfillCovers: _backfillCovers,
+                ),
               ),
+
+              // ── Progress Indicator ───────────────────────────────────
               if (scanner.isLoading) ...[
-                const SizedBox(height: FlatSpacing.smPlus - 2),
-                const LinearProgressIndicator(),
+                const SizedBox(height: 16),
+                const _ScanProgressIndicator(),
               ],
-              const SizedBox(height: FlatSpacing.smPlus - 2),
-              _ResultCard(
-                scannedCount: scanner.results.length,
-                directories: scanner.directories,
-                lastSave: scanner.lastSave,
-                error: scanner.error,
-                surfaceBg: surfaceBg,
-                tokens: tokens,
-                watchRunning: _watchRunning,
-                watchPendingEvents: _watchPendingEvents,
-                watchEventCount: _watchEventCount,
-                lastWatchEventPath: _lastWatchEventPath,
-                lastWatchEventKind: _lastWatchEventKind,
+
+              const SizedBox(height: 16),
+
+              // ── Status Card ──────────────────────────────────────────
+              _GlassCard(
+                title: 'Status',
+                icon: PhosphorIcons.chartBar(),
+                child: _StatusSection(
+                  scannedCount: scanner.results.length,
+                  directories: scanner.directories,
+                  lastSave: scanner.lastSave,
+                  error: scanner.error,
+                  watchRunning: _watchRunning,
+                  watchPendingEvents: _watchPendingEvents,
+                  watchEventCount: _watchEventCount,
+                  lastWatchEventPath: _lastWatchEventPath,
+                  lastWatchEventKind: _lastWatchEventKind,
+                ),
               ),
+
+              // ── Preview Songs ────────────────────────────────────────
               if (scanner.results.isNotEmpty) ...[
-                const SizedBox(height: FlatSpacing.smPlus - 2),
-                _PreviewSongsCard(scanner.results, surfaceBg: surfaceBg, tokens: tokens),
+                const SizedBox(height: 16),
+                _GlassCard(
+                  title: 'Preview',
+                  icon: PhosphorIcons.musicNote(),
+                  child: _PreviewSongsSection(scanner.results),
+                ),
               ],
             ],
           ),
@@ -140,6 +173,8 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
       ],
     );
   }
+
+  // ── Private Methods ────────────────────────────────────────────────────
 
   void _applyConfigOnce(AsyncValue<ScanConfig?> config) {
     if (_configApplied) return;
@@ -260,12 +295,65 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   }
 }
 
-class _DirectoriesCard extends StatelessWidget {
-  const _DirectoriesCard({
+// ═══════════════════════════════════════════════════════════════════════════
+// Glass Card Container
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Reusable glass card with title and icon.
+class _GlassCard extends StatelessWidget {
+  const _GlassCard({
+    required this.title,
+    required this.icon,
+    required this.child,
+  });
+
+  final String title;
+  final IconData icon;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    return MacosGlassContainer(
+      materialType: GlassMaterialType.thick,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Section header.
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 16,
+                color: FlatColors.textSecondary(brightness),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: FlatTypography.headingCompact(brightness),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Content.
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Directories Section
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _DirectoriesSection extends StatelessWidget {
+  const _DirectoriesSection({
     required this.directories,
     required this.pathController,
-    required this.surfaceBg,
-    required this.tokens,
     required this.onAddTyped,
     required this.onBrowse,
     required this.onRemove,
@@ -273,8 +361,6 @@ class _DirectoriesCard extends StatelessWidget {
 
   final List<String> directories;
   final TextEditingController pathController;
-  final Color surfaceBg;
-  final BayinTokens tokens;
   final VoidCallback onAddTyped;
   final VoidCallback onBrowse;
   final ValueChanged<String> onRemove;
@@ -282,185 +368,323 @@ class _DirectoriesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Container(
-      padding: const EdgeInsets.all(FlatSpacing.smPlus),
-      decoration: BoxDecoration(
-        color: surfaceBg,
-        borderRadius: BorderRadius.circular(FlatRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Folders',
-            style: FlatTypography.bodySmall(brightness).copyWith(
-              fontWeight: FontWeight.w600,
+    final isDark = brightness == Brightness.dark;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Styled Input Container ─────────────────────────────────
+        Container(
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.08),
+              width: 0.5,
             ),
           ),
-          const SizedBox(height: FlatSpacing.sm),
-          Row(
+          child: Column(
             children: [
-              Expanded(
-                child: TextField(
-                  controller: pathController,
-                  decoration: const InputDecoration(
-                    hintText: r'Enter a folder path, e.g. D:\Music',
-                    border: InputBorder.none,
-                  ),
-                  onSubmitted: (value) => onAddTyped(),
+              // ── Input Row ───────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    // Folder icon.
+                    Icon(
+                      PhosphorIcons.folderSimple(),
+                      size: 18,
+                      color: FlatColors.primary(brightness),
+                    ),
+                    const SizedBox(width: 10),
+
+                    // Text field.
+                    Expanded(
+                      child: TextField(
+                        controller: pathController,
+                        decoration: InputDecoration(
+                          hintText: 'D:\\Music',
+                          hintStyle: FlatTypography.bodySmall(brightness).copyWith(
+                            color: FlatColors.textTertiary(brightness),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          isDense: true,
+                        ),
+                        style: FlatTypography.bodySmall(brightness),
+                        onSubmitted: (_) => onAddTyped(),
+                      ),
+                    ),
+
+                    // Browse button.
+                    _PillButton(
+                      label: 'Browse',
+                      icon: PhosphorIcons.folderOpen(),
+                      onPressed: onBrowse,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: FlatSpacing.sm),
-              IconButton(
-                onPressed: onAddTyped,
-                icon: Icon(PhosphorIcons.plus()),
+
+              // ── Divider ──────────────────────────────────────────
+              Container(
+                height: 1,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06),
               ),
-              const SizedBox(width: FlatSpacing.sm),
-              IconButton(
-                onPressed: onBrowse,
-                icon: Icon(PhosphorIcons.folderOpen()),
+
+              // ── Action Bar ───────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: [
+                    Icon(
+                      PhosphorIcons.info(),
+                      size: 12,
+                      color: FlatColors.textTertiary(brightness),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        directories.isEmpty
+                            ? 'Select music folders to scan'
+                            : '${directories.length} folder${directories.length > 1 ? 's' : ''} selected',
+                        style: FlatTypography.caption(brightness),
+                      ),
+                    ),
+                    // Add button.
+                    _AddButton(
+                      onPressed: pathController.text.trim().isEmpty ? null : onAddTyped,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: FlatSpacing.sm),
-          if (directories.isEmpty)
-            Text(
-              'No folders selected yet.',
-              style: FlatTypography.caption(brightness),
-            )
-          else
-            Wrap(
-              spacing: FlatSpacing.sm,
-              runSpacing: FlatSpacing.sm,
-              children: [
-                for (final path in directories)
-                  _PathChip(path: path, onRemove: () => onRemove(path)),
-              ],
-            ),
-        ],
-      ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // ── Directory Chips ────────────────────────────────────────
+        if (directories.isEmpty)
+          _EmptyState(
+            icon: PhosphorIcons.folderOpen(),
+            message: 'No folders added yet',
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final path in directories)
+                _DirectoryChip(
+                  path: path,
+                  onRemove: () => onRemove(path),
+                ),
+            ],
+          ),
+      ],
     );
   }
 }
 
-class _PathChip extends StatelessWidget {
-  const _PathChip({required this.path, required this.onRemove});
-  final String path;
-  final VoidCallback onRemove;
+/// Pill-shaped button for the input area.
+class _PillButton extends StatelessWidget {
+  const _PillButton({
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Container(
-      padding: const EdgeInsets.only(
-        left: FlatSpacing.smPlus - 2,
-        right: FlatSpacing.xs,
-        top: FlatSpacing.xs + 2,
-        bottom: FlatSpacing.xs + 2,
-      ),
-      decoration: BoxDecoration(
-        color: FlatColors.stateLayer(brightness, FlatStateIntensity.standard),
-        borderRadius: BorderRadius.circular(FlatRadius.circle),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            path,
-            overflow: TextOverflow.ellipsis,
-            style: FlatTypography.bodySmall(brightness),
+    final isDark = brightness == Brightness.dark;
+
+    return Material(
+      color: isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: FlatColors.textSecondary(brightness)),
+              const SizedBox(width: 5),
+              Text(
+                label,
+                style: FlatTypography.caption(brightness).copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: FlatSpacing.xs),
-          GestureDetector(
-            onTap: onRemove,
-            child: Icon(PhosphorIcons.x(), size: 16),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _ScanOptionsCard extends StatelessWidget {
-  const _ScanOptionsCard({
+/// Add button with icon.
+class _AddButton extends StatelessWidget {
+  const _AddButton({required this.onPressed});
+
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isEnabled = onPressed != null;
+
+    return Material(
+      color: isEnabled
+          ? FlatColors.primary(brightness)
+          : FlatColors.stateLayer(brightness, FlatStateIntensity.subtle),
+      borderRadius: BorderRadius.circular(6),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(6),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                PhosphorIcons.plus(),
+                size: 14,
+                color: isEnabled ? Colors.white : FlatColors.textTertiary(brightness),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Add',
+                style: FlatTypography.caption(brightness).copyWith(
+                  color: isEnabled ? Colors.white : FlatColors.textTertiary(brightness),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Scan Options Section
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ScanOptionsSection extends StatelessWidget {
+  const _ScanOptionsSection({
     required this.skipShort,
     required this.minDuration,
-    required this.surfaceBg,
     required this.onSkipShortChanged,
     required this.onMinDurationChanged,
   });
 
   final bool skipShort;
   final double minDuration;
-  final Color surfaceBg;
   final ValueChanged<bool> onSkipShortChanged;
   final ValueChanged<double> onMinDurationChanged;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-        FlatSpacing.smPlus,
-        FlatSpacing.sm,
-        FlatSpacing.smPlus,
-        FlatSpacing.smPlus - 2,
-      ),
-      decoration: BoxDecoration(
-        color: surfaceBg,
-        borderRadius: BorderRadius.circular(FlatRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Skip short tracks',
-                      style: FlatTypography.bodySmall(brightness).copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+
+    return Column(
+      children: [
+        // Skip short tracks toggle.
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Skip short tracks',
+                    style: FlatTypography.bodySmall(brightness).copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                    Text(
-                      'Ignore tracks shorter than the minimum duration.',
-                      style: FlatTypography.caption(brightness),
-                    ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Ignore tracks shorter than minimum duration',
+                    style: FlatTypography.caption(brightness),
+                  ),
+                ],
               ),
-              Switch(value: skipShort, onChanged: onSkipShortChanged),
-            ],
-          ),
-          const SizedBox(height: FlatSpacing.xs + 2),
-          Text(
-            'Minimum duration: ${minDuration.round()}s',
-            style: FlatTypography.bodySmall(brightness).copyWith(
-              fontWeight: FontWeight.w600,
             ),
-          ),
-          Slider(
-            value: minDuration.clamp(5, 300),
-            min: 5,
-            max: 300,
-            divisions: 59,
-            label: '${minDuration.round()}s',
-            onChanged: onMinDurationChanged,
-          ),
-        ],
-      ),
+            MacosSwitch(
+              value: skipShort,
+              onChanged: onSkipShortChanged,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // Duration slider.
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  PhosphorIcons.clock(),
+                  size: 14,
+                  color: FlatColors.textSecondary(brightness),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Minimum duration',
+                  style: FlatTypography.bodySmall(brightness).copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                MacosBadge(
+                  label: '${minDuration.round()}s',
+                  color: FlatColors.primary(brightness),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            MacosSlider(
+              value: minDuration.clamp(5.0, 300.0),
+              min: 5,
+              max: 300,
+              divisions: 59,
+              onChanged: onMinDurationChanged,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-class _ActionCard extends StatelessWidget {
-  const _ActionCard({
+// ═══════════════════════════════════════════════════════════════════════════
+// Actions Section
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _ActionsSection extends StatelessWidget {
+  const _ActionsSection({
     required this.scanDisabled,
     required this.backfillDisabled,
-    required this.surfaceBg,
     required this.onSaveConfig,
     required this.onPreviewScan,
     required this.onScanAndSave,
@@ -469,7 +693,6 @@ class _ActionCard extends StatelessWidget {
 
   final bool scanDisabled;
   final bool backfillDisabled;
-  final Color surfaceBg;
   final Future<void> Function() onSaveConfig;
   final Future<void> Function() onPreviewScan;
   final Future<void> Function() onScanAndSave;
@@ -477,89 +700,73 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(FlatSpacing.smPlus),
-      decoration: BoxDecoration(
-        color: surfaceBg,
-        borderRadius: BorderRadius.circular(FlatRadius.lg),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: scanDisabled ? null : onSaveConfig,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(PhosphorIcons.floppyDisk()),
-                  const SizedBox(width: FlatSpacing.sm),
-                  const Text('Save scan config'),
-                ],
+    return Column(
+      children: [
+        // Save config button.
+        SizedBox(
+          width: double.infinity,
+          child: MacosSecondaryButton(
+            onPressed: scanDisabled ? null : onSaveConfig,
+            icon: PhosphorIcons.floppyDisk(),
+            label: 'Save configuration',
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Scan buttons row.
+        Row(
+          children: [
+            Expanded(
+              child: MacosSecondaryButton(
+                onPressed: scanDisabled ? null : onPreviewScan,
+                icon: PhosphorIcons.magnifyingGlass(),
+                label: 'Preview',
               ),
             ),
-          ),
-          const SizedBox(height: FlatSpacing.sm),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: scanDisabled ? null : onPreviewScan,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(PhosphorIcons.magnifyingGlass()),
-                      const SizedBox(width: FlatSpacing.sm),
-                      const Text('Preview scan'),
-                    ],
-                  ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: MacosPrimaryButton(
+                onPressed: scanDisabled ? null : onScanAndSave,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(PhosphorIcons.database(), size: 16),
+                    const SizedBox(width: 8),
+                    const Text('Scan & save'),
+                  ],
                 ),
-              ),
-              const SizedBox(width: FlatSpacing.sm),
-              Expanded(
-                child: FilledButton(
-                  onPressed: scanDisabled ? null : onScanAndSave,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(PhosphorIcons.database()),
-                      const SizedBox(width: FlatSpacing.sm),
-                      const Text('Scan & save'),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: FlatSpacing.sm),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: backfillDisabled ? null : onBackfillCovers,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(PhosphorIcons.imageSquare()),
-                  const SizedBox(width: FlatSpacing.sm),
-                  const Text('Backfill covers'),
-                ],
               ),
             ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // Backfill covers button.
+        SizedBox(
+          width: double.infinity,
+          child: MacosSecondaryButton(
+            onPressed: backfillDisabled ? null : onBackfillCovers,
+            icon: PhosphorIcons.imageSquare(),
+            label: 'Backfill album covers',
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-class _ResultCard extends StatelessWidget {
-  const _ResultCard({
+// ═══════════════════════════════════════════════════════════════════════════
+// Status Section
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _StatusSection extends StatelessWidget {
+  const _StatusSection({
     required this.scannedCount,
     required this.directories,
     required this.lastSave,
     required this.error,
-    required this.surfaceBg,
-    required this.tokens,
     required this.watchRunning,
     required this.watchPendingEvents,
     required this.watchEventCount,
@@ -571,8 +778,6 @@ class _ResultCard extends StatelessWidget {
   final List<String> directories;
   final ScanAndSaveResult? lastSave;
   final String? error;
-  final Color surfaceBg;
-  final BayinTokens tokens;
   final bool watchRunning;
   final int watchPendingEvents;
   final int watchEventCount;
@@ -582,132 +787,491 @@ class _ResultCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final secondaryStyle = FlatTypography.caption(brightness);
-    return Container(
-      padding: const EdgeInsets.all(FlatSpacing.smPlus),
-      decoration: BoxDecoration(
-        color: surfaceBg,
-        borderRadius: BorderRadius.circular(FlatRadius.lg),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Scan status',
-            style: FlatTypography.bodySmall(brightness).copyWith(
-              fontWeight: FontWeight.w600,
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Scanned count.
+        _StatusRow(
+          icon: PhosphorIcons.musicNotes(),
+          label: 'Preview results',
+          value: '$scannedCount songs',
+        ),
+
+        const SizedBox(height: 8),
+
+        // Save status.
+        if (lastSave != null) ...[
+          _StatusRow(
+            icon: PhosphorIcons.checkCircle(),
+            label: 'Last save',
+            value:
+                'Scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // Watcher status.
+        Row(
+          children: [
+            Icon(
+              watchRunning ? PhosphorIcons.eye() : PhosphorIcons.eyeSlash(),
+              size: 14,
+              color: watchRunning
+                  ? FlatColors.secondary(brightness)
+                  : FlatColors.textSecondary(brightness),
             ),
-          ),
-          const SizedBox(height: FlatSpacing.xs + 2),
-          Text(
-            'Preview results: $scannedCount',
-            style: FlatTypography.bodySmall(brightness),
-          ),
-          if (directories.isNotEmpty)
-            Text('Last run: ${directories.join(', ')}', style: secondaryStyle),
-          if (lastSave != null)
+            const SizedBox(width: 6),
             Text(
-              'Saved: scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
-              style: secondaryStyle,
+              'File watcher',
+              style: FlatTypography.bodySmall(brightness),
             ),
-          Text('Watcher: ${watchRunning ? 'running' : 'stopped'}',
-              style: secondaryStyle),
-          Text(
-            'Watcher events: $watchEventCount (pending: $watchPendingEvents)',
-            style: secondaryStyle,
+            const Spacer(),
+            MacosBadge(
+              label: watchRunning ? 'Running' : 'Stopped',
+              color: watchRunning
+                  ? FlatColors.secondary(brightness)
+                  : FlatColors.textSecondary(brightness),
+            ),
+          ],
+        ),
+
+        // Watcher events.
+        if (watchEventCount > 0) ...[
+          const SizedBox(height: 8),
+          _StatusRow(
+            icon: PhosphorIcons.arrowCounterClockwise(),
+            label: 'Events',
+            value:
+                '$watchEventCount total, $watchPendingEvents pending',
           ),
-          if (lastWatchEventPath != null && lastWatchEventPath!.isNotEmpty)
-            Text(
-              'Last watcher event: ${lastWatchEventKind ?? 'unknown'} - $lastWatchEventPath',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: secondaryStyle,
-            ),
-          if (error != null)
-            Padding(
-              padding: const EdgeInsets.only(top: FlatSpacing.xs + 2),
-              child: Text(
-                'Error: $error',
-                style: FlatTypography.bodySmall(brightness).copyWith(
-                  color: FlatColors.error(brightness),
-                ),
+        ],
+
+        // Last event.
+        if (lastWatchEventPath != null && lastWatchEventPath!.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          _StatusRow(
+            icon: PhosphorIcons.file(),
+            label: 'Last event',
+            value: '${lastWatchEventKind ?? 'unknown'} - $lastWatchEventPath',
+            maxLines: 1,
+          ),
+        ],
+
+        // Error.
+        if (error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: FlatColors.error(brightness).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: FlatColors.error(brightness).withValues(alpha: 0.3),
+                width: 0.5,
               ),
             ),
+            child: Row(
+              children: [
+                Icon(
+                  PhosphorIcons.warningCircle(),
+                  size: 16,
+                  color: FlatColors.error(brightness),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    error!,
+                    style: FlatTypography.bodySmall(brightness).copyWith(
+                      color: FlatColors.error(brightness),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Preview Songs Section
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _PreviewSongsSection extends StatelessWidget {
+  const _PreviewSongsSection(this.results);
+
+  final List<ScannedSong> results;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final displayCount = results.length > 20 ? 20 : results.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Song list.
+        for (var i = 0; i < displayCount; i++)
+          _SongTile(
+            song: results[i],
+            index: i,
+          ),
+
+        // More indicator.
+        if (results.length > displayCount)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Center(
+              child: MacosBadge(
+                label: '+${results.length - displayCount} more',
+                color: FlatColors.textSecondary(brightness),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Shared Components
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Directory path chip.
+class _DirectoryChip extends StatelessWidget {
+  const _DirectoryChip({
+    required this.path,
+    required this.onRemove,
+  });
+
+  final String path;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isDark = brightness == Brightness.dark;
+
+    // Extract folder name from path.
+    final folderName = path.split(RegExp(r'[/\\]')).last;
+    final parentPath = path.substring(0, path.length - folderName.length);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onRemove,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.08),
+              width: 0.5,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Folder icon.
+              Icon(
+                PhosphorIcons.folder(),
+                size: 16,
+                color: FlatColors.primary(brightness),
+              ),
+              const SizedBox(width: 8),
+
+              // Path info.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 220),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      folderName,
+                      overflow: TextOverflow.ellipsis,
+                      style: FlatTypography.bodySmall(brightness).copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (parentPath.isNotEmpty)
+                      Text(
+                        parentPath,
+                        overflow: TextOverflow.ellipsis,
+                        style: FlatTypography.caption(brightness).copyWith(
+                          color: FlatColors.textTertiary(brightness),
+                          fontSize: 10,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Remove button.
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: FlatColors.stateLayer(
+                    brightness,
+                    FlatStateIntensity.standard,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  PhosphorIcons.x(),
+                  size: 10,
+                  color: FlatColors.textSecondary(brightness),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Empty state placeholder.
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 32,
+              color: FlatColors.textTertiary(brightness),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: FlatTypography.caption(brightness),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Status row with icon, label, and value.
+class _StatusRow extends StatelessWidget {
+  const _StatusRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.maxLines,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final int? maxLines;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: FlatColors.textSecondary(brightness),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: FlatTypography.caption(brightness),
+              ),
+              Text(
+                value,
+                maxLines: maxLines,
+                overflow: maxLines != null ? TextOverflow.ellipsis : null,
+                style: FlatTypography.bodySmall(brightness),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Song preview tile.
+class _SongTile extends StatelessWidget {
+  const _SongTile({
+    required this.song,
+    required this.index,
+  });
+
+  final ScannedSong song;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final isEven = index % 2 == 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        // Zebra striping.
+        color: isEven ? Colors.transparent : FlatColors.stateLayer(
+          brightness,
+          FlatStateIntensity.subtle,
+        ),
+        border: Border(
+          bottom: BorderSide(
+            color: MacosBorder.color(brightness),
+            width: 0.5,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          // Track number.
+          SizedBox(
+            width: 24,
+            child: Text(
+              '${index + 1}',
+              style: FlatTypography.caption(brightness),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          const SizedBox(width: 12),
+
+          // Music icon.
+          Icon(
+            PhosphorIcons.musicNote(),
+            size: 16,
+            color: FlatColors.primary(brightness),
+          ),
+          const SizedBox(width: 12),
+
+          // Song info.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  song.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FlatTypography.bodySmall(brightness).copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${song.artist} — ${song.album}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: FlatTypography.caption(brightness),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
-class _PreviewSongsCard extends StatelessWidget {
-  const _PreviewSongsCard(this.results,
-      {required this.surfaceBg, required this.tokens});
+/// Scan progress indicator with animation.
+class _ScanProgressIndicator extends StatefulWidget {
+  const _ScanProgressIndicator();
 
-  final List<ScannedSong> results;
-  final Color surfaceBg;
-  final BayinTokens tokens;
+  @override
+  State<_ScanProgressIndicator> createState() =>
+      _ScanProgressIndicatorState();
+}
+
+class _ScanProgressIndicatorState extends State<_ScanProgressIndicator>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final maxCount = results.length > 20 ? 20 : results.length;
-    return Container(
-      decoration: BoxDecoration(
-        color: surfaceBg,
-        borderRadius: BorderRadius.circular(FlatRadius.lg),
-      ),
+
+    return MacosGlassContainer(
+      materialType: GlassMaterialType.thin,
+      padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              FlatSpacing.smPlus,
-              FlatSpacing.smPlus - 2,
-              FlatSpacing.smPlus,
-              FlatSpacing.sm,
-            ),
-            child: Row(
-              children: [
-                Text(
-                  'Preview songs',
-                  style: FlatTypography.bodySmall(brightness).copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+          Row(
+            children: [
+              RotationTransition(
+                turns: _controller,
+                child: Icon(
+                  PhosphorIcons.arrowsClockwise(),
+                  size: 16,
+                  color: FlatColors.primary(brightness),
                 ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Scanning...',
+                style: FlatTypography.bodySmall(brightness).copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              backgroundColor: FlatColors.stateLayer(
+                brightness,
+                FlatStateIntensity.standard,
+              ),
             ),
           ),
-          for (var i = 0; i < maxCount; i++)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: FlatSpacing.smPlus,
-                vertical: FlatSpacing.xs + 2,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    results[i].title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FlatTypography.bodySmall(brightness),
-                  ),
-                  Text(
-                    '${results[i].artist} - ${results[i].album}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: FlatTypography.caption(brightness),
-                  ),
-                ],
-              ),
-            ),
-          if (results.length > maxCount)
-            Padding(
-              padding: const EdgeInsets.only(bottom: FlatSpacing.smPlus - 2),
-              child: Text(
-                '...and ${results.length - maxCount} more',
-                style: FlatTypography.caption(brightness),
-              ),
-            ),
         ],
       ),
     );

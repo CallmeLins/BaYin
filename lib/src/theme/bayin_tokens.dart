@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 import 'design_tokens.dart';
+import 'macos_design_tokens.dart';
 
-/// Flat surface tokens for BaYin — defines the color of each surface region.
+/// Surface tokens for BaYin — supports both flat and glassmorphism modes.
 ///
-/// Replaces the previous glass/blur surface tokens with flat, solid colors.
 /// Accessed via [bayinTokensProvider] (Riverpod).
 ///
-/// These tokens are derived from [FlatColors] and represent semantic surface
-/// roles (window background, sidebar, titlebar, player, etc.).
+/// These tokens represent semantic surface roles (window background, sidebar,
+/// titlebar, player, etc.) with support for macOS-style glass materials.
 
 class BayinTokens {
   const BayinTokens({
@@ -22,6 +22,9 @@ class BayinTokens {
     required this.separatorAlpha,
     required this.separatorSoftAlpha,
     required this.highlight,
+    this.windowGlassMaterial = GlassMaterialType.thick,
+    this.sidebarGlassMaterial = GlassMaterialType.thin,
+    this.barGlassMaterial = GlassMaterialType.ultra,
   });
 
   /// Main window / body background.
@@ -64,6 +67,17 @@ class BayinTokens {
   /// True when the window background is a dark surface.
   bool get isDark => windowBg.computeLuminance() < 0.5;
 
+  // ── Glass Material Properties ────────────────────────────────────────
+
+  /// Glass material type for window background.
+  final GlassMaterialType windowGlassMaterial;
+
+  /// Glass material type for sidebar.
+  final GlassMaterialType sidebarGlassMaterial;
+
+  /// Glass material type for bars and popovers.
+  final GlassMaterialType barGlassMaterial;
+
   /// Primary text color suitable for body text on the window surface.
   Color get textPrimary =>
       isDark ? FlatColors.foregroundDark : FlatColors.foregroundLight;
@@ -86,6 +100,9 @@ const lightTokens = BayinTokens(
   separatorAlpha: 1.0,
   separatorSoftAlpha: 0.5,
   highlight: FlatColors.primaryLight,
+  windowGlassMaterial: GlassMaterialType.thick,
+  sidebarGlassMaterial: GlassMaterialType.thin,
+  barGlassMaterial: GlassMaterialType.ultra,
 );
 
 /// Dark flat surface tokens — Spotify-flat three-tier mapping.
@@ -100,4 +117,7 @@ const darkTokens = BayinTokens(
   separatorAlpha: 1.0,
   separatorSoftAlpha: 0.5,
   highlight: FlatColors.primaryDark,
+  windowGlassMaterial: GlassMaterialType.thick,
+  sidebarGlassMaterial: GlassMaterialType.thin,
+  barGlassMaterial: GlassMaterialType.ultra,
 );

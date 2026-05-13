@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fluent_ui/fluent_ui.dart' as ft;
 
 import 'design_tokens.dart';
+import 'macos_design_tokens.dart';
 
 /// Flat Design System — Theme builders for BaYin.
 ///
@@ -130,9 +131,10 @@ final class AppTheme {
         scrolledUnderElevation: 0,
       ),
 
-      // ── Buttons — flat, no elevation ──────────────────────────────
+      // ── Buttons — macOS glass style ────────────────────────────────
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
+          // macOS gradient: subtle vertical gradient.
           backgroundColor: primary,
           foregroundColor: onPrimary,
           elevation: 0,
@@ -141,7 +143,12 @@ final class AppTheme {
           disabledBackgroundColor: primary.withValues(alpha: 0.5),
           minimumSize: const Size(48, 48),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(FlatRadius.md),
+            borderRadius: BorderRadius.circular(6), // macOS uses 6px
+          ),
+          // Inner top highlight for 3D bezel effect.
+          side: BorderSide(
+            color: Colors.white.withValues(alpha: 0.2),
+            width: 0.5,
           ),
           textStyle: FlatTypography.button(brightness).copyWith(
             color: onPrimary,
@@ -205,37 +212,50 @@ final class AppTheme {
         ),
       ),
 
-      // ── Cards — no elevation ──────────────────────────────────────
+      // ── Cards — macOS glass style ─────────────────────────────────
       cardTheme: CardThemeData(
         color: surfaceContainerHigh,
+        // Subtle elevation for depth.
         elevation: 0,
         shadowColor: Colors.transparent,
         surfaceTintColor: Colors.transparent,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(FlatRadius.md),
+          borderRadius: BorderRadius.circular(12), // macOS uses 12px for cards
+          // Retina border: 0.5px hairline.
+          side: BorderSide(
+            color: MacosBorder.color(brightness),
+            width: MacosDesignTokens.hairlineWidth,
+          ),
         ),
       ),
 
-      // ── Inputs — flat background, border on focus ─────────────────
+      // ── Inputs — macOS glass style ────────────────────────────────
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: surfaceContainerHigh,
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: FlatSpacing.md,
-          vertical: FlatSpacing.sm + 4,
+          horizontal: 12,
+          vertical: 10,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(FlatRadius.md),
+          borderRadius: BorderRadius.circular(5), // macOS uses 5px
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(FlatRadius.md),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(5),
+          borderSide: BorderSide(
+            color: MacosBorder.color(brightness),
+            width: MacosDesignTokens.hairlineWidth,
+          ),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(FlatRadius.md),
-          borderSide: BorderSide(color: primary, width: FlatBorder.focus),
+          borderRadius: BorderRadius.circular(5),
+          // Glow ring on focus.
+          borderSide: BorderSide(
+            color: const Color(0x333B82F6), // blue-500/20
+            width: 4,
+          ),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(FlatRadius.md),
@@ -272,18 +292,26 @@ final class AppTheme {
         overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
       ),
 
-      // ── Switch — flat ─────────────────────────────────────────────
+      // ── Switch — macOS capsule style ───────────────────────────────
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return primary;
-          return FlatColors.textSecondary(brightness);
+          // White thumb with shadow.
+          return Colors.white;
         }),
         trackColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return primary.withValues(alpha: 0.6);
+            // macOS green when on.
+            return brightness == Brightness.light
+                ? const Color(0xFF34C759)
+                : const Color(0xFF30D158);
           }
-          return muted;
+          // Gray when off.
+          return brightness == Brightness.light
+              ? const Color(0xFFE5E5EA)
+              : const Color(0xFF636366);
         }),
+        // Capsule shape.
+        trackOutlineColor: WidgetStateProperty.all(Colors.transparent),
       ),
 
       // ── Tooltips — flat block ─────────────────────────────────────

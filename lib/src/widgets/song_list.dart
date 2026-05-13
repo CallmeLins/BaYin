@@ -17,6 +17,7 @@ String _formatDuration(double seconds) {
   return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
 }
 
+/// Song list widget — fills the entire content area.
 class SongList extends ConsumerWidget {
   const SongList({
     super.key,
@@ -37,24 +38,21 @@ class SongList extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ListView.builder(
-      controller: scrollController,
-      padding: padding ??
-          const EdgeInsets.symmetric(
-            horizontal: FlatSpacing.sm + 4,
-            vertical: FlatSpacing.sm,
-          ),
-      itemCount: songs.length,
-      itemExtent: 52,
-      itemBuilder: (context, index) {
-        final song = songs[index];
-        return _SongRow(
-          song: song,
-          index: showIndex ? index + 1 : null,
-          onTap: onTap == null ? null : () => onTap!(song),
-          onLongPress: onLongPress == null ? null : () => onLongPress!(song),
-        );
-      },
+    return ClipRect(
+      child: ListView.builder(
+        controller: scrollController,
+        padding: padding ?? EdgeInsets.zero,
+        itemCount: songs.length,
+        itemBuilder: (context, index) {
+          final song = songs[index];
+          return _SongRow(
+            song: song,
+            index: showIndex ? index + 1 : null,
+            onTap: onTap == null ? null : () => onTap!(song),
+            onLongPress: onLongPress == null ? null : () => onLongPress!(song),
+          );
+        },
+      ),
     );
   }
 }
@@ -75,22 +73,24 @@ class _SongRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final brightness = Theme.of(context).brightness;
+    final isOdd = (index ?? 0).isOdd;
+
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FlatSpacing.sm,
-          vertical: FlatSpacing.xs,
-        ),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(FlatRadius.sm),
-        ),
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        // Zebra striping.
+        color: isOdd
+            ? FlatColors.stateLayer(brightness, FlatStateIntensity.subtle)
+            : Colors.transparent,
         child: Row(
           children: [
+            // Index number.
             if (index != null)
               SizedBox(
-                width: 36,
+                width: 32,
                 child: Text(
                   '$index',
                   textAlign: TextAlign.center,
@@ -101,19 +101,25 @@ class _SongRow extends ConsumerWidget {
                   ),
                 ),
               ),
-            CoverArt(
-              width: 36,
-              height: 36,
-              coverHash: song.coverHash,
-              streamInfo: song.streamInfo,
-              size: CoverArtSize.small,
-              borderRadius: BorderRadius.circular(FlatRadius.sm),
-              placeholderIconSize: 16,
+
+            // Cover art.
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: CoverArt(
+                width: 32,
+                height: 32,
+                coverHash: song.coverHash,
+                streamInfo: song.streamInfo,
+                size: CoverArtSize.small,
+                borderRadius: BorderRadius.circular(4),
+                placeholderIconSize: 14,
+              ),
             ),
-            const SizedBox(width: FlatSpacing.smPlus - 2),
+            const SizedBox(width: 10),
+
+            // Song info.
             Expanded(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -121,9 +127,10 @@ class _SongRow extends ConsumerWidget {
                     song.title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: FlatTypography.bodySmall(brightness),
+                    style: FlatTypography.bodySmall(brightness).copyWith(
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                  const SizedBox(height: 2),
                   Text(
                     '${song.artist} \u00b7 ${song.album}',
                     maxLines: 1,
@@ -133,10 +140,14 @@ class _SongRow extends ConsumerWidget {
                 ],
               ),
             ),
-            const SizedBox(width: FlatSpacing.sm),
+
+            const SizedBox(width: 12),
+
+            // Duration.
             Text(
               _formatDuration(song.duration),
               style: FlatTypography.caption(brightness).copyWith(
+                color: FlatColors.textSecondary(brightness),
                 fontFeatures: const <FontFeature>[
                   FontFeature.tabularFigures(),
                 ],

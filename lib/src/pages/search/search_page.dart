@@ -7,6 +7,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../utils/utils.dart';
 import '../../widgets/widgets.dart';
 
@@ -255,16 +256,16 @@ class _ResultsView extends ConsumerWidget {
         ),
         Expanded(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+            margin: const EdgeInsets.fromLTRB(8, 0, 8, 0),
             decoration: BoxDecoration(
-              color: tokens.isDark
-                  ? Colors.white.withValues(alpha: 0.04)
-                  : Colors.black.withValues(alpha: 0.02),
+              color: FlatColors.surfaceContainer(
+                tokens.isDark ? Brightness.dark : Brightness.light,
+              ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: tokens.isDark
-                    ? Colors.white.withValues(alpha: 0.07)
-                    : Colors.black.withValues(alpha: 0.06),
+                    ? FlatColors.borderDark
+                    : FlatColors.borderLight,
                 width: 0.6,
               ),
             ),
@@ -289,7 +290,7 @@ class _ResultsView extends ConsumerWidget {
                       final index = buckets[letter];
                       if (index == null || !scrollController.hasClients) return;
                       onLetterChange(letter);
-                      const itemExtent = 52.0;
+                      const itemExtent = 48.0;
                       scrollController.animateTo(
                         index * itemExtent,
                         duration: const Duration(milliseconds: 180),

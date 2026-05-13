@@ -78,17 +78,17 @@ class _SongsPageState extends ConsumerState<SongsPage> {
             ),
             Expanded(
               child: Container(
-                margin: EdgeInsets.zero,
+                margin: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                 decoration: BoxDecoration(
                   color: FlatColors.surfaceContainer(
                     tokens.isDark ? Brightness.dark : Brightness.light,
                   ),
-                  borderRadius: BorderRadius.circular(FlatRadius.md),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: tokens.isDark
                         ? FlatColors.borderDark
                         : FlatColors.borderLight,
-                    width: FlatBorder.structural,
+                    width: 0.6,
                   ),
                 ),
                 child: Row(

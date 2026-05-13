@@ -5,6 +5,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../models/models.dart';
 import '../../providers/providers.dart';
+import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class AlbumDetailPage extends ConsumerWidget {
@@ -61,8 +62,20 @@ class AlbumDetailPage extends ConsumerWidget {
                   child: _AlbumHeader(album: album, songCount: inAlbum.length),
                 ),
                 Expanded(
-                  child: BayinGlassCard(
-                    margin: const EdgeInsets.fromLTRB(8, 0, 8, 10),
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                    decoration: BoxDecoration(
+                      color: FlatColors.surfaceContainerHigh(
+                        Theme.of(context).brightness,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? FlatColors.borderDark
+                            : FlatColors.borderLight,
+                        width: 0.6,
+                      ),
+                    ),
                     child: inAlbum.isEmpty
                         ? _EmptySongsInAlbum(album: album)
                         : SongList(
