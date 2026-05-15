@@ -1,0 +1,8 @@
+xcuserdata/
+build/
+Externals/
+bayin.xcodeproj/project.xcworkspace/xcuserdata/
+bayin.xcodeproj/xcuserdata/
+.DS_Store
+Podfile.lock
+Pods/
