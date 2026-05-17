@@ -6,6 +6,8 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
+        <!-- Window background transparent to avoid white flash behind navigation bar -->
+        <item name="android:windowBackground">@android:color/transparent</item>
     </style>
 
     <!-- Splash screen theme -->

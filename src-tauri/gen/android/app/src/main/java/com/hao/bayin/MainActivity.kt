@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
+import android.graphics.Color
 import android.view.View
 import android.view.WindowInsetsController
 import android.webkit.JavascriptInterface
@@ -52,40 +53,49 @@ class MainActivity : TauriActivity() {
     webViewRef = webView
     Log.d(TAG, "onWebViewCreate called, adding AndroidBridge")
 
+    // 设置 WebView 背景透明，避免底部手势导航区域透出白色背景
+    webView.setBackgroundColor(Color.TRANSPARENT)
+
     // 添加 JavaScript 接口
     webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
   }
 
   /**
-   * 设置状态栏图标颜色
+   * 设置状态栏和导航栏图标颜色
    * @param isDark true = 深色主题（白色图标），false = 浅色主题（黑色图标）
    */
   private fun setStatusBarIcons(isDark: Boolean) {
     runOnUiThread {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         // Android 11+
+        val controller = window.insetsController
         if (isDark) {
-          // 深色主题：状态栏图标为白色
-          window.insetsController?.setSystemBarsAppearance(
+          // 深色主题：状态栏和导航栏指示条为白色
+          controller?.setSystemBarsAppearance(
             0,
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+              WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
           )
         } else {
-          // 浅色主题：状态栏图标为黑色
-          window.insetsController?.setSystemBarsAppearance(
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS,
-            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+          // 浅色主题：状态栏和导航栏指示条为黑色
+          controller?.setSystemBarsAppearance(
+            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+              WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
+            WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+              WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
           )
         }
       } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
         // Android 6-10
         @Suppress("DEPRECATION")
+        val lightFlags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+          View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
         if (isDark) {
           window.decorView.systemUiVisibility =
-            window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+            window.decorView.systemUiVisibility and lightFlags.inv()
         } else {
           window.decorView.systemUiVisibility =
-            window.decorView.systemUiVisibility or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            window.decorView.systemUiVisibility or lightFlags
         }
       }
     }
