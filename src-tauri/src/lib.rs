@@ -102,8 +102,16 @@ async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default()
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .max_file_size(500_000)       // 500 KB per file
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepAll)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_edge_to_edge::init())
         .plugin(tauri_plugin_media_session::init())
         .plugin(tauri_plugin_media::init())

@@ -23,6 +23,11 @@
     "core:window:allow-show",
     "core:window:allow-set-effects",
     "media:default",
-    "media-session:default"
+    "media-session:default",
+    "log:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-write-image"
   ]
 }
