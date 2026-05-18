@@ -13,7 +13,6 @@ import android.view.View
 import android.view.WindowInsetsController
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
-import androidx.activity.enableEdgeToEdge
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
@@ -40,12 +39,8 @@ class MainActivity : TauriActivity() {
       elapsed < splashMinDuration
     }
 
-    enableEdgeToEdge()
     super.onCreate(savedInstanceState)
     Log.d(TAG, "onCreate called")
-
-    // 默认设置为深色模式的状态栏图标（白色）
-    setStatusBarIcons(true)
   }
 
   override fun onWebViewCreate(webView: WebView) {

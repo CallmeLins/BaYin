@@ -8,6 +8,11 @@
         <item name="android:windowLightStatusBar">false</item>
         <!-- Window background transparent to avoid white flash behind navigation bar -->
         <item name="android:windowBackground">@android:color/transparent</item>
+        <!-- Critical for HyperOS: disable system enforcement of contrast for navigation/status bars -->
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="30">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="30">false</item>
+        <!-- Allow content to draw behind system bars -->
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 
     <!-- Splash screen theme (night mode) -->

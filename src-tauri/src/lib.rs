@@ -3,17 +3,12 @@ mod commands;
 mod playback;
 mod playback_control;
 #[cfg(target_os = "windows")]
-mod system_media_windows;
-#[cfg(target_os = "windows")]
 mod taskbar_thumbnail_toolbar_windows;
 mod db;
 mod models;
 mod tray;
 mod utils;
 mod watcher;
-
-#[cfg(target_os = "android")]
-mod system_media_android;
 
 use commands::{
     delete_background_image, get_background_image_data, save_background_image, save_background_image_base64,
@@ -109,7 +104,9 @@ pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(bayin_system_media::init())
+        .plugin(tauri_plugin_edge_to_edge::init())
+        .plugin(tauri_plugin_media_session::init())
+        .plugin(tauri_plugin_media::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
@@ -268,20 +265,7 @@ pub fn run() {
                 app.manage(playback::PlaybackDomainState::new());
             }
 
-            #[cfg(target_os = "android")]
-            {
-                // Only expose the AppHandle to JNI after all required states are managed,
-                // otherwise background threads (MediaPlaybackService) can crash by calling `state()` too early.
-                system_media_android::set_app_handle(app.handle().clone());
-            }
-
             // 桌面端：创建系统托盘
-            #[cfg(target_os = "windows")]
-            {
-                // Integrate with Windows' System Media Transport Controls (media keys / volume flyout).
-                system_media_windows::init(app.handle().clone());
-            }
-
             #[cfg(desktop)]
             {
                 tray::init_tray_state();

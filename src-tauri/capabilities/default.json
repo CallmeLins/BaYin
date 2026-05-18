@@ -21,6 +21,8 @@
     "updater:default",
     "core:window:allow-hide",
     "core:window:allow-show",
-    "core:window:allow-set-effects"
+    "core:window:allow-set-effects",
+    "media:default",
+    "media-session:default"
   ]
 }
