@@ -132,8 +132,8 @@ impl CoverCache {
         None
     }
 
-    /// Get cover URL (asset protocol) by hash and size
-    /// Uses http://asset.localhost/ format for Tauri 2.0
+    /// Get cover URL (asset protocol) by hash and size.
+    /// Always returns `http://asset.localhost/…` for WebView display.
     pub fn get_cover_url(&self, hash: &str, size: CoverSize) -> Option<String> {
         self.get_cover_path(hash, size).map(|path| {
             let path_str = path.to_string_lossy().replace('\\', "/");
@@ -146,6 +146,8 @@ impl CoverCache {
             format!("http://asset.localhost/{}", encoded_path)
         })
     }
+
+
 
     /// Get cache statistics
     pub fn get_stats(&self) -> CacheStats {

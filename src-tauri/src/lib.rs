@@ -3,6 +3,10 @@ mod commands;
 mod playback;
 mod playback_control;
 #[cfg(target_os = "windows")]
+mod system_media_windows;
+#[cfg(target_os = "android")]
+mod system_media_android;
+#[cfg(target_os = "windows")]
 mod taskbar_thumbnail_toolbar_windows;
 mod db;
 mod models;
@@ -113,7 +117,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_edge_to_edge::init())
-        .plugin(tauri_plugin_media_session::init())
+        .plugin(bayin_system_media::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
@@ -258,6 +262,18 @@ pub fn run() {
             cover_cache.ensure_dirs().expect("Failed to create cover cache directories");
 
             app.manage(CoverCacheState(Mutex::new(cover_cache)));
+
+            // 移动端：暴露 AppHandle 给 JNI（在所有 state 管理完成后）
+            #[cfg(target_os = "android")]
+            {
+                system_media_android::set_app_handle(app.handle().clone());
+            }
+
+            // 桌面端：Windows SMTC 集成
+            #[cfg(target_os = "windows")]
+            {
+                system_media_windows::init(app.handle().clone());
+            }
 
             // 初始化文件监听器状态（仅桌面端）
             #[cfg(desktop)]
