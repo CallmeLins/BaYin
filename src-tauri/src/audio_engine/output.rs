@@ -143,7 +143,10 @@ fn build_output_stream(
                 }
             },
             move |err| {
-                log::error!("Audio output error: {}", err);
+                // Only log the first error to avoid log spam when device is disconnected
+                if !stream_error.load(Ordering::Relaxed) {
+                    log::error!("Audio output device error: {}", err);
+                }
                 stream_error.store(true, Ordering::Relaxed);
             },
             None,

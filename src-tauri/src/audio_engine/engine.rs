@@ -154,6 +154,10 @@ struct AudioThreadState {
     last_fft_emit: Instant,
     session_id: u64,
     last_emitted_pos: f64,
+
+    // Device error recovery cooldown
+    last_output_error: Option<Instant>,
+    output_error_count: u32,
 }
 
 impl AudioThreadState {
@@ -181,6 +185,9 @@ impl AudioThreadState {
             last_fft_emit: Instant::now(),
             session_id: 0,
             last_emitted_pos: 0.0,
+
+            last_output_error: None,
+            output_error_count: 0,
         }
     }
 
@@ -399,25 +406,44 @@ impl AudioThreadState {
     ) {
         let failed = self.output.as_ref().map(|o| o.has_stream_error()).unwrap_or(false);
         if !failed {
+            self.output_error_count = 0;
             return;
         }
+
+        // Cooldown: don't retry more than once per 2 seconds
+        let now = Instant::now();
+        if let Some(last_err) = self.last_output_error {
+            if now.duration_since(last_err) < Duration::from_secs(2) {
+                return; // Still in cooldown
+            }
+        }
+        self.last_output_error = Some(now);
+        self.output_error_count += 1;
 
         self.pause_target_secs = None;
         self.end_pending = false;
 
+        // After 5 consecutive failures, give up and stop playback
+        if self.output_error_count > 5 {
+            log::warn!("Audio output: {} consecutive device errors, stopping playback", self.output_error_count);
+            self.is_playing = false;
+            self.reset_output_state();
+            update_state(state, false, self.position_secs, self.duration_secs, self.volume);
+            let _ = app_handle.emit(
+                "audio:error",
+                ErrorPayload {
+                    message: "Audio device disconnected and recovery failed".to_string(),
+                },
+            );
+            self.emit_state_changed(app_handle, false);
+            return;
+        }
+
         if self.decoder.is_some() {
             let should_play = self.is_playing;
             if let Err(e) = self.reinitialize_output_for_route_change(should_play, state, app_handle) {
-                self.is_playing = false;
-                self.reset_output_state();
-                update_state(state, false, self.position_secs, self.duration_secs, self.volume);
-                let _ = app_handle.emit(
-                    "audio:error",
-                    ErrorPayload {
-                        message: format!("Audio output stream failed and recovery failed: {}", e),
-                    },
-                );
-                self.emit_state_changed(app_handle, false);
+                log::warn!("Audio output recovery attempt {} failed: {}", self.output_error_count, e);
+                // Don't stop immediately - the next loop iteration will retry after cooldown
             }
         } else {
             self.is_playing = false;
