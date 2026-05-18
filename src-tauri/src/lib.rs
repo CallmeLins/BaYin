@@ -2,10 +2,7 @@ mod audio_engine;
 mod commands;
 mod playback;
 mod playback_control;
-#[cfg(target_os = "windows")]
-mod system_media_windows;
-#[cfg(target_os = "android")]
-mod system_media_android;
+
 #[cfg(target_os = "windows")]
 mod taskbar_thumbnail_toolbar_windows;
 mod db;
@@ -105,7 +102,7 @@ async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let mut builder = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -122,11 +119,7 @@ pub fn run() {
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
 
-    // Desktop-only: tauri-plugin-media (SMTC/MPRIS/Now Playing)
-    #[cfg(desktop)]
-    {
-        builder = builder.plugin(tauri_plugin_media::init());
-    }
+
 
     // 窗口状态插件仅桌面端使用（必须在窗口创建前注册）
     #[cfg(desktop)]
@@ -263,17 +256,7 @@ pub fn run() {
 
             app.manage(CoverCacheState(Mutex::new(cover_cache)));
 
-            // 移动端：暴露 AppHandle 给 JNI（在所有 state 管理完成后）
-            #[cfg(target_os = "android")]
-            {
-                system_media_android::set_app_handle(app.handle().clone());
-            }
 
-            // 桌面端：Windows SMTC 集成
-            #[cfg(target_os = "windows")]
-            {
-                system_media_windows::init(app.handle().clone());
-            }
 
             // 初始化文件监听器状态（仅桌面端）
             #[cfg(desktop)]

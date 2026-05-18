@@ -1,0 +1,13 @@
+# Default permissions for the bayin-system-media plugin.
+# This is the permission set referenced by "bayin-system-media:default" in capabilities.
+
+"$schema" = "schemas/schema.json"
+
+[default]
+permissions = [
+  "allow-initialize",
+  "allow-set-metadata",
+  "allow-set-playback-status",
+  "allow-set-position",
+  "allow-clear",
+]
