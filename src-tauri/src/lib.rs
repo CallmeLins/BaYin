@@ -101,7 +101,7 @@ async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let mut builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -114,10 +114,15 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_edge_to_edge::init())
         .plugin(tauri_plugin_media_session::init())
-        .plugin(tauri_plugin_media::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_process::init());
+
+    // Desktop-only: tauri-plugin-media (SMTC/MPRIS/Now Playing)
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_media::init());
+    }
 
     // 窗口状态插件仅桌面端使用（必须在窗口创建前注册）
     #[cfg(desktop)]

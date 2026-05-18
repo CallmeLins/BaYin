@@ -410,11 +410,22 @@ impl AudioThreadState {
             return;
         }
 
+        // CRITICAL: Drop the old stream immediately to stop error callbacks
+        let was_playing = self.is_playing;
+        let position = self.position_secs;
+        self.output = None; // This drops the stream and stops error callbacks
+
         // Cooldown: don't retry more than once per 2 seconds
         let now = Instant::now();
         if let Some(last_err) = self.last_output_error {
             if now.duration_since(last_err) < Duration::from_secs(2) {
-                return; // Still in cooldown
+                // Still in cooldown - pause playback gracefully
+                if was_playing {
+                    self.is_playing = false;
+                    update_state(state, false, position, self.duration_secs, self.volume);
+                    self.emit_state_changed(app_handle, false);
+                }
+                return;
             }
         }
         self.last_output_error = Some(now);
@@ -423,8 +434,8 @@ impl AudioThreadState {
         self.pause_target_secs = None;
         self.end_pending = false;
 
-        // After 5 consecutive failures, give up and stop playback
-        if self.output_error_count > 5 {
+        // After 3 consecutive failures, give up and stop playback
+        if self.output_error_count > 3 {
             log::warn!("Audio output: {} consecutive device errors, stopping playback", self.output_error_count);
             self.is_playing = false;
             self.reset_output_state();
@@ -439,11 +450,20 @@ impl AudioThreadState {
             return;
         }
 
+        log::info!("Audio output device changed, attempting recovery (attempt {}/3)...", self.output_error_count);
+
         if self.decoder.is_some() {
-            let should_play = self.is_playing;
-            if let Err(e) = self.reinitialize_output_for_route_change(should_play, state, app_handle) {
-                log::warn!("Audio output recovery attempt {} failed: {}", self.output_error_count, e);
-                // Don't stop immediately - the next loop iteration will retry after cooldown
+            match self.reinitialize_output_for_route_change(was_playing, state, app_handle) {
+                Ok(()) => {
+                    log::info!("Audio output recovered successfully");
+                }
+                Err(e) => {
+                    log::warn!("Audio output recovery attempt {} failed: {}", self.output_error_count, e);
+                    // Pause playback gracefully
+                    self.is_playing = false;
+                    update_state(state, false, self.position_secs, self.duration_secs, self.volume);
+                    self.emit_state_changed(app_handle, false);
+                }
             }
         } else {
             self.is_playing = false;
