@@ -102,6 +102,13 @@ async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Android: force-link the system-media JNI exports into libbayin_lib.so.
+    // Without this reference, the cdylib linker strips `#[no_mangle]` items
+    // defined in the bayin-system-media rlib and the MediaPlaybackService
+    // hits UnsatisfiedLinkError on every native call.
+    #[cfg(target_os = "android")]
+    bayin_system_media::ensure_jni_exports_linked();
+
     let builder = tauri::Builder::default()
         .plugin(
             tauri_plugin_log::Builder::new()

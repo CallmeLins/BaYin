@@ -12,6 +12,14 @@ use models::*;
 #[cfg(target_os = "android")]
 const ANDROID_PLUGIN_ID: &str = "app.tauri.bayin.systemmedia";
 
+/// Re-exported on Android only. The main app must call this once at startup
+/// so the cdylib linker keeps the JNI export symbols in `libbayin_lib.so`
+/// (without a reachable reference they get stripped from the dependency rlib).
+#[cfg(target_os = "android")]
+pub fn ensure_jni_exports_linked() {
+    platform::android::ensure_jni_exports_linked();
+}
+
 // ── Plugin state ───────────────────────────────────────────────────
 
 struct MediaState {
@@ -76,12 +84,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             clear,
         ])
         .setup(|_app, _api| {
-            // Desktop: create platform controller
-            #[cfg(desktop)]
+            // Desktop and Android both use the cross-platform MediaController
+            // API. On desktop the controller talks to the OS media API
+            // directly; on Android it writes to a shared state that the
+            // Kotlin foreground service polls (see platform/android.rs).
+            #[cfg(any(desktop, target_os = "android"))]
             {
                 let controller = platform::create_controller();
 
-                // Register event handler that emits Tauri events to the frontend
+                // Register event handler that emits Tauri events to the frontend.
                 let app_handle = _app.clone();
                 let event_sink: Box<dyn Fn(MediaControlEvent) + Send> =
                     Box::new(move |event: MediaControlEvent| {
@@ -97,12 +108,17 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 #[cfg(target_os = "linux")]
                 platform::linux::set_event_handler(event_sink);
 
+                #[cfg(target_os = "android")]
+                platform::android::set_event_handler(event_sink);
+
                 _app.manage(MediaState {
                     controller: Mutex::new(controller),
                 });
             }
 
-            // Android: register the native plugin
+            // Android: register the Kotlin-side plugin (MediaSession + foreground
+            // notification service). Must run AFTER the event handler is set so
+            // any immediate JNI callback finds the sink populated.
             #[cfg(target_os = "android")]
             {
                 let _ = _api.register_android_plugin(ANDROID_PLUGIN_ID, "SystemMediaPlugin");

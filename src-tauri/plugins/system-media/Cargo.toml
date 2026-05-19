@@ -14,6 +14,7 @@ log = "0.4"
 # Android JNI (only compiled on Android)
 [target.'cfg(target_os = "android")'.dependencies]
 bayin-playback = { path = "../../crates/bayin-playback" }
+jni = "0.21"
 
 # macOS: cocoa + objc for Now Playing API
 [target.'cfg(target_os = "macos")'.dependencies]

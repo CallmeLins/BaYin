@@ -8,6 +8,8 @@ pub mod windows;
 pub mod macos;
 #[cfg(target_os = "linux")]
 pub mod linux;
+#[cfg(target_os = "android")]
+pub mod android;
 
 /// Trait that each platform must implement.
 pub trait MediaController: Send {
@@ -26,7 +28,9 @@ pub fn create_controller() -> Box<dyn MediaController> {
     { Box::new(macos::MacOsController::new()) }
     #[cfg(target_os = "linux")]
     { Box::new(linux::LinuxController::new()) }
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    #[cfg(target_os = "android")]
+    { Box::new(android::AndroidController::new()) }
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
     { Box::new(StubController) }
 }
 

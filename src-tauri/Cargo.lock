@@ -382,6 +382,7 @@ dependencies = [
  "bayin-playback",
  "block",
  "cocoa",
+ "jni",
  "log",
  "objc",
  "serde",

@@ -42,6 +42,14 @@ class MediaPlaybackService : Service() {
     private var lastArtworkUrl: String? = null
     private var currentArtwork: android.graphics.Bitmap? = null
 
+    /**
+     * Pushed from Rust whenever the now-playing state changes. Hops to the
+     * scheduler thread so all MediaSession mutations stay serialized.
+     */
+    private val updateCallback = Runnable {
+        scheduler.execute { runCatching { updateFromRust() } }
+    }
+
     override fun onCreate() {
         super.onCreate()
 
@@ -90,7 +98,12 @@ class MediaPlaybackService : Service() {
         startForeground(NOTIFICATION_ID, placeholder)
         isForeground = true
 
-        // Delay polling until the Rust side has finished managing app state.
+        // Hand the Runnable to Rust so set_metadata / set_playback_status /
+        // set_position / clear can wake us up instantly.
+        runCatching { SystemMediaBridge.nativeSetUpdateCallback(updateCallback) }
+
+        // Polling remains as a safety net (in case the callback ref is ever
+        // lost) but at a much lower frequency now that pushes are the norm.
         scheduler.schedule({ startPolling() }, 800, TimeUnit.MILLISECONDS)
     }
 
@@ -110,6 +123,7 @@ class MediaPlaybackService : Service() {
 
     override fun onDestroy() {
         pollTask?.cancel(true)
+        runCatching { SystemMediaBridge.nativeSetUpdateCallback(null) }
         scheduler.shutdownNow()
         unregisterAudioDeviceCallback()
         session.release()
@@ -120,10 +134,12 @@ class MediaPlaybackService : Service() {
 
     private fun startPolling() {
         pollTask?.cancel(true)
+        // Safety-net poll only — the Rust→Java callback drives real-time
+        // updates, so we don't need a tight 1 s loop here anymore.
         pollTask = scheduler.scheduleAtFixedRate(
             { updateFromRust() },
             0,
-            1,
+            5,
             TimeUnit.SECONDS
         )
     }
