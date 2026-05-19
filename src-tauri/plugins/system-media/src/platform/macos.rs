@@ -24,6 +24,31 @@ struct CGSize {
     height: f64,
 }
 
+// ── MediaPlayer framework constants ────────────────────────────────
+//
+// CRITICAL: The NowPlayingInfo dictionary keys are NSString constants exposed
+// by MediaPlayer.framework. Their *runtime values* are short identifiers like
+// "title", "artist", "playbackDuration", "artwork" — NOT their symbol names.
+// Earlier this file used string literals like "MPMediaItemPropertyTitle" as
+// keys, which silently mismatch the framework's expected keys, so Control
+// Center sees an empty dictionary and shows no progress / no artwork.
+//
+// We declare the framework symbols as `usize` (just the underlying pointer
+// bits) and cast to `id` when constructing the dictionary. `usize` sidesteps
+// `Sync`/`Sized` constraints that come with declaring a `*const Object` or
+// `&'static Object` extern static.
+#[allow(non_upper_case_globals)]
+extern "C" {
+    static MPMediaItemPropertyTitle: usize;
+    static MPMediaItemPropertyArtist: usize;
+    static MPMediaItemPropertyAlbumTitle: usize;
+    static MPMediaItemPropertyPlaybackDuration: usize;
+    static MPMediaItemPropertyArtwork: usize;
+    static MPNowPlayingInfoPropertyElapsedPlaybackTime: usize;
+    static MPNowPlayingInfoPropertyPlaybackRate: usize;
+    static MPNowPlayingInfoPropertyMediaType: usize;
+}
+
 // ── GCD main-thread dispatch ───────────────────────────────────────
 
 type DispatchQueueT = *mut c_void;
@@ -258,54 +283,82 @@ impl MediaController for MacOsController {
                 let mut keys: Vec<id> = Vec::new();
                 let mut vals: Vec<id> = Vec::new();
 
-                keys.push(NSString::alloc(nil).init_str("MPMediaItemPropertyTitle"));
+                keys.push(MPMediaItemPropertyTitle as id);
                 vals.push(NSString::alloc(nil).init_str(&title));
 
                 if let Some(ref artist) = artist {
-                    keys.push(NSString::alloc(nil).init_str("MPMediaItemPropertyArtist"));
+                    keys.push(MPMediaItemPropertyArtist as id);
                     vals.push(NSString::alloc(nil).init_str(artist));
                 }
                 if let Some(ref album) = album {
-                    keys.push(NSString::alloc(nil).init_str("MPMediaItemPropertyAlbumTitle"));
+                    keys.push(MPMediaItemPropertyAlbumTitle as id);
                     vals.push(NSString::alloc(nil).init_str(album));
                 }
                 if let Some(duration) = duration {
-                    keys.push(NSString::alloc(nil).init_str("MPMediaItemPropertyPlaybackDuration"));
+                    keys.push(MPMediaItemPropertyPlaybackDuration as id);
                     vals.push(msg_send![class!(NSNumber), numberWithDouble: duration]);
                 }
 
                 // ── Artwork ──────────────────────────────────────
+                // Accepts plain file paths, file:// URLs, and http(s):// URLs.
+                // Loads via NSData so HTTP works (synchronously on the main
+                // thread — fine for a one-off cover URL, and matches what we
+                // need to construct MPMediaItemArtwork up front).
                 if let Some(ref url_str) = artwork_url {
+                    let has_scheme = url_str.starts_with("file://")
+                        || url_str.starts_with("http://")
+                        || url_str.starts_with("https://");
                     let ns_str = NSString::alloc(nil).init_str(url_str);
-                    let ns_url: id = msg_send![class!(NSURL), URLWithString: ns_str];
+                    let ns_url: id = if has_scheme {
+                        msg_send![class!(NSURL), URLWithString: ns_str]
+                    } else {
+                        // Bare path: percent-encoding etc. handled by fileURLWithPath:.
+                        msg_send![class!(NSURL), fileURLWithPath: ns_str]
+                    };
                     if !ns_url.is_null() {
-                        // Pre-load the image data on the main thread (local file URLs are fast)
-                        let img: id = msg_send![class!(NSImage), alloc];
-                        let img: id = msg_send![img, initWithContentsOfURL: ns_url];
-                        if !img.is_null() {
-                            // Retain the image so it stays alive while the block holds it
-                            let _: () = msg_send![img, retain];
-                            // CGSize for the artwork bounds
-                            let size = CGSize { width: 600.0, height: 600.0 };
-                            let img_ref = img;
-                            let handler = ConcreteBlock::new(move |_: CGSize| -> id {
-                                img_ref
-                            });
-                            let handler = handler.copy();
-                            let artwork: id = msg_send![class!(MPMediaItemArtwork), alloc];
-                            let artwork: id = msg_send![artwork, initWithBoundsSize: size requestHandler: &*handler];
-                            if !artwork.is_null() {
-                                keys.push(NSString::alloc(nil).init_str("MPMediaItemPropertyArtwork"));
-                                vals.push(artwork);
+                        let data: id = msg_send![class!(NSData), dataWithContentsOfURL: ns_url];
+                        if !data.is_null() {
+                            let img: id = msg_send![class!(NSImage), alloc];
+                            let img: id = msg_send![img, initWithData: data];
+                            if !img.is_null() {
+                                let _: () = msg_send![img, retain];
+                                let size = CGSize { width: 600.0, height: 600.0 };
+                                let img_ref = img;
+                                let handler = ConcreteBlock::new(move |_: CGSize| -> id {
+                                    img_ref
+                                });
+                                let handler = handler.copy();
+                                let artwork: id = msg_send![class!(MPMediaItemArtwork), alloc];
+                                let artwork: id = msg_send![artwork, initWithBoundsSize: size requestHandler: &*handler];
+                                if !artwork.is_null() {
+                                    keys.push(MPMediaItemPropertyArtwork as id);
+                                    vals.push(artwork);
+                                } else {
+                                    log::warn!("[system-media] MPMediaItemArtwork init failed");
+                                }
+                            } else {
+                                log::warn!("[system-media] NSImage initWithData failed for '{}'", url_str);
                             }
+                        } else {
+                            log::warn!("[system-media] NSData dataWithContentsOfURL failed for '{}'", url_str);
                         }
+                    } else {
+                        log::warn!("[system-media] NSURL creation failed for '{}'", url_str);
                     }
                 }
 
+                // MPNowPlayingInfoMediaTypeAudio = 1 — tells Control Center
+                // this is an audio session, which affects the layout it picks.
+                keys.push(MPNowPlayingInfoPropertyMediaType as id);
+                vals.push(msg_send![class!(NSNumber), numberWithUnsignedInt: 1u32]);
+
                 // ── Initial playback state ───────────────────────
-                keys.push(NSString::alloc(nil).init_str("MPNowPlayingInfoPropertyPlaybackRate"));
+                // Rate=0/elapsed=0 here means "paused at start"; callers are
+                // expected to follow up with set_playback_status(Playing) and
+                // optionally set_position(...) to set the actual progress.
+                keys.push(MPNowPlayingInfoPropertyPlaybackRate as id);
                 vals.push(msg_send![class!(NSNumber), numberWithDouble: 0.0f64]);
-                keys.push(NSString::alloc(nil).init_str("MPNowPlayingInfoPropertyElapsedPlaybackTime"));
+                keys.push(MPNowPlayingInfoPropertyElapsedPlaybackTime as id);
                 vals.push(msg_send![class!(NSNumber), numberWithDouble: 0.0f64]);
 
                 let k_arr = NSArray::arrayWithObjects(nil, &keys);
@@ -325,7 +378,7 @@ impl MediaController for MacOsController {
                 let current: id = msg_send![ic, nowPlayingInfo];
                 if !current.is_null() {
                     let dict: id = msg_send![current, mutableCopy];
-                    let key = NSString::alloc(nil).init_str("MPNowPlayingInfoPropertyPlaybackRate");
+                    let key: id = MPNowPlayingInfoPropertyPlaybackRate as id;
                     let rate: f64 = if status == PlaybackStatus::Playing { 1.0 } else { 0.0 };
                     let val: id = msg_send![class!(NSNumber), numberWithDouble: rate];
                     let _: () = msg_send![dict, setObject:val forKey:key];
@@ -343,7 +396,7 @@ impl MediaController for MacOsController {
                 let current: id = msg_send![ic, nowPlayingInfo];
                 if !current.is_null() {
                     let dict: id = msg_send![current, mutableCopy];
-                    let key = NSString::alloc(nil).init_str("MPNowPlayingInfoPropertyElapsedPlaybackTime");
+                    let key: id = MPNowPlayingInfoPropertyElapsedPlaybackTime as id;
                     let val: id = msg_send![class!(NSNumber), numberWithDouble: position_secs];
                     let _: () = msg_send![dict, setObject:val forKey:key];
                     let _: () = msg_send![ic, setNowPlayingInfo: dict];
