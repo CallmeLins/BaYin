@@ -1,4 +1,5 @@
 #![allow(unexpected_cfgs)]
+#![allow(unused_imports)]
 
 use std::sync::Mutex;
 use tauri::{plugin::TauriPlugin, Emitter, Manager, Runtime};
@@ -74,14 +75,14 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             set_position,
             clear,
         ])
-        .setup(|app, _api| {
+        .setup(|_app, _api| {
             // Desktop: create platform controller
             #[cfg(desktop)]
             {
                 let controller = platform::create_controller();
 
                 // Register event handler that emits Tauri events to the frontend
-                let app_handle = app.clone();
+                let app_handle = _app.clone();
                 let event_sink: Box<dyn Fn(MediaControlEvent) + Send> =
                     Box::new(move |event: MediaControlEvent| {
                         let _ = app_handle.emit("bayin-system-media://control", &event);
@@ -93,7 +94,10 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
                 #[cfg(target_os = "windows")]
                 platform::windows::set_event_handler(event_sink);
 
-                app.manage(MediaState {
+                #[cfg(target_os = "linux")]
+                platform::linux::set_event_handler(event_sink);
+
+                _app.manage(MediaState {
                     controller: Mutex::new(controller),
                 });
             }
@@ -101,7 +105,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             // Android: register the native plugin
             #[cfg(target_os = "android")]
             {
-                let _ = api.register_android_plugin(ANDROID_PLUGIN_ID, "SystemMediaPlugin");
+                let _ = _api.register_android_plugin(ANDROID_PLUGIN_ID, "SystemMediaPlugin");
             }
 
             Ok(())

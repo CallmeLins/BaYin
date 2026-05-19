@@ -21,15 +21,19 @@ cocoa = "0.26"
 objc = "0.2"
 block = "0.1"
 
-# Windows: windows crate for SMTC
+# Windows: windows crate for SMTC (version pinned to match src-tauri/Cargo.toml)
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
+windows = { version = "0.61", features = [
     "Media",
     "Media_Playback",
     "Storage_Streams",
     "Foundation",
     "Win32_System_WinRT",
 ] }
+
+# Linux: zbus for MPRIS2 D-Bus service
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
 
 [build-dependencies]
 tauri-plugin = { version = "2", features = ["build"] }

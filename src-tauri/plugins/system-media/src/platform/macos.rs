@@ -213,6 +213,9 @@ impl Drop for MacOsController {
 
 impl MediaController for MacOsController {
     fn initialize(&mut self) -> Result<(), Box<dyn StdError + Send>> {
+        if self.initialized {
+            return Ok(());
+        }
         let handler_usize = self.handler.0 as usize;
         let result = run_on_main_sync(move || -> Result<(), Box<dyn StdError + Send>> {
             let target = handler_usize as id;
