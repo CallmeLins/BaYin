@@ -5,17 +5,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'src/i18n/strings.g.dart';
-import 'src/providers/providers.dart';
-import 'src/router/app_router.dart';
-import 'src/rust/rust_api.dart';
-import 'src/services/library_service.dart';
-import 'src/services/media_session_service.dart';
-import 'src/services/file_watcher_service.dart';
-import 'src/services/scan_service.dart';
-import 'src/services/settings_service.dart';
-import 'src/services/window_service.dart';
-import 'src/theme/app_theme.dart';
+import 'ui/i18n/strings.g.dart';
+import 'ui/providers/providers.dart';
+import 'ui/router/app_router.dart';
+import 'ui/rust/rust_api.dart';
+import 'ui/services/library_service.dart';
+import 'ui/services/media_session_service.dart';
+import 'ui/services/file_watcher_service.dart';
+import 'ui/services/scan_service.dart';
+import 'ui/services/settings_service.dart';
+import 'ui/services/window_service.dart';
+import 'ui/theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
