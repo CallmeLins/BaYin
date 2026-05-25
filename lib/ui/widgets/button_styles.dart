@@ -5,9 +5,16 @@ class BayinButtonStyles {
 
   static ButtonStyle outlinedFlat(BuildContext context) {
     final brightness = Theme.of(context).brightness;
+    final borderColor = brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.black.withValues(alpha: 0.12);
     return OutlinedButton.styleFrom(
       minimumSize: const Size(double.infinity, 40),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      side: BorderSide(color: borderColor, width: 0.8),
+      foregroundColor: brightness == Brightness.dark
+          ? Colors.white
+          : Colors.black,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
       ),

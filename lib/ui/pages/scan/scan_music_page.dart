@@ -3,27 +3,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
-import '../../models/models.dart';
 import '../../providers/providers.dart';
-import '../../theme/design_tokens.dart';
-import '../../theme/macos_design_tokens.dart';
-import '../../utils/info_bar_helper.dart';
-import '../../rust/rust_api.dart';
-import '../../services/file_watcher_service.dart';
 import '../../services/scan_service.dart';
+import '../../utils/info_bar_helper.dart';
 import '../../widgets/widgets.dart';
-import '../../widgets/glass/glass.dart';
 import 'folder_browser.dart';
 
-/// Scan Music Page — macOS-style glassmorphism UI.
-///
-/// Features:
-/// - Glass material cards with Retina borders
-/// - Traffic lights in header
-/// - Segmented controls for scan options
-/// - Animated progress indicators
 class ScanMusicPage extends ConsumerStatefulWidget {
   const ScanMusicPage({super.key});
 
@@ -33,37 +21,17 @@ class ScanMusicPage extends ConsumerStatefulWidget {
 
 class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
   final TextEditingController _pathController = TextEditingController();
-  StreamSubscription<List<RustFileWatchEvent>>? _watchSubscription;
   List<String> _directories = <String>[];
   bool _skipShort = false;
-  double _minDuration = 30;
   bool _configApplied = false;
-  bool _watchRunning = false;
-  int _watchPendingEvents = 0;
-  int _watchEventCount = 0;
-  String? _lastWatchEventPath;
-  String? _lastWatchEventKind;
 
   @override
   void initState() {
     super.initState();
-    _watchSubscription = FileWatcherService.instance.events.listen((events) {
-      if (!mounted || events.isEmpty) return;
-      final last = events.last;
-      setState(() {
-        _watchEventCount += events.length;
-        _lastWatchEventPath = last.path;
-        _lastWatchEventKind = last.kind;
-        _watchPendingEvents = 0;
-      });
-      _refreshWatcherStatus();
-    });
-    _refreshWatcherStatus();
   }
 
   @override
   void dispose() {
-    _watchSubscription?.cancel();
     _pathController.dispose();
     super.dispose();
   }
@@ -74,97 +42,116 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
     final config = ref.watch(scanConfigProvider);
     _applyConfigOnce(config);
 
+    final isScanning = scanner.isLoading;
+
     return Column(
       children: [
-        // ── Header ───────────────────────────────────────────────────────
         const BayinPageHeader(
           title: Text('Scan Music'),
         ),
-
-        // ── Content ──────────────────────────────────────────────────────
         Expanded(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
 
-              // ── Folders Card ─────────────────────────────────────────
-              _GlassCard(
-                title: 'Folders',
-                icon: PhosphorIcons.folder(),
-                child: _DirectoriesSection(
+              // ── Sources Section ───────────────────────────────────────
+              Text(
+                'Sources',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Add local folders or connect a stream server to scan music into your library.',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.55)
+                      : Colors.black.withValues(alpha: 0.45),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── Add Source Buttons ────────────────────────────────────
+              Row(
+                children: [
+                  Expanded(
+                    child: _AddSourceButton(
+                      icon: PhosphorIcons.folderSimple(),
+                      label: 'Add local source',
+                      onTap: _browseFolder,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _AddSourceButton(
+                      icon: PhosphorIcons.cloud(),
+                      label: 'Add stream source',
+                      onTap: () => context.go('/stream-config'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // ── Source List ───────────────────────────────────────────
+              if (_directories.isEmpty)
+                _EmptySourcesPlaceholder()
+              else
+                _SourceList(
                   directories: _directories,
-                  pathController: _pathController,
-                  onAddTyped: _addTypedPath,
-                  onBrowse: _browseFolder,
                   onRemove: _removeDirectory,
                 ),
+
+              const SizedBox(height: 24),
+
+              // ── Skip Short Audio ─────────────────────────────────────
+              _OptionCard(
+                title: 'Skip short audio',
+                subtitle: 'Minimum duration 60 seconds',
+                value: _skipShort,
+                onChanged: (v) => setState(() => _skipShort = v),
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 24),
 
-              // ── Scan Options Card ────────────────────────────────────
-              _GlassCard(
-                title: 'Options',
-                icon: PhosphorIcons.gear(),
-                child: _ScanOptionsSection(
-                  skipShort: _skipShort,
-                  minDuration: _minDuration,
-                  onSkipShortChanged: (value) =>
-                      setState(() => _skipShort = value),
-                  onMinDurationChanged: (value) =>
-                      setState(() => _minDuration = value),
+              // ── Scan Button ──────────────────────────────────────────
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: isScanning || _directories.isEmpty
+                      ? null
+                      : _scanAndSave,
+                  style: BayinButtonStyles.filledFlat().copyWith(
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    shape: WidgetStateProperty.all(
+                      RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                  child: Text(
+                    isScanning ? 'Scanning...' : 'Start Scan',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
 
-              const SizedBox(height: 16),
-
-              // ── Actions Card ─────────────────────────────────────────
-              _GlassCard(
-                title: 'Actions',
-                icon: PhosphorIcons.playCircle(),
-                child: _ActionsSection(
-                  scanDisabled: scanner.isLoading || _directories.isEmpty,
-                  backfillDisabled: scanner.isLoading,
-                  onSaveConfig: _saveConfig,
-                  onPreviewScan: _previewScan,
-                  onScanAndSave: _scanAndSave,
-                  onBackfillCovers: _backfillCovers,
-                ),
-              ),
-
-              // ── Progress Indicator ───────────────────────────────────
-              if (scanner.isLoading) ...[
-                const SizedBox(height: 16),
-                const _ScanProgressIndicator(),
-              ],
-
-              const SizedBox(height: 16),
-
-              // ── Status Card ──────────────────────────────────────────
-              _GlassCard(
-                title: 'Status',
-                icon: PhosphorIcons.chartBar(),
-                child: _StatusSection(
+              // ── Scan Status ──────────────────────────────────────────
+              if (scanner.results.isNotEmpty) ...[
+                const SizedBox(height: 24),
+                _ScanResultCard(
                   scannedCount: scanner.results.length,
-                  directories: scanner.directories,
                   lastSave: scanner.lastSave,
                   error: scanner.error,
-                  watchRunning: _watchRunning,
-                  watchPendingEvents: _watchPendingEvents,
-                  watchEventCount: _watchEventCount,
-                  lastWatchEventPath: _lastWatchEventPath,
-                  lastWatchEventKind: _lastWatchEventKind,
-                ),
-              ),
-
-              // ── Preview Songs ────────────────────────────────────────
-              if (scanner.results.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                _GlassCard(
-                  title: 'Preview',
-                  icon: PhosphorIcons.musicNote(),
-                  child: _PreviewSongsSection(scanner.results),
                 ),
               ],
             ],
@@ -173,8 +160,6 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
       ],
     );
   }
-
-  // ── Private Methods ────────────────────────────────────────────────────
 
   void _applyConfigOnce(AsyncValue<ScanConfig?> config) {
     if (_configApplied) return;
@@ -187,7 +172,6 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
       setState(() {
         _directories = List<String>.from(data.directories);
         _skipShort = data.skipShort;
-        _minDuration = data.minDuration;
       });
     });
   }
@@ -198,13 +182,6 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
     final selected = await FolderBrowser.show(context, initialPath: initialPath);
     if (selected == null || selected.trim().isEmpty) return;
     _addDirectory(selected.trim());
-  }
-
-  void _addTypedPath() {
-    final path = _pathController.text.trim();
-    if (path.isEmpty) return;
-    _addDirectory(path);
-    _pathController.clear();
   }
 
   void _addDirectory(String path) {
@@ -220,327 +197,84 @@ class _ScanMusicPageState extends ConsumerState<ScanMusicPage> {
     });
   }
 
-  Future<void> _saveConfig() async {
+  Future<void> _scanAndSave() async {
     try {
       await ref.read(scanServiceProvider).saveScanConfig(
             ScanConfig(
               directories: List<String>.unmodifiable(_directories),
               skipShort: _skipShort,
-              minDuration: _minDuration,
+              minDuration: _skipShort ? 60 : 0,
               lastScanAt: DateTime.now().millisecondsSinceEpoch,
             ),
           );
-      await FileWatcherService.instance.start(_directories);
-      _refreshWatcherStatus();
       ref.invalidate(scanConfigProvider);
       if (!mounted) return;
-      showInfoMessage(context, 'Scan config saved.');
+
+      await ref.read(scannerProvider.notifier).scanAndSave(
+            _directories,
+            skipShortAudio: _skipShort,
+            minDuration: _skipShort ? 60 : 0,
+          );
+
+      if (!mounted) return;
+      showInfoMessage(context, 'Scan complete.');
     } catch (error) {
       if (!mounted) return;
-      showInfoMessage(context, 'Failed to save config: $error', isError: true);
-    }
-  }
-
-  void _refreshWatcherStatus() {
-    try {
-      final status = FileWatcherService.instance.status();
-      if (!mounted) return;
-      setState(() {
-        _watchRunning = status.running;
-        _watchPendingEvents = status.pendingEvents;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _watchRunning = false;
-        _watchPendingEvents = 0;
-      });
-    }
-  }
-
-  Future<void> _previewScan() async {
-    await _saveConfig();
-    await ref.read(scannerProvider.notifier).scanDirectories(
-          _directories,
-          skipShortAudio: _skipShort,
-          minDuration: _minDuration,
-        );
-  }
-
-  Future<void> _scanAndSave() async {
-    await _saveConfig();
-    await ref.read(scannerProvider.notifier).scanAndSave(
-          _directories,
-          skipShortAudio: _skipShort,
-          minDuration: _minDuration,
-        );
-  }
-
-  Future<void> _backfillCovers() async {
-    try {
-      await ref.read(libraryServiceProvider).ensureDatabaseInitialized();
-      final result = await ref.read(scanServiceProvider).backfillLocalCovers();
-      ref.invalidate(librarySongsProvider);
-      ref.invalidate(libraryAlbumsProvider);
-      ref.invalidate(libraryArtistsProvider);
-      if (!mounted) return;
-      showInfoMessage(
-          context,
-          'Cover backfill finished. Updated ${result.updated}/${result.totalCandidates}, skipped ${result.skipped}, failed ${result.failed}.',
-          duration: const Duration(seconds: 5));
-    } catch (error) {
-      if (!mounted) return;
-      showInfoMessage(context, 'Cover backfill failed: $error', isError: true);
+      showInfoMessage(context, 'Scan failed: $error', isError: true);
     }
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Glass Card Container
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Add Source Button ────────────────────────────────────────────────────
 
-/// Reusable glass card with title and icon.
-class _GlassCard extends StatelessWidget {
-  const _GlassCard({
-    required this.title,
+class _AddSourceButton extends StatefulWidget {
+  const _AddSourceButton({
     required this.icon,
-    required this.child,
-  });
-
-  final String title;
-  final IconData icon;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-
-    return BayinGlassGroup(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Section header.
-            Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 16,
-                  color: FlatColors.textSecondary(brightness),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: FlatTypography.label(brightness).copyWith(
-                    color: FlatColors.textSecondary(brightness),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Divider(
-                    height: 1,
-                    thickness: 1,
-                    color: brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: 0.10)
-                        : Colors.black.withValues(alpha: 0.06),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Content.
-            child,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Directories Section
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _DirectoriesSection extends StatelessWidget {
-  const _DirectoriesSection({
-    required this.directories,
-    required this.pathController,
-    required this.onAddTyped,
-    required this.onBrowse,
-    required this.onRemove,
-  });
-
-  final List<String> directories;
-  final TextEditingController pathController;
-  final VoidCallback onAddTyped;
-  final VoidCallback onBrowse;
-  final ValueChanged<String> onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // ── Styled Input Container ─────────────────────────────────
-        Container(
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-          ),
-          child: Column(
-            children: [
-              // ── Input Row ───────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    // Folder icon.
-                    Icon(
-                      PhosphorIcons.folderSimple(),
-                      size: 18,
-                      color: FlatColors.primary(brightness),
-                    ),
-                    const SizedBox(width: 10),
-
-                    // Text field.
-                    Expanded(
-                      child: TextField(
-                        controller: pathController,
-                        decoration: InputDecoration(
-                          hintText: 'D:\\Music',
-                          hintStyle: FlatTypography.bodySmall(brightness).copyWith(
-                            color: FlatColors.textTertiary(brightness),
-                          ),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                          isDense: true,
-                        ),
-                        style: FlatTypography.bodySmall(brightness),
-                        onSubmitted: (_) => onAddTyped(),
-                      ),
-                    ),
-
-                    // Browse button.
-                    _PillButton(
-                      label: 'Browse',
-                      icon: PhosphorIcons.folderOpen(),
-                      onPressed: onBrowse,
-                    ),
-                  ],
-                ),
-              ),
-
-              // ── Divider ──────────────────────────────────────────
-              Container(
-                height: 1,
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.06)
-                    : Colors.black.withValues(alpha: 0.06),
-              ),
-
-              // ── Action Bar ───────────────────────────────────────
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      PhosphorIcons.info(),
-                      size: 12,
-                      color: FlatColors.textTertiary(brightness),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        directories.isEmpty
-                            ? 'Select music folders to scan'
-                            : '${directories.length} folder${directories.length > 1 ? 's' : ''} selected',
-                        style: FlatTypography.caption(brightness),
-                      ),
-                    ),
-                    // Add button.
-                    _AddButton(
-                      onPressed: pathController.text.trim().isEmpty ? null : onAddTyped,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 12),
-
-        // ── Directory Chips ────────────────────────────────────────
-        if (directories.isEmpty)
-          _EmptyState(
-            icon: PhosphorIcons.folderOpen(),
-            message: 'No folders added yet',
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final path in directories)
-                _DirectoryChip(
-                  path: path,
-                  onRemove: () => onRemove(path),
-                ),
-            ],
-          ),
-      ],
-    );
-  }
-}
-
-/// Pill-shaped button for the input area.
-class _PillButton extends StatelessWidget {
-  const _PillButton({
     required this.label,
-    required this.icon,
-    required this.onPressed,
+    required this.onTap,
   });
 
-  final String label;
   final IconData icon;
-  final VoidCallback onPressed;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_AddSourceButton> createState() => _AddSourceButtonState();
+}
+
+class _AddSourceButtonState extends State<_AddSourceButton> {
+  bool _pressing = false;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
+    final bgColor = brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.04);
 
-    return Material(
-      color: isDark
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.black.withValues(alpha: 0.06),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressing = true),
+      onTapUp: (_) => setState(() => _pressing = false),
+      onTapCancel: () => setState(() => _pressing = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 120),
+        scale: _pressing ? 0.97 : 1.0,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 14, color: FlatColors.textSecondary(brightness)),
-              const SizedBox(width: 5),
+              Icon(widget.icon, size: 16),
+              const SizedBox(width: 8),
               Text(
-                label,
-                style: FlatTypography.caption(brightness).copyWith(
+                widget.label,
+                style: const TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -552,439 +286,93 @@ class _PillButton extends StatelessWidget {
   }
 }
 
-/// Add button with icon.
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.onPressed});
+// ── Empty Sources Placeholder ────────────────────────────────────────────
 
-  final VoidCallback? onPressed;
-
+class _EmptySourcesPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final isEnabled = onPressed != null;
-
-    return Material(
-      color: isEnabled
-          ? FlatColors.primary(brightness)
-          : FlatColors.stateLayer(brightness, FlatStateIntensity.subtle),
-      borderRadius: BorderRadius.circular(6),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(6),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                PhosphorIcons.plus(),
-                size: 14,
-                color: isEnabled ? Colors.white : FlatColors.textTertiary(brightness),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'Add',
-                style: FlatTypography.caption(brightness).copyWith(
-                  color: isEnabled ? Colors.white : FlatColors.textTertiary(brightness),
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.12)
+              : Colors.black.withValues(alpha: 0.10),
+          width: 1,
+          strokeAlign: BorderSide.strokeAlignInside,
+        ),
+      ),
+      child: Text(
+        'No sources configured yet.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 14,
+          color: brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.45)
+              : Colors.black.withValues(alpha: 0.40),
         ),
       ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Scan Options Section
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Source List ──────────────────────────────────────────────────────────
 
-class _ScanOptionsSection extends StatelessWidget {
-  const _ScanOptionsSection({
-    required this.skipShort,
-    required this.minDuration,
-    required this.onSkipShortChanged,
-    required this.onMinDurationChanged,
-  });
-
-  final bool skipShort;
-  final double minDuration;
-  final ValueChanged<bool> onSkipShortChanged;
-  final ValueChanged<double> onMinDurationChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-
-    return Column(
-      children: [
-        // Skip short tracks toggle.
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Skip short tracks',
-                    style: FlatTypography.bodySmall(brightness).copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Ignore tracks shorter than minimum duration',
-                    style: FlatTypography.caption(brightness),
-                  ),
-                ],
-              ),
-            ),
-            MacosSwitch(
-              value: skipShort,
-              onChanged: onSkipShortChanged,
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 16),
-
-        // Duration slider.
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  PhosphorIcons.clock(),
-                  size: 14,
-                  color: FlatColors.textSecondary(brightness),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  'Minimum duration',
-                  style: FlatTypography.bodySmall(brightness).copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const Spacer(),
-                MacosBadge(
-                  label: '${minDuration.round()}s',
-                  color: FlatColors.primary(brightness),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            MacosSlider(
-              value: minDuration.clamp(5.0, 300.0),
-              min: 5,
-              max: 300,
-              divisions: 59,
-              onChanged: onMinDurationChanged,
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Actions Section
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _ActionsSection extends StatelessWidget {
-  const _ActionsSection({
-    required this.scanDisabled,
-    required this.backfillDisabled,
-    required this.onSaveConfig,
-    required this.onPreviewScan,
-    required this.onScanAndSave,
-    required this.onBackfillCovers,
-  });
-
-  final bool scanDisabled;
-  final bool backfillDisabled;
-  final Future<void> Function() onSaveConfig;
-  final Future<void> Function() onPreviewScan;
-  final Future<void> Function() onScanAndSave;
-  final Future<void> Function() onBackfillCovers;
-
-  @override
-  Widget build(BuildContext context) {
-    final outlinedStyle = BayinButtonStyles.outlinedFlat(context);
-    final filledStyle = BayinButtonStyles.filledFlat();
-
-    return Column(
-      children: [
-        // Save config button.
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: scanDisabled ? null : onSaveConfig,
-            style: outlinedStyle,
-            icon: Icon(PhosphorIcons.floppyDisk(), size: 16),
-            label: const Text('Save configuration'),
-          ),
-        ),
-
-        const SizedBox(height: 8),
-
-        // Scan buttons row.
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: scanDisabled ? null : onPreviewScan,
-                style: outlinedStyle,
-                icon: Icon(PhosphorIcons.magnifyingGlass(), size: 16),
-                label: const Text('Preview'),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: FilledButton(
-                onPressed: scanDisabled ? null : onScanAndSave,
-                style: filledStyle,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(PhosphorIcons.database(), size: 16),
-                    const SizedBox(width: 8),
-                    const Text('Scan & save'),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 8),
-
-        // Backfill covers button.
-        SizedBox(
-          width: double.infinity,
-          child: OutlinedButton.icon(
-            onPressed: backfillDisabled ? null : onBackfillCovers,
-            style: outlinedStyle,
-            icon: Icon(PhosphorIcons.imageSquare(), size: 16),
-            label: const Text('Backfill album covers'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Status Section
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _StatusSection extends StatelessWidget {
-  const _StatusSection({
-    required this.scannedCount,
+class _SourceList extends StatelessWidget {
+  const _SourceList({
     required this.directories,
-    required this.lastSave,
-    required this.error,
-    required this.watchRunning,
-    required this.watchPendingEvents,
-    required this.watchEventCount,
-    required this.lastWatchEventPath,
-    required this.lastWatchEventKind,
+    required this.onRemove,
   });
 
-  final int scannedCount;
   final List<String> directories;
-  final ScanAndSaveResult? lastSave;
-  final String? error;
-  final bool watchRunning;
-  final int watchPendingEvents;
-  final int watchEventCount;
-  final String? lastWatchEventPath;
-  final String? lastWatchEventKind;
+  final ValueChanged<String> onRemove;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Scanned count.
-        _StatusRow(
-          icon: PhosphorIcons.musicNotes(),
-          label: 'Preview results',
-          value: '$scannedCount songs',
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.8,
         ),
-
-        const SizedBox(height: 10),
-
-        // Save status.
-        if (lastSave != null) ...[
-          _StatusRow(
-            icon: PhosphorIcons.checkCircle(),
-            label: 'Last save',
-            value:
-                'Scanned ${lastSave!.scanned}, saved ${lastSave!.saved}, skipped ${lastSave!.skipped}',
-          ),
-          const SizedBox(height: 10),
-        ],
-
-        // Watcher status.
-        Row(
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
           children: [
-            Icon(
-              watchRunning ? PhosphorIcons.eye() : PhosphorIcons.eyeSlash(),
-              size: 14,
-              color: watchRunning
-                  ? FlatColors.secondary(brightness)
-                  : FlatColors.textSecondary(brightness),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              'File watcher',
-              style: FlatTypography.bodySmall(brightness),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: (watchRunning
-                        ? FlatColors.secondary(brightness)
-                        : FlatColors.textSecondary(brightness))
-                    .withValues(alpha: 0.16),
-                borderRadius: BorderRadius.circular(999),
+            for (var i = 0; i < directories.length; i++) ...[
+              _SourceRow(
+                path: directories[i],
+                onRemove: () => onRemove(directories[i]),
               ),
-              child: Text(
-                watchRunning ? 'Running' : 'Stopped',
-                style: FlatTypography.caption(brightness).copyWith(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+              if (i < directories.length - 1)
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                  indent: 64,
+                  color: brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.06)
+                      : Colors.black.withValues(alpha: 0.06),
                 ),
-              ),
-            ),
+            ],
           ],
         ),
-
-        // Watcher events.
-        if (watchEventCount > 0) ...[
-          const SizedBox(height: 8),
-          _StatusRow(
-            icon: PhosphorIcons.arrowCounterClockwise(),
-            label: 'Events',
-            value:
-                '$watchEventCount total, $watchPendingEvents pending',
-          ),
-        ],
-
-        // Last event.
-        if (lastWatchEventPath != null && lastWatchEventPath!.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          _StatusRow(
-            icon: PhosphorIcons.file(),
-            label: 'Last event',
-            value: '${lastWatchEventKind ?? 'unknown'} - $lastWatchEventPath',
-            maxLines: 1,
-          ),
-        ],
-
-        // Error.
-        if (error != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: FlatColors.error(brightness).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: FlatColors.error(brightness).withValues(alpha: 0.3),
-                width: 0.5,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  PhosphorIcons.warningCircle(),
-                  size: 16,
-                  color: FlatColors.error(brightness),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    error!,
-                    style: FlatTypography.bodySmall(brightness).copyWith(
-                      color: FlatColors.error(brightness),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ],
+      ),
     );
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Preview Songs Section
-// ═══════════════════════════════════════════════════════════════════════════
+// ── Source Row ───────────────────────────────────────────────────────────
 
-class _PreviewSongsSection extends StatelessWidget {
-  const _PreviewSongsSection(this.results);
-
-  final List<ScannedSong> results;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final displayCount = results.length > 20 ? 20 : results.length;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Song list.
-        for (var i = 0; i < displayCount; i++)
-          _SongTile(
-            song: results[i],
-            index: i,
-          ),
-
-        // More indicator.
-        if (results.length > displayCount)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: FlatColors.textSecondary(brightness)
-                      .withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  '+${results.length - displayCount} more',
-                  style: FlatTypography.caption(brightness).copyWith(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Shared Components
-// ═══════════════════════════════════════════════════════════════════════════
-
-/// Directory path chip.
-class _DirectoryChip extends StatelessWidget {
-  const _DirectoryChip({
+class _SourceRow extends StatefulWidget {
+  const _SourceRow({
     required this.path,
     required this.onRemove,
   });
@@ -993,120 +381,94 @@ class _DirectoryChip extends StatelessWidget {
   final VoidCallback onRemove;
 
   @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    final isDark = brightness == Brightness.dark;
-
-    // Extract folder name from path.
-    final folderName = path.split(RegExp(r'[/\\]')).last;
-    final parentPath = path.substring(0, path.length - folderName.length);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: onRemove,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.black.withValues(alpha: 0.03),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.08),
-              width: 0.5,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Folder icon.
-              Icon(
-                PhosphorIcons.folder(),
-                size: 16,
-                color: FlatColors.primary(brightness),
-              ),
-              const SizedBox(width: 8),
-
-              // Path info.
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 220),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      folderName,
-                      overflow: TextOverflow.ellipsis,
-                      style: FlatTypography.bodySmall(brightness).copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    if (parentPath.isNotEmpty)
-                      Text(
-                        parentPath,
-                        overflow: TextOverflow.ellipsis,
-                        style: FlatTypography.caption(brightness).copyWith(
-                          color: FlatColors.textTertiary(brightness),
-                          fontSize: 10,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // Remove button.
-              Container(
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFEF4444).withValues(alpha: 0.14),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  PhosphorIcons.x(),
-                  size: 10,
-                  color: const Color(0xFFEF4444),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  State<_SourceRow> createState() => _SourceRowState();
 }
 
-/// Empty state placeholder.
-class _EmptyState extends StatelessWidget {
-  const _EmptyState({
-    required this.icon,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String message;
+class _SourceRowState extends State<_SourceRow> {
+  bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
+    final folderName = widget.path.split(RegExp(r'[/\\]')).last;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 24),
-      child: Center(
-        child: Column(
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        color: _hovering
+            ? (brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.03))
+            : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        child: Row(
           children: [
-            Icon(
-              icon,
-              size: 32,
-              color: FlatColors.textTertiary(brightness),
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                color: const Color(0xFF3B82F6).withValues(
+                  alpha: brightness == Brightness.dark ? 0.22 : 0.12,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF3B82F6).withValues(
+                    alpha: brightness == Brightness.dark ? 0.38 : 0.22,
+                  ),
+                  width: 0.8,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                PhosphorIcons.folderSimple(),
+                size: 18,
+                color: const Color(0xFF3B82F6),
+              ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              message,
-              style: FlatTypography.caption(brightness),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    folderName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    widget.path,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.40),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: widget.onRemove,
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  PhosphorIcons.x(),
+                  size: 14,
+                  color: const Color(0xFFEF4444),
+                ),
+              ),
             ),
           ],
         ),
@@ -1115,134 +477,67 @@ class _EmptyState extends StatelessWidget {
   }
 }
 
-/// Status row with icon, label, and value.
-class _StatusRow extends StatelessWidget {
-  const _StatusRow({
-    required this.icon,
-    required this.label,
+// ── Option Card ──────────────────────────────────────────────────────────
+
+class _OptionCard extends StatelessWidget {
+  const _OptionCard({
+    required this.title,
+    required this.subtitle,
     required this.value,
-    this.maxLines,
+    required this.onChanged,
   });
 
-  final IconData icon;
-  final String label;
-  final String value;
-  final int? maxLines;
+  final String title;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    final tone = switch (label) {
-      'Preview results' => const Color(0xFF3B82F6),
-      'Last save' => const Color(0xFF10B981),
-      'Events' => const Color(0xFFF59E0B),
-      'Last event' => const Color(0xFF8B5CF6),
-      _ => FlatColors.textSecondary(brightness),
-    };
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          icon,
-          size: 14,
-          color: tone,
-        ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: FlatTypography.caption(brightness).copyWith(
-                  color: FlatColors.textSecondary(brightness),
-                ),
-              ),
-              Text(
-                value,
-                maxLines: maxLines,
-                overflow: maxLines != null ? TextOverflow.ellipsis : null,
-                style: FlatTypography.bodySmall(brightness).copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Song preview tile.
-class _SongTile extends StatelessWidget {
-  const _SongTile({
-    required this.song,
-    required this.index,
-  });
-
-  final ScannedSong song;
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.transparent,
-        border: Border(
-          bottom: BorderSide(
-            color: MacosBorder.color(brightness),
-            width: 0.5,
-          ),
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.8,
         ),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       child: Row(
         children: [
-          // Track number.
-          SizedBox(
-            width: 24,
-            child: Text(
-              '${index + 1}',
-              style: FlatTypography.caption(brightness),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(width: 12),
-
-          // Music icon.
-          Icon(
-            PhosphorIcons.musicNote(),
-            size: 16,
-            color: FlatColors.primary(brightness),
-          ),
-          const SizedBox(width: 12),
-
-          // Song info.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  song.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FlatTypography.bodySmall(brightness).copyWith(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${song.artist} — ${song.album}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: FlatTypography.caption(brightness),
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.45)
+                        : Colors.black.withValues(alpha: 0.40),
+                  ),
                 ),
               ],
             ),
+          ),
+          BayinToggleSwitch(
+            value: value,
+            onChanged: onChanged,
           ),
         ],
       ),
@@ -1250,76 +545,127 @@ class _SongTile extends StatelessWidget {
   }
 }
 
-/// Scan progress indicator with animation.
-class _ScanProgressIndicator extends StatefulWidget {
-  const _ScanProgressIndicator();
+// ── Scan Result Card ─────────────────────────────────────────────────────
 
-  @override
-  State<_ScanProgressIndicator> createState() =>
-      _ScanProgressIndicatorState();
-}
+class _ScanResultCard extends StatelessWidget {
+  const _ScanResultCard({
+    required this.scannedCount,
+    this.lastSave,
+    this.error,
+  });
 
-class _ScanProgressIndicatorState extends State<_ScanProgressIndicator>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1500),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
+  final int scannedCount;
+  final ScanAndSaveResult? lastSave;
+  final String? error;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-
-    return BayinGlassGroup(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                RotationTransition(
-                  turns: _controller,
-                  child: Icon(
-                    PhosphorIcons.arrowsClockwise(),
-                    size: 16,
-                    color: FlatColors.primary(brightness),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Scanning...',
-                  style: FlatTypography.bodySmall(brightness).copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
+    return Container(
+      decoration: BoxDecoration(
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.02),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: brightness == Brightness.dark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
+          width: 0.8,
+        ),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _ResultRow(
+            icon: PhosphorIcons.musicNotes(),
+            label: 'Scanned',
+            value: '$scannedCount songs',
+            color: const Color(0xFF3B82F6),
+          ),
+          if (lastSave != null) ...[
+            const SizedBox(height: 10),
+            _ResultRow(
+              icon: PhosphorIcons.checkCircle(),
+              label: 'Saved',
+              value: '${lastSave!.saved}, skipped ${lastSave!.skipped}',
+              color: const Color(0xFF10B981),
             ),
-            const SizedBox(height: 12),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: LinearProgressIndicator(
-                backgroundColor: FlatColors.stateLayer(
-                  brightness,
-                  FlatStateIntensity.standard,
-                ),
+          ],
+          if (error != null) ...[
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    PhosphorIcons.warningCircle(),
+                    size: 14,
+                    color: const Color(0xFFEF4444),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      error!,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFEF4444),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
-        ),
+        ],
       ),
+    );
+  }
+}
+
+class _ResultRow extends StatelessWidget {
+  const _ResultRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: color),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.55)
+                : Colors.black.withValues(alpha: 0.45),
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 }

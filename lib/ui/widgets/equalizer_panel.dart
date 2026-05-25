@@ -19,8 +19,8 @@ class EqualizerPanel extends ConsumerWidget {
   });
 
   static const List<String> bands = [
-    '31Hz', '62Hz', '125Hz', '250Hz', '500Hz',
-    '1kHz', '2kHz', '4kHz', '8kHz', '16kHz',
+    '31', '62', '125', '250', '500',
+    '1k', '2k', '4k', '8k', '16k',
   ];
 
   final bool enabled;
@@ -34,12 +34,14 @@ class EqualizerPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ref.watch(bayinTokensProvider);
+    final brightness = Theme.of(context).brightness;
     final surfaceColor = tokens.isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.04);
 
     return Column(
       children: [
+        // ── Enable Toggle ─────────────────────────────────────────────
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -67,6 +69,8 @@ class EqualizerPanel extends ConsumerWidget {
           ),
         ),
         const SizedBox(height: 10),
+
+        // ── Preset Row ────────────────────────────────────────────────
         _PresetRow(
           selected: selectedPreset,
           onChanged: onPresetChanged,
@@ -74,21 +78,128 @@ class EqualizerPanel extends ConsumerWidget {
           tokens: tokens,
         ),
         const SizedBox(height: 10),
+
+        // ── EQ Grid ───────────────────────────────────────────────────
         Container(
           decoration: BoxDecoration(
             color: surfaceColor,
             borderRadius: BorderRadius.circular(12),
           ),
-          padding: const EdgeInsets.fromLTRB(10, 10, 10, 4),
+          padding: const EdgeInsets.fromLTRB(12, 16, 12, 12),
           child: Column(
             children: [
-              for (var i = 0; i < gains.length && i < bands.length; i++)
-                _BandRow(
-                  label: bands[i],
-                  value: gains[i],
-                  onChanged: (value) => onBandGainChanged(i, value),
-                  tokens: tokens,
-                ),
+              // ── dB Labels ─────────────────────────────────────────
+              Row(
+                children: [
+                  const SizedBox(width: 40),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('+12', style: TextStyle(fontSize: 10, color: tokens.textSecondary)),
+                        Text('0', style: TextStyle(fontSize: 10, color: tokens.textSecondary)),
+                        Text('-12', style: TextStyle(fontSize: 10, color: tokens.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
+              const SizedBox(height: 6),
+
+
+
+              // ── Band Sliders ──────────────────────────────────────
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Vertical dB Scale ───────────────────────────
+                  SizedBox(
+                    width: 40,
+                    height: 160,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('+12', style: TextStyle(fontSize: 9, color: tokens.textSecondary)),
+                        Text('0', style: TextStyle(fontSize: 9, color: tokens.textSecondary)),
+                        Text('-12', style: TextStyle(fontSize: 9, color: tokens.textSecondary)),
+                      ],
+                    ),
+                  ),
+
+                  // ── Sliders ─────────────────────────────────────
+                  Expanded(
+                    child: SizedBox(
+                      height: 160,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (var i = 0; i < gains.length && i < bands.length; i++) ...[
+                            if (i > 0)
+                              Container(
+                                width: 1,
+                                color: brightness == Brightness.dark
+                                    ? Colors.white.withValues(alpha: 0.06)
+                                    : Colors.black.withValues(alpha: 0.06),
+                              ),
+                            Expanded(
+                              child: _BandSlider(
+                                label: bands[i],
+                                value: gains[i],
+                                onChanged: (v) => onBandGainChanged(i, v),
+                                enabled: enabled,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // ── Value Display ───────────────────────────────
+                  SizedBox(
+                    width: 48,
+                    height: 160,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          '${gains.isNotEmpty ? gains[0].toStringAsFixed(1) : '0.0'} dB',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: tokens.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 8),
+
+              // ── Frequency Labels ─────────────────────────────────
+              Row(
+                children: [
+                  const SizedBox(width: 40),
+                  Expanded(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        for (final band in bands)
+                          Text(
+                            band,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: tokens.textSecondary,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 48),
+                ],
+              ),
             ],
           ),
         ),
@@ -96,6 +207,133 @@ class EqualizerPanel extends ConsumerWidget {
     );
   }
 }
+
+// ── Band Slider ──────────────────────────────────────────────────────────
+
+class _BandSlider extends StatelessWidget {
+  const _BandSlider({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    required this.enabled,
+  });
+
+  final String label;
+  final double value;
+  final Future<void> Function(double) onChanged;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    final normalizedValue = ((value.clamp(-12, 12) + 12) / 24).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onVerticalDragUpdate: enabled
+          ? (details) {
+              final box = context.findRenderObject() as RenderBox?;
+              if (box == null) return;
+              final local = box.globalToLocal(details.globalPosition);
+              final fraction = (1 - (local.dy / box.size.height)).clamp(0.0, 1.0);
+              final newValue = (fraction * 24 - 12).clamp(-12.0, 12.0);
+              onChanged(newValue);
+            }
+          : null,
+      onTapDown: enabled
+          ? (details) {
+              final box = context.findRenderObject() as RenderBox?;
+              if (box == null) return;
+              final local = box.globalToLocal(details.globalPosition);
+              final fraction = (1 - (local.dy / box.size.height)).clamp(0.0, 1.0);
+              final newValue = (fraction * 24 - 12).clamp(-12.0, 12.0);
+              onChanged(newValue);
+            }
+          : null,
+      child: Container(
+        color: Colors.transparent,
+        child: CustomPaint(
+          painter: _BandPainter(
+            value: normalizedValue,
+            brightness: brightness,
+            enabled: enabled,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Band Painter ─────────────────────────────────────────────────────────
+
+class _BandPainter extends CustomPainter {
+  _BandPainter({
+    required this.value,
+    required this.brightness,
+    required this.enabled,
+  });
+
+  final double value;
+  final Brightness brightness;
+  final bool enabled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height * (1 - value));
+    final trackColor = brightness == Brightness.dark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.08);
+    final fillColor = enabled
+        ? const Color(0xFF3B82F6)
+        : (brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.25)
+            : Colors.black.withValues(alpha: 0.20));
+
+    // ── Track ───────────────────────────────────────────────────────
+    final trackPaint = Paint()
+      ..color = trackColor
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(size.width / 2, 0),
+      Offset(size.width / 2, size.height),
+      trackPaint,
+    );
+
+    // ── Filled portion ──────────────────────────────────────────────
+    final fillPaint = Paint()
+      ..color = fillColor
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(size.width / 2, size.height),
+      center,
+      fillPaint,
+    );
+
+    // ── Thumb ───────────────────────────────────────────────────────
+    final thumbPaint = Paint()
+      ..color = enabled ? Colors.white : (brightness == Brightness.dark
+          ? Colors.white.withValues(alpha: 0.6)
+          : Colors.black.withValues(alpha: 0.6))
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 5, thumbPaint);
+
+    // ── Thumb border ────────────────────────────────────────────────
+    final borderPaint = Paint()
+      ..color = fillColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawCircle(center, 5, borderPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _BandPainter oldDelegate) =>
+      oldDelegate.value != value ||
+      oldDelegate.brightness != brightness ||
+      oldDelegate.enabled != enabled;
+}
+
+// ── Preset Row ───────────────────────────────────────────────────────────
 
 class _PresetRow extends StatelessWidget {
   const _PresetRow({
@@ -167,53 +405,6 @@ class _PresetRow extends StatelessWidget {
         ),
         child: Text(label, style: const TextStyle(fontSize: 13)),
       ),
-    );
-  }
-}
-
-class _BandRow extends StatelessWidget {
-  const _BandRow({
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    required this.tokens,
-  });
-
-  final String label;
-  final double value;
-  final Future<void> Function(double) onChanged;
-  final BayinTokens tokens;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        SizedBox(
-          width: 52,
-          child: Text(label),
-        ),
-        Expanded(
-          child: Slider(
-            value: value.clamp(-12, 12),
-            min: -12,
-            max: 12,
-            divisions: 48,
-            label: '${value.toStringAsFixed(1)} dB',
-            onChanged: (v) => onChanged(v),
-          ),
-        ),
-        SizedBox(
-          width: 48,
-          child: Text(
-            value.toStringAsFixed(1),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 12,
-              color: tokens.textSecondary,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

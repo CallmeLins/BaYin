@@ -465,6 +465,7 @@ class _ActionButtons extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: isTesting ? null : onTest,
+                style: BayinButtonStyles.outlinedFlat(context),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -475,7 +476,7 @@ class _ActionButtons extends StatelessWidget {
                             width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
-                      Icon(PhosphorIcons.plugs()),
+                      Icon(PhosphorIcons.plugs(), size: 16),
                     const SizedBox(width: 6),
                     const Text('Test'),
                   ],
@@ -486,6 +487,7 @@ class _ActionButtons extends StatelessWidget {
             Expanded(
               child: FilledButton(
                 onPressed: isSaving ? null : onSave,
+                style: BayinButtonStyles.filledFlat(),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -496,7 +498,7 @@ class _ActionButtons extends StatelessWidget {
                             width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
-                      Icon(PhosphorIcons.floppyDisk()),
+                      Icon(PhosphorIcons.floppyDisk(), size: 16),
                     const SizedBox(width: 6),
                     const Text('Save'),
                   ],
@@ -511,6 +513,7 @@ class _ActionButtons extends StatelessWidget {
             Expanded(
               child: OutlinedButton(
                 onPressed: hasSelectedServer && !isSyncing ? onSync : null,
+                style: BayinButtonStyles.outlinedFlat(context),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -521,7 +524,7 @@ class _ActionButtons extends StatelessWidget {
                             width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
-                      Icon(PhosphorIcons.arrowsClockwise()),
+                      Icon(PhosphorIcons.arrowsClockwise(), size: 16),
                     const SizedBox(width: 6),
                     const Text('Sync playlists'),
                   ],
@@ -532,6 +535,7 @@ class _ActionButtons extends StatelessWidget {
             Expanded(
               child: FilledButton(
                 onPressed: hasSelectedServer && !isDeleting ? onDelete : null,
+                style: BayinButtonStyles.filledFlat(),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -542,7 +546,7 @@ class _ActionButtons extends StatelessWidget {
                             width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
                       )
                     else
-                      Icon(PhosphorIcons.trash()),
+                      Icon(PhosphorIcons.trash(), size: 16),
                     const SizedBox(width: 6),
                     const Text('Delete'),
                   ],

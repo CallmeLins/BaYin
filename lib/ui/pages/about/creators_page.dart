@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
-import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class CreatorsPage extends ConsumerWidget {
@@ -11,6 +11,8 @@ class CreatorsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final brightness = Theme.of(context).brightness;
+
     return Column(
       children: [
         BayinPageHeader(
@@ -31,98 +33,162 @@ class CreatorsPage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 8),
-              const BayinSectionHeader(title: 'TEAM'),
-              _CreatorCard(
-                icon: PhosphorIcons.sparkle(),
-                chipColor: const Color(0xFF3B82F6),
-                name: 'BaYin Team',
-                role: 'Product and design',
-                description: 'Owns product direction, UI/UX decisions and release planning.',
+              const SizedBox(height: 16),
+
+              // ── Creator Card ────────────────────────────────────────
+              BayinGlassGroup(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          color: brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.black.withValues(alpha: 0.05),
+                          shape: BoxShape.circle,
+                        ),
+                        alignment: Alignment.center,
+                        child: Icon(
+                          PhosphorIcons.code(),
+                          size: 36,
+                          color: brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.80)
+                              : Colors.black.withValues(alpha: 0.70),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Lins',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Lead Developer',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF3B82F6),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Builds the Flutter + Rust cross-platform music player.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: brightness == Brightness.dark
+                                    ? Colors.white.withValues(alpha: 0.55)
+                                    : Colors.black.withValues(alpha: 0.50),
+                                height: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            GestureDetector(
+                              onTap: () async {
+                                final uri = Uri.parse('https://github.com/CallmeLins');
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: brightness == Brightness.dark
+                                      ? Colors.white
+                                      : Colors.black,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      PhosphorIcons.githubLogo(),
+                                      size: 16,
+                                      color: brightness == Brightness.dark
+                                          ? Colors.black
+                                          : Colors.white,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'GitHub Profile',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: brightness == Brightness.dark
+                                            ? Colors.black
+                                            : Colors.white,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 10),
-              _CreatorCard(
-                icon: PhosphorIcons.deviceMobileCamera(),
-                chipColor: const Color(0xFF06B6D4),
-                name: 'Flutter Client',
-                role: 'Cross-platform UI',
-                description:
-                    'Implements desktop/mobile user experience, state flow and interaction.',
-              ),
-              const SizedBox(height: 10),
-              _CreatorCard(
-                icon: PhosphorIcons.waveform(),
-                chipColor: const Color(0xFF8B5CF6),
-                name: 'Rust Core',
-                role: 'Audio engine and library backend',
-                description:
-                    'Provides playback, FFT, scanner/database and stream integrations via FFI.',
+
+              const SizedBox(height: 24),
+
+              // ── Thanks Section ──────────────────────────────────────
+              BayinGlassGroup(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Special Thanks',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Thanks to all contributors and the open source community for making this project possible.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.55)
+                              : Colors.black.withValues(alpha: 0.50),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GestureDetector(
+                        onTap: () async {
+                          final uri = Uri.parse('https://github.com/CallmeLins/BaYin/graphs/contributors');
+                          await launchUrl(uri, mode: LaunchMode.externalApplication);
+                        },
+                        child: const Text(
+                          'View Contributors →',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                            color: Color(0xFF3B82F6),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
       ],
-    );
-  }
-}
-
-
-class _CreatorCard extends ConsumerWidget {
-  const _CreatorCard({
-    required this.icon,
-    required this.chipColor,
-    required this.name,
-    required this.role,
-    required this.description,
-  });
-
-  final IconData icon;
-  final Color chipColor;
-  final String name;
-  final String role;
-  final String description;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final brightness = Theme.of(context).brightness;
-    return BayinGlassCard(
-      padding: const EdgeInsets.all(FlatSpacing.smPlus),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: chipColor,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: Icon(icon, size: 15, color: Colors.white),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  name,
-                  style: FlatTypography.headingCompact(brightness),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: FlatSpacing.xs + 2),
-          Text(
-            role,
-            style: FlatTypography.caption(brightness),
-          ),
-          const SizedBox(height: FlatSpacing.sm),
-          Text(
-            description,
-            style: FlatTypography.bodySmall(brightness),
-          ),
-        ],
-      ),
     );
   }
 }

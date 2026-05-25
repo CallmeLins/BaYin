@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
-import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
+import '../../widgets/toggle_switch.dart';
 
 class UserInterfacePage extends ConsumerWidget {
   const UserInterfacePage({super.key});
@@ -39,66 +39,95 @@ class UserInterfacePage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
+
+              // ── Appearance Section ───────────────────────────────────
               const BayinSectionHeader(title: 'APPEARANCE'),
               BayinGlassGroup(
                 child: Column(
                   children: [
-                    _SettingRow(
-                      title: 'Theme',
-                      trailing: SegmentedButton<ThemeMode>(
-                        segments: const [
-                          ButtonSegment<ThemeMode>(
-                            value: ThemeMode.system,
-                            label: Text('System'),
+                    // ── Theme Selector ────────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Theme',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                          ButtonSegment<ThemeMode>(
-                            value: ThemeMode.light,
-                            label: Text('Light'),
-                          ),
-                          ButtonSegment<ThemeMode>(
-                            value: ThemeMode.dark,
-                            label: Text('Dark'),
+                          const SizedBox(height: 10),
+                          _SegmentedSelector<ThemeMode>(
+                            options: const [
+                              _SegmentOption(value: ThemeMode.system, label: 'System'),
+                              _SegmentOption(value: ThemeMode.light, label: 'Light'),
+                              _SegmentOption(value: ThemeMode.dark, label: 'Dark'),
+                            ],
+                            selected: themeMode,
+                            onChanged: themeController.setThemeMode,
                           ),
                         ],
-                        selected: {themeMode},
-                        onSelectionChanged: (v) => themeController.setThemeMode(v.first),
                       ),
                     ),
                     _InsetDivider(),
-                    _SettingRow(
-                      title: 'Language',
-                      trailing: DropdownButton<Locale?>(
-                        value: locale,
-                        items: const [
-                          DropdownMenuItem<Locale?>(value: null, child: Text('System')),
-                          DropdownMenuItem<Locale?>(value: Locale('en'), child: Text('English')),
-                          DropdownMenuItem<Locale?>(
-                            value: Locale('zh', 'CN'),
-                            child: Text('Chinese (Simplified)'),
+
+                    // ── Language Selector ─────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Language',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _SegmentedSelector<String?>(
+                            options: const [
+                              _SegmentOption(value: null, label: 'System'),
+                              _SegmentOption(value: 'en', label: 'English'),
+                              _SegmentOption(value: 'zh-CN', label: '中文'),
+                            ],
+                            selected: locale?.languageCode,
+                            onChanged: (v) {
+                              if (v == null) {
+                                localeController.setLocale(null);
+                              } else if (v == 'zh-CN') {
+                                localeController.setLocale(const Locale('zh', 'CN'));
+                              } else {
+                                localeController.setLocale(const Locale('en'));
+                              }
+                            },
                           ),
                         ],
-                        onChanged: localeController.setLocale,
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 18),
+
+              const SizedBox(height: 24),
+
+              // ── Lists Section ────────────────────────────────────────
               const BayinSectionHeader(title: 'LISTS'),
               BayinGlassGroup(
-                child: Column(
-                  children: [
-                    _SwitchRow(
-                      title: 'Show cover in lists',
-                      subtitle: 'Display song art in row lists when available.',
-                      value: app.showCoverInList,
-                      onChanged: appController.setShowCoverInList,
-                    ),
-                  ],
+                child: _SwitchRow(
+                  title: 'Show cover in lists',
+                  subtitle: 'Display song art in row lists when available.',
+                  value: app.showCoverInList,
+                  onChanged: appController.setShowCoverInList,
                 ),
               ),
-              const SizedBox(height: 18),
+
+              const SizedBox(height: 24),
+
+              // ── Audio Visualizer Section ─────────────────────────────
               const BayinSectionHeader(title: 'AUDIO VISUALIZER'),
               BayinGlassGroup(
                 child: Column(
@@ -127,35 +156,89 @@ class UserInterfacePage extends ConsumerWidget {
   }
 }
 
+// ── Segmented Selector ───────────────────────────────────────────────────
 
+class _SegmentOption<T> {
+  const _SegmentOption({required this.value, required this.label});
 
-class _SettingRow extends StatelessWidget {
-  const _SettingRow({required this.title, required this.trailing});
+  final T value;
+  final String label;
+}
 
-  final String title;
-  final Widget trailing;
+class _SegmentedSelector<T> extends StatelessWidget {
+  const _SegmentedSelector({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<_SegmentOption<T>> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Row(
         children: [
-          Expanded(
-            child: Text(
-              title,
-              style: FlatTypography.bodySmall(brightness).copyWith(
-                fontWeight: FontWeight.w500,
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(options[i].value),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected == options[i].value
+                        ? (brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.14)
+                            : Colors.white)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: selected == options[i].value
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    options[i].label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: selected == options[i].value
+                          ? (brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black)
+                          : (brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.55)
+                              : Colors.black.withValues(alpha: 0.50)),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-          trailing,
+          ],
         ],
       ),
     );
   }
 }
+
+// ── Switch Row ───────────────────────────────────────────────────────────
 
 class _SwitchRow extends StatelessWidget {
   const _SwitchRow({
@@ -177,7 +260,7 @@ class _SwitchRow extends StatelessWidget {
       onTap: () => onChanged(!value),
       borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: Row(
           children: [
             Expanded(
@@ -186,12 +269,21 @@ class _SwitchRow extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: FlatTypography.bodySmall(brightness).copyWith(
+                    style: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(subtitle, style: FlatTypography.caption(brightness)),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.40),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -206,12 +298,14 @@ class _SwitchRow extends StatelessWidget {
   }
 }
 
+// ── Inset Divider ────────────────────────────────────────────────────────
+
 class _InsetDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return Padding(
-      padding: const EdgeInsets.only(left: 50),
+      padding: const EdgeInsets.only(left: 14),
       child: Divider(
         height: 1,
         thickness: 1,

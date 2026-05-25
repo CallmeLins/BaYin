@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
-import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class LyricSettingsPage extends ConsumerWidget {
@@ -14,7 +13,7 @@ class LyricSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
-    final brightness = Theme.of(context).brightness;
+
     return Column(
       children: [
         BayinPageHeader(
@@ -35,105 +34,95 @@ class LyricSettingsPage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 12),
-              _SectionGroup(
-                title: 'TYPOGRAPHY & TIMING',
+              const SizedBox(height: 16),
+
+              // ── All Settings in One Card ─────────────────────────────
+              BayinGlassGroup(
                 child: Column(
                   children: [
-                    _SliderTile(
-                      title: 'Lyrics font size',
+
+
+                    // ── Font Size ────────────────────────────────────
+                    _SliderRow(
+                      title: 'Font Size',
                       value: app.lyricsFontSize,
                       min: 12,
-                      max: 36,
-                      divisions: 24,
-                      label: '${app.lyricsFontSize.toStringAsFixed(1)} px',
+                      max: 32,
                       onChanged: controller.setLyricsFontSize,
                     ),
-                    _FlatDivider(),
-                    _SliderTile(
-                      title: 'Translation font size',
+                    _InsetDivider(),
+
+                    // ── Translation Font Size ────────────────────────
+                    _SliderRow(
+                      title: 'Translation Font Size',
                       value: app.lyricsTranslationFontSize,
                       min: 10,
-                      max: 30,
-                      divisions: 20,
-                      label: '${app.lyricsTranslationFontSize.toStringAsFixed(1)} px',
+                      max: 28,
                       onChanged: controller.setLyricsTranslationFontSize,
                     ),
-                    _FlatDivider(),
-                    _SliderTile(
-                      title: 'Lyrics offset',
-                      value: app.lyricsOffsetMs.toDouble(),
-                      min: -3000,
-                      max: 3000,
-                      divisions: 120,
-                      label: '${app.lyricsOffsetMs} ms',
-                      onChanged: (value) => controller.setLyricsOffsetMs(value.round()),
+                    _InsetDivider(),
+
+                    // ── Lyrics Offset ────────────────────────────────
+                    _OffsetRow(
+                      title: 'Lyrics Offset',
+                      subtitle: 'Adjust lyrics timing to sync with audio.',
+                      valueMs: app.lyricsOffsetMs,
+                      onChanged: controller.setLyricsOffsetMs,
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              _SectionGroup(
-                title: 'LAYOUT',
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Lyrics position',
-                        style: FlatTypography.bodySmall(brightness).copyWith(
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      SegmentedButton<String>(
-                        segments: const [
-                          ButtonSegment<String>(
-                            value: 'left',
-                            label: Text('Left'),
+                    _InsetDivider(),
+
+                    // ── Lyric Position ───────────────────────────────
+                    Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Lyric Position',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                          ButtonSegment<String>(
-                            value: 'center',
-                            label: Text('Center'),
-                          ),
-                          ButtonSegment<String>(
-                            value: 'right',
-                            label: Text('Right'),
+                          const SizedBox(height: 10),
+                          _SegmentedSelector<String>(
+                            options: const [
+                              _SegmentOption(value: 'left', label: 'Left'),
+                              _SegmentOption(value: 'center', label: 'Center'),
+                              _SegmentOption(value: 'right', label: 'Right'),
+                            ],
+                            selected: app.lyricsPosition,
+                            onChanged: controller.setLyricsPosition,
                           ),
                         ],
-                        selected: {app.lyricsPosition},
-                        onSelectionChanged: (v) {
-                          controller.setLyricsPosition(v.first);
-                        },
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              _SectionGroup(
-                title: 'BEHAVIOR & ANIMATION',
-                child: Column(
-                  children: [
-                    _SwitchTileCard(
-                      title: 'Selectable lyrics',
-                      subtitle: 'Allow selecting/copying lyric text.',
-                      value: app.lyricsSelectable,
-                      onChanged: controller.setLyricsSelectable,
                     ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _InsetDivider(),
+
+                    // ── Word-by-word Animation ───────────────────────
+                    _SwitchRow(
                       title: 'Word-by-word animation',
                       subtitle: 'Animate karaoke tokens progressively.',
                       value: app.lyricsWordByWordAnimation,
                       onChanged: controller.setLyricsWordByWordAnimation,
                     ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _InsetDivider(),
+
+                    // ── Auto Blur ────────────────────────────────────
+                    _SwitchRow(
                       title: 'Auto blur inactive lines',
                       subtitle: 'Reduce emphasis on non-active lyrics.',
                       value: app.lyricsAutoBlur,
                       onChanged: controller.setLyricsAutoBlur,
+                    ),
+                    _InsetDivider(),
+
+                    // ── Selectable Lyrics ────────────────────────────
+                    _SwitchRow(
+                      title: 'Allow text selection',
+                      subtitle: 'Allow selecting/copying lyric text.',
+                      value: app.lyricsSelectable,
+                      onChanged: controller.setLyricsSelectable,
                     ),
                   ],
                 ),
@@ -146,65 +135,96 @@ class LyricSettingsPage extends ConsumerWidget {
   }
 }
 
+// ── Segmented Selector ───────────────────────────────────────────────────
 
-/// A structural 2px divider within a section group.
-class _FlatDivider extends StatelessWidget {
+class _SegmentOption<T> {
+  const _SegmentOption({required this.value, required this.label});
+
+  final T value;
+  final String label;
+}
+
+class _SegmentedSelector<T> extends StatelessWidget {
+  const _SegmentedSelector({
+    required this.options,
+    required this.selected,
+    required this.onChanged,
+  });
+
+  final List<_SegmentOption<T>> options;
+  final T selected;
+  final ValueChanged<T> onChanged;
+
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
-    return Divider(
-      height: FlatBorder.structural,
-      indent: FlatSpacing.md,
-      color: FlatColors.border(brightness),
-    );
-  }
-}
-
-class _SectionGroup extends ConsumerWidget {
-  const _SectionGroup({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final brightness = Theme.of(context).brightness;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xs + 2,
-          ),
-          child: Text(
-            title,
-            style: FlatTypography.label(brightness),
-          ),
-        ),
-        Container(
-          decoration: BoxDecoration(
-            color: FlatColors.background(brightness),
-            borderRadius: BorderRadius.circular(FlatRadius.md),
-            border: Border.all(
-              color: FlatColors.border(brightness),
-              width: FlatBorder.structural,
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        children: [
+          for (var i = 0; i < options.length; i++) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(options[i].value),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: selected == options[i].value
+                        ? (brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.14)
+                            : Colors.white)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: selected == options[i].value
+                        ? [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.06),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    options[i].label,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                      color: selected == options[i].value
+                          ? (brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black)
+                          : (brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.55)
+                              : Colors.black.withValues(alpha: 0.50)),
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
-          child: child,
-        ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 }
 
-class _SliderTile extends ConsumerWidget {
-  const _SliderTile({
+// ── Slider Row ───────────────────────────────────────────────────────────
+
+class _SliderRow extends StatelessWidget {
+  const _SliderRow({
     required this.title,
     required this.value,
     required this.min,
     required this.max,
-    required this.divisions,
-    required this.label,
     required this.onChanged,
   });
 
@@ -212,15 +232,13 @@ class _SliderTile extends ConsumerWidget {
   final double value;
   final double min;
   final double max;
-  final int divisions;
-  final String label;
   final Future<void> Function(double) onChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -229,23 +247,40 @@ class _SliderTile extends ConsumerWidget {
             children: [
               Text(
                 title,
-                style: FlatTypography.bodySmall(brightness).copyWith(
+                style: const TextStyle(
+                  fontSize: 14,
                   fontWeight: FontWeight.w500,
                 ),
               ),
               Text(
-                label,
-                style: FlatTypography.caption(brightness),
+                '${value.round()}px',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.55)
+                      : Colors.black.withValues(alpha: 0.50),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            divisions: divisions,
-            onChanged: (v) => onChanged(v),
+          const SizedBox(height: 6),
+          SliderTheme(
+            data: SliderThemeData(
+              trackHeight: 4,
+              activeTrackColor: const Color(0xFF3B82F6),
+              inactiveTrackColor: brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.12)
+                  : Colors.black.withValues(alpha: 0.10),
+              thumbColor: Colors.white,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayColor: const Color(0xFF3B82F6).withValues(alpha: 0.12),
+            ),
+            child: Slider(
+              value: value.clamp(min, max),
+              min: min,
+              max: max,
+              onChanged: (v) => onChanged(v),
+            ),
           ),
         ],
       ),
@@ -253,8 +288,173 @@ class _SliderTile extends ConsumerWidget {
   }
 }
 
-class _SwitchTileCard extends ConsumerWidget {
-  const _SwitchTileCard({
+// ── Offset Row ───────────────────────────────────────────────────────────
+
+class _OffsetRow extends StatelessWidget {
+  const _OffsetRow({
+    required this.title,
+    required this.subtitle,
+    required this.valueMs,
+    required this.onChanged,
+  });
+
+  final String title;
+  final String subtitle;
+  final int valueMs;
+  final Future<void> Function(int) onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.40),
+                    ),
+                  ),
+                ],
+              ),
+              Text(
+                '${valueMs > 0 ? '+' : ''}$valueMs ms',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.55)
+                      : Colors.black.withValues(alpha: 0.50),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _OffsetButton(
+                label: '-',
+                onTap: () => onChanged(valueMs - 100),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.10)
+                          : Colors.black.withValues(alpha: 0.08),
+                      width: 0.8,
+                    ),
+                    color: brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.04)
+                        : Colors.black.withValues(alpha: 0.03),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${valueMs > 0 ? '+' : ''}$valueMs ms',
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _OffsetButton(
+                label: '+',
+                onTap: () => onChanged(valueMs + 100),
+              ),
+              const SizedBox(width: 8),
+              _OffsetButton(
+                label: 'Reset',
+                onTap: () => onChanged(0),
+                width: 56,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _OffsetButton extends StatefulWidget {
+  const _OffsetButton({
+    required this.label,
+    required this.onTap,
+    this.width = 36,
+  });
+
+  final String label;
+  final VoidCallback onTap;
+  final double width;
+
+  @override
+  State<_OffsetButton> createState() => _OffsetButtonState();
+}
+
+class _OffsetButtonState extends State<_OffsetButton> {
+  bool _pressing = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return GestureDetector(
+      onTap: widget.onTap,
+      onTapDown: (_) => setState(() => _pressing = true),
+      onTapUp: (_) => setState(() => _pressing = false),
+      onTapCancel: () => setState(() => _pressing = false),
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 120),
+        scale: _pressing ? 0.95 : 1.0,
+        child: Container(
+          width: widget.width,
+          height: 36,
+          decoration: BoxDecoration(
+            color: brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            widget.label,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Switch Row ───────────────────────────────────────────────────────────
+
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
     required this.title,
     required this.subtitle,
     required this.value,
@@ -267,16 +467,13 @@ class _SwitchTileCard extends ConsumerWidget {
   final Future<void> Function(bool) onChanged;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return InkWell(
       onTap: () => onChanged(!value),
-      borderRadius: BorderRadius.circular(FlatRadius.md),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FlatSpacing.md,
-          vertical: FlatSpacing.sm + 4,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: Row(
           children: [
             Expanded(
@@ -285,14 +482,20 @@ class _SwitchTileCard extends ConsumerWidget {
                 children: [
                   Text(
                     title,
-                    style: FlatTypography.bodySmall(brightness).copyWith(
+                    style: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: FlatTypography.caption(brightness),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.40),
+                    ),
                   ),
                 ],
               ),
@@ -303,6 +506,25 @@ class _SwitchTileCard extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Inset Divider ────────────────────────────────────────────────────────
+
+class _InsetDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Padding(
+      padding: const EdgeInsets.only(left: 14),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
       ),
     );
   }

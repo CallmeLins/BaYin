@@ -13,6 +13,7 @@ class EqualizerSettingsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final app = ref.watch(appSettingsProvider);
     final controller = ref.read(appSettingsProvider.notifier);
+    final brightness = Theme.of(context).brightness;
 
     return Column(
       children: [
@@ -34,11 +35,12 @@ class EqualizerSettingsPage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 8),
-              const BayinSectionHeader(title: 'EQUALIZER'),
-              _GlassWrap(
+              const SizedBox(height: 16),
+
+              // ── EQ Panel Card ───────────────────────────────────────
+              BayinGlassGroup(
                 child: Padding(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(20),
                   child: EqualizerPanel(
                     enabled: app.eqEnabled,
                     selectedPreset: app.eqPreset,
@@ -47,6 +49,23 @@ class EqualizerSettingsPage extends ConsumerWidget {
                     onBandGainChanged: controller.setEqBandGain,
                     onPresetChanged: (preset) => _applyPreset(controller, preset),
                     onReset: controller.resetEq,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ── Info Text ───────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '10-band parametric EQ with Rust engine hook. Changes apply in real-time during playback.',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: brightness == Brightness.dark
+                        ? Colors.white.withValues(alpha: 0.45)
+                        : Colors.black.withValues(alpha: 0.40),
+                    height: 1.5,
                   ),
                 ),
               ),
@@ -63,7 +82,6 @@ class EqualizerSettingsPage extends ConsumerWidget {
       controller.resetEq();
       return;
     }
-
     if (preset == 'bass') {
       _setAll(controller, const [6, 5, 4, 2, 1, 0, -1, -2, -3, -4]);
       return;
@@ -81,32 +99,5 @@ class EqualizerSettingsPage extends ConsumerWidget {
     for (var i = 0; i < gains.length; i++) {
       controller.setEqBandGain(i, gains[i]);
     }
-  }
-}
-
-
-class _GlassWrap extends StatelessWidget {
-  const _GlassWrap({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return Container(
-      decoration: BoxDecoration(
-        color: brightness == Brightness.dark
-            ? Colors.white.withValues(alpha: 0.04)
-            : Colors.black.withValues(alpha: 0.02),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.08)
-              : Colors.black.withValues(alpha: 0.06),
-          width: 0.8,
-        ),
-      ),
-      child: child,
-    );
   }
 }

@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../../providers/providers.dart';
-import '../../theme/design_tokens.dart';
 import '../../widgets/widgets.dart';
 
 class BayinProPage extends ConsumerWidget {
@@ -36,176 +35,209 @@ class BayinProPage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'Feature flags for advanced visuals and focused playback.',
-                  style: TextStyle(color: FlatColors.textSecondary(brightness)),
+              const SizedBox(height: 16),
+
+              // ── Pricing Section ──────────────────────────────────────
+              const BayinSectionHeader(title: 'PRICING'),
+              BayinGlassGroup(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Free',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: brightness == Brightness.dark
+                              ? Colors.white
+                              : Colors.black,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'BaYin Pro is free and open source.\nNo payment required.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: brightness == Brightness.dark
+                              ? Colors.white.withValues(alpha: 0.65)
+                              : Colors.black.withValues(alpha: 0.60),
+                          height: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => context.go('/about/donate'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            elevation: 0,
+                          ),
+                          icon: Icon(PhosphorIcons.coffee(), size: 18),
+                          label: const Text(
+                            'Buy Me a Coffee',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 18),
-              _SectionGroup(
-                title: 'PRO FEATURES',
+
+              const SizedBox(height: 24),
+
+              // ── Activate Section ─────────────────────────────────────
+              const BayinSectionHeader(title: 'ACTIVATE'),
+              BayinGlassGroup(
+                child: _SwitchRow(
+                  title: 'Enable Pro',
+                  subtitle: 'Master switch for all Pro-only options.',
+                  value: app.proEnabled,
+                  onChanged: controller.setProEnabled,
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              // ── Settings Section ─────────────────────────────────────
+              const BayinSectionHeader(title: 'SETTINGS'),
+              BayinGlassGroup(
                 child: Column(
                   children: [
-                    _SwitchTileCard(
-                      title: 'Enable Pro',
-                      subtitle: 'Master switch for all Pro-only options.',
-                      value: app.proEnabled,
-                      onChanged: controller.setProEnabled,
-                    ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _SwitchRow(
                       title: 'Desktop glass effect',
                       subtitle: 'Enable translucent desktop surface accents.',
                       value: app.proGlassEnabled,
-                      onChanged: app.proEnabled ? controller.setProGlassEnabled : null,
+                      onChanged: app.proEnabled
+                          ? controller.setProGlassEnabled
+                          : null,
+                      locked: !app.proEnabled,
                     ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _InsetDivider(),
+                    _SwitchRow(
                       title: 'Colorful spectrum',
                       subtitle: 'Allow richer color rendering for spectrum views.',
                       value: app.proColorSpectrumEnabled,
-                      onChanged:
-                          app.proEnabled ? controller.setProColorSpectrumEnabled : null,
+                      onChanged: app.proEnabled
+                          ? controller.setProColorSpectrumEnabled
+                          : null,
+                      locked: !app.proEnabled,
                     ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _InsetDivider(),
+                    _SwitchRow(
                       title: 'Pure mode feature',
                       subtitle: 'Unlock Pure mode toggle in playback experience.',
                       value: app.proPureModeEnabled,
-                      onChanged:
-                          app.proEnabled ? controller.setProPureModeFeatureEnabled : null,
+                      onChanged: app.proEnabled
+                          ? controller.setProPureModeFeatureEnabled
+                          : null,
+                      locked: !app.proEnabled,
                     ),
-                    _FlatDivider(),
-                    _SwitchTileCard(
+                    _InsetDivider(),
+                    _SwitchRow(
                       title: 'Pure mode active',
                       subtitle: 'Hide non-essential UI during playback.',
                       value: app.pureModeEnabled,
                       onChanged: app.proEnabled && app.proPureModeEnabled
                           ? controller.setPureModeEnabled
                           : null,
+                      locked: !app.proEnabled || !app.proPureModeEnabled,
                     ),
                   ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
 
-/// A structural 2px divider within a section group.
-class _FlatDivider extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final brightness = Theme.of(context).brightness;
-    return Divider(
-      height: FlatBorder.structural,
-      indent: FlatSpacing.md,
-      color: FlatColors.border(brightness),
-    );
-  }
-}
+              const SizedBox(height: 24),
 
-class _SectionGroup extends ConsumerWidget {
-  const _SectionGroup({required this.title, required this.child});
-
-  final String title;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final brightness = Theme.of(context).brightness;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            FlatSpacing.md, 0, FlatSpacing.md, FlatSpacing.xs + 2,
-          ),
-          child: Row(
-            children: [
-              Text(
-                title,
-                style: FlatTypography.label(brightness),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: brightness == Brightness.dark
-                      ? Colors.white.withValues(alpha: 0.10)
-                      : Colors.black.withValues(alpha: 0.06),
+              // ── More Coming ──────────────────────────────────────────
+              BayinGlassGroup(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Center(
+                    child: Text(
+                      'More features coming soon.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: brightness == Brightness.dark
+                            ? Colors.white.withValues(alpha: 0.55)
+                            : Colors.black.withValues(alpha: 0.50),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ],
           ),
         ),
-        Container(
-          decoration: BoxDecoration(
-            color: brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.04)
-                : Colors.black.withValues(alpha: 0.02),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: brightness == Brightness.dark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.06),
-              width: 0.8,
-            ),
-          ),
-          child: child,
-        ),
       ],
     );
   }
 }
 
-class _SwitchTileCard extends ConsumerWidget {
-  const _SwitchTileCard({
+class _SwitchRow extends StatelessWidget {
+  const _SwitchRow({
     required this.title,
     required this.subtitle,
     required this.value,
     required this.onChanged,
+    this.locked = false,
   });
 
   final String title;
   final String subtitle;
   final bool value;
   final Future<void> Function(bool)? onChanged;
+  final bool locked;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
     return InkWell(
       onTap: onChanged == null ? null : () => onChanged!(!value),
-      borderRadius: BorderRadius.circular(FlatRadius.md),
+      borderRadius: BorderRadius.circular(12),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: FlatSpacing.md,
-          vertical: FlatSpacing.sm + 4,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         child: Row(
           children: [
+            if (locked) ...[
+              Icon(
+                PhosphorIcons.lock(),
+                size: 14,
+                color: brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.35)
+                    : Colors.black.withValues(alpha: 0.30),
+              ),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: FlatTypography.bodySmall(brightness).copyWith(
+                    style: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                  const SizedBox(height: FlatSpacing.xs),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: FlatTypography.caption(brightness),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: brightness == Brightness.dark
+                          ? Colors.white.withValues(alpha: 0.45)
+                          : Colors.black.withValues(alpha: 0.40),
+                    ),
                   ),
                 ],
               ),
@@ -216,6 +248,23 @@ class _SwitchTileCard extends ConsumerWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InsetDivider extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    return Padding(
+      padding: const EdgeInsets.only(left: 14),
+      child: Divider(
+        height: 1,
+        thickness: 1,
+        color: brightness == Brightness.dark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
       ),
     );
   }
