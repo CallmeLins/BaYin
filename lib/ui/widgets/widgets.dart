@@ -19,6 +19,7 @@ library;
 
 export 'alphabet_scroller.dart';
 export 'bayin_surface.dart';
+export 'button_styles.dart';
 export 'cover_art.dart';
 export 'equalizer_panel.dart';
 export 'ghost_icon_button.dart';
@@ -34,3 +35,4 @@ export 'sidebar.dart';
 export 'song_list.dart';
 export 'song_menu.dart';
 export 'titlebar.dart';
+export 'toggle_switch.dart';

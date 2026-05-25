@@ -29,6 +29,8 @@ class MusicLibraryPage extends ConsumerWidget {
     }
 
     final metrics = _buildMetrics(songs);
+    final quality = _buildQualityStats(songs);
+
     return Column(
       children: [
         const BayinPageHeader(
@@ -40,10 +42,10 @@ class MusicLibraryPage extends ConsumerWidget {
             children: [
               const SizedBox(height: 8),
               const BayinSectionHeader(title: 'LIBRARY STATS'),
-              BayinGlassGroup(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: GridView(
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final wide = constraints.maxWidth >= 900;
+                  final statsGrid = GridView(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -74,8 +76,92 @@ class MusicLibraryPage extends ConsumerWidget {
                         value: '${metrics.withCoverSongs} (${_formatPercent(metrics.coverCoverage)})',
                       ),
                     ],
-                  ),
-                ),
+                  );
+
+                  final qualityCard = BayinGlassGroup(
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Quality Distribution',
+                              style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            height: 180,
+                            child: _SimpleDonutChart(data: quality),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final q in quality)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 9),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      color: q.color,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      q.name,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                  Text(
+                                    '${q.value}',
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  );
+
+                  if (!wide) {
+                    return Column(
+                      children: [
+                        qualityCard,
+                        const SizedBox(height: 12),
+                        BayinGlassGroup(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: statsGrid,
+                          ),
+                        ),
+                      ],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: qualityCard),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 2,
+                        child: BayinGlassGroup(
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: statsGrid,
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -102,9 +188,7 @@ class _StatCard extends ConsumerWidget {
     final surfaceColor = tokens.isDark
         ? Colors.white.withValues(alpha: 0.06)
         : Colors.black.withValues(alpha: 0.04);
-    final iconBgColor = tokens.isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.black.withValues(alpha: 0.06);
+    final iconTone = _iconTone(label);
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
       decoration: BoxDecoration(
@@ -123,16 +207,14 @@ class _StatCard extends ConsumerWidget {
             width: 38,
             height: 38,
             decoration: BoxDecoration(
-              color: iconBgColor,
+              color: iconTone.withValues(alpha: tokens.isDark ? 0.22 : 0.12),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: tokens.isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.black.withValues(alpha: 0.06),
+                color: iconTone.withValues(alpha: tokens.isDark ? 0.38 : 0.22),
                 width: 0.8,
               ),
             ),
-            child: Icon(icon, size: 18, color: tokens.textPrimary),
+            child: Icon(icon, size: 18, color: iconTone),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -166,6 +248,107 @@ class _StatCard extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _QualityStat {
+  const _QualityStat({required this.name, required this.value, required this.color});
+
+  final String name;
+  final int value;
+  final Color color;
+}
+
+List<_QualityStat> _buildQualityStats(List<Song> songs) {
+  var hiRes = 0;
+  var sq = 0;
+  var hq = 0;
+  var other = 0;
+  for (final song in songs) {
+    if (song.isHr == true && song.isSq == true) {
+      hiRes++;
+    } else if (song.isSq == true) {
+      sq++;
+    } else if (song.isHr == true) {
+      hq++;
+    } else {
+      other++;
+    }
+  }
+  return <_QualityStat>[
+    _QualityStat(name: 'Hi-Res', value: hiRes, color: const Color(0xFF8B5CF6)),
+    _QualityStat(name: 'SQ', value: sq, color: const Color(0xFF10B981)),
+    _QualityStat(name: 'HQ', value: hq, color: const Color(0xFF3B82F6)),
+    _QualityStat(name: 'Other', value: other, color: const Color(0xFF9CA3AF)),
+  ].where((item) => item.value > 0).toList(growable: false);
+}
+
+class _SimpleDonutChart extends StatelessWidget {
+  const _SimpleDonutChart({required this.data});
+
+  final List<_QualityStat> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = data.fold<int>(0, (sum, item) => sum + item.value);
+    if (total <= 0) {
+      return const Center(child: Text('No data'));
+    }
+
+    return CustomPaint(
+      painter: _DonutPainter(data: data, total: total),
+      child: const SizedBox.expand(),
+    );
+  }
+}
+
+class _DonutPainter extends CustomPainter {
+  _DonutPainter({required this.data, required this.total});
+
+  final List<_QualityStat> data;
+  final int total;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = (size.shortestSide / 2) - 8;
+    final stroke = radius * 0.35;
+    var start = -1.5708;
+
+    for (final item in data) {
+      final sweep = (item.value / total) * 6.28318;
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round
+        ..color = item.color;
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        start,
+        sweep,
+        false,
+        paint,
+      );
+      start += sweep + 0.03;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
+      oldDelegate.data != data || oldDelegate.total != total;
+}
+
+Color _iconTone(String label) {
+  return switch (label) {
+    'Songs' => const Color(0xFF3B82F6),
+    'Albums' => const Color(0xFF8B5CF6),
+    'Artists' => const Color(0xFF10B981),
+    'Library Size' => const Color(0xFFF59E0B),
+    'Local Songs' => const Color(0xFF06B6D4),
+    'Stream Songs' => const Color(0xFFEC4899),
+    'Total Duration' => const Color(0xFF6366F1),
+    'Songs With Cover' => const Color(0xFF22C55E),
+    _ => const Color(0xFF3B82F6),
+  };
 }
 
 class _ErrorState extends ConsumerWidget {

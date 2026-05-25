@@ -8,6 +8,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 import '../../providers/providers.dart';
 import '../../rust/rust_api.dart';
 import '../../theme/design_tokens.dart';
+import '../../widgets/button_styles.dart';
 
 class FolderBrowser extends ConsumerStatefulWidget {
   const FolderBrowser({
@@ -94,15 +95,18 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
                     decoration: const InputDecoration(
                       hintText: 'Folder path',
                       border: InputBorder.none,
+                      isDense: true,
                     ),
                     onSubmitted: (value) => _load(value),
                   ),
                 ),
                 const SizedBox(width: FlatSpacing.sm),
                 FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(40, 40),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  style: BayinButtonStyles.filledFlat().copyWith(
+                    minimumSize: WidgetStateProperty.all(const Size(40, 40)),
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 12),
+                    ),
                   ),
                   onPressed: () => _load(_pathController.text.trim()),
                   child: Icon(PhosphorIcons.arrowRight()),
@@ -120,9 +124,11 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
             child: Row(
               children: [
                 OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(44, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  style: BayinButtonStyles.outlinedFlat(context).copyWith(
+                    minimumSize: WidgetStateProperty.all(const Size(44, 34)),
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 12),
+                    ),
                   ),
                   onPressed: _goParent,
                   child: Row(
@@ -147,9 +153,11 @@ class _FolderBrowserState extends ConsumerState<FolderBrowser> {
                 ),
                 const SizedBox(width: FlatSpacing.sm),
                 FilledButton(
-                  style: FilledButton.styleFrom(
-                    minimumSize: const Size(68, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  style: BayinButtonStyles.filledFlat().copyWith(
+                    minimumSize: WidgetStateProperty.all(const Size(68, 34)),
+                    padding: WidgetStateProperty.all(
+                      const EdgeInsets.symmetric(horizontal: 14),
+                    ),
                   ),
                   onPressed: () => Navigator.of(context).pop(_currentPath),
                   child: const Text('Select'),

@@ -33,6 +33,7 @@ class LicensesPage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
               const SizedBox(height: 8),
+              const BayinSectionHeader(title: 'LICENSES'),
               _LicenseCard(
                 title: 'Open source components',
                 content:
@@ -76,11 +77,28 @@ class _LicenseCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(PhosphorIcons.scales(), size: 15, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             content,
             style: TextStyle(color: tokens.textSecondary),

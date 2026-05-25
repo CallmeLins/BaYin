@@ -195,7 +195,10 @@ class _SwitchRow extends StatelessWidget {
                 ],
               ),
             ),
-            Switch(value: value, onChanged: onChanged),
+            BayinToggleSwitch(
+              value: value,
+              onChanged: (v) => onChanged(v),
+            ),
           ],
         ),
       ),

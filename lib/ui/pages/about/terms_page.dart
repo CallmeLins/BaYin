@@ -32,6 +32,7 @@ class TermsPage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
               const SizedBox(height: 8),
+              const BayinSectionHeader(title: 'TERMS'),
               const _TermCard(
                 title: 'Personal use',
                 content:
@@ -70,14 +71,42 @@ class _TermCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = ref.watch(bayinTokensProvider);
+    final icon = switch (title) {
+      'Personal use' => PhosphorIcons.userCircle(),
+      'Content responsibility' => PhosphorIcons.fileText(),
+      _ => PhosphorIcons.warningCircle(),
+    };
+    final chipColor = switch (title) {
+      'Personal use' => const Color(0xFF3B82F6),
+      'Content responsibility' => const Color(0xFF8B5CF6),
+      _ => const Color(0xFFF59E0B),
+    };
+
     return BayinGlassCard(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: chipColor,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 15, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 6),
           Text(

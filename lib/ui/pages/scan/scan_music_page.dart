@@ -713,34 +713,40 @@ class _ActionsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final outlinedStyle = BayinButtonStyles.outlinedFlat(context);
+    final filledStyle = BayinButtonStyles.filledFlat();
+
     return Column(
       children: [
         // Save config button.
         SizedBox(
           width: double.infinity,
-          child: MacosSecondaryButton(
+          child: OutlinedButton.icon(
             onPressed: scanDisabled ? null : onSaveConfig,
-            icon: PhosphorIcons.floppyDisk(),
-            label: 'Save configuration',
+            style: outlinedStyle,
+            icon: Icon(PhosphorIcons.floppyDisk(), size: 16),
+            label: const Text('Save configuration'),
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         // Scan buttons row.
         Row(
           children: [
             Expanded(
-              child: MacosSecondaryButton(
+              child: OutlinedButton.icon(
                 onPressed: scanDisabled ? null : onPreviewScan,
-                icon: PhosphorIcons.magnifyingGlass(),
-                label: 'Preview',
+                style: outlinedStyle,
+                icon: Icon(PhosphorIcons.magnifyingGlass(), size: 16),
+                label: const Text('Preview'),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
-              child: MacosPrimaryButton(
+              child: FilledButton(
                 onPressed: scanDisabled ? null : onScanAndSave,
+                style: filledStyle,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -754,15 +760,16 @@ class _ActionsSection extends StatelessWidget {
           ],
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         // Backfill covers button.
         SizedBox(
           width: double.infinity,
-          child: MacosSecondaryButton(
+          child: OutlinedButton.icon(
             onPressed: backfillDisabled ? null : onBackfillCovers,
-            icon: PhosphorIcons.imageSquare(),
-            label: 'Backfill album covers',
+            style: outlinedStyle,
+            icon: Icon(PhosphorIcons.imageSquare(), size: 16),
+            label: const Text('Backfill album covers'),
           ),
         ),
       ],
@@ -840,11 +847,22 @@ class _StatusSection extends StatelessWidget {
               style: FlatTypography.bodySmall(brightness),
             ),
             const Spacer(),
-            MacosBadge(
-              label: watchRunning ? 'Running' : 'Stopped',
-              color: watchRunning
-                  ? FlatColors.secondary(brightness)
-                  : FlatColors.textSecondary(brightness),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: (watchRunning
+                        ? FlatColors.secondary(brightness)
+                        : FlatColors.textSecondary(brightness))
+                    .withValues(alpha: 0.16),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                watchRunning ? 'Running' : 'Stopped',
+                style: FlatTypography.caption(brightness).copyWith(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ],
         ),
@@ -938,9 +956,20 @@ class _PreviewSongsSection extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(top: 12),
             child: Center(
-              child: MacosBadge(
-                label: '+${results.length - displayCount} more',
-                color: FlatColors.textSecondary(brightness),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: FlatColors.textSecondary(brightness)
+                      .withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '+${results.length - displayCount} more',
+                  style: FlatTypography.caption(brightness).copyWith(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ),
           ),
@@ -1033,16 +1062,13 @@ class _DirectoryChip extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: FlatColors.stateLayer(
-                    brightness,
-                    FlatStateIntensity.standard,
-                  ),
+                  color: const Color(0xFFEF4444).withValues(alpha: 0.14),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
                   PhosphorIcons.x(),
                   size: 10,
-                  color: FlatColors.textSecondary(brightness),
+                  color: const Color(0xFFEF4444),
                 ),
               ),
             ],
@@ -1106,6 +1132,13 @@ class _StatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
+    final tone = switch (label) {
+      'Preview results' => const Color(0xFF3B82F6),
+      'Last save' => const Color(0xFF10B981),
+      'Events' => const Color(0xFFF59E0B),
+      'Last event' => const Color(0xFF8B5CF6),
+      _ => FlatColors.textSecondary(brightness),
+    };
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1113,7 +1146,7 @@ class _StatusRow extends StatelessWidget {
         Icon(
           icon,
           size: 14,
-          color: FlatColors.textSecondary(brightness),
+          color: tone,
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -1122,13 +1155,17 @@ class _StatusRow extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: FlatTypography.caption(brightness),
+                style: FlatTypography.caption(brightness).copyWith(
+                  color: FlatColors.textSecondary(brightness),
+                ),
               ),
               Text(
                 value,
                 maxLines: maxLines,
                 overflow: maxLines != null ? TextOverflow.ellipsis : null,
-                style: FlatTypography.bodySmall(brightness),
+                style: FlatTypography.bodySmall(brightness).copyWith(
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -1245,42 +1282,43 @@ class _ScanProgressIndicatorState extends State<_ScanProgressIndicator>
   Widget build(BuildContext context) {
     final brightness = Theme.of(context).brightness;
 
-    return MacosGlassContainer(
-      materialType: GlassMaterialType.thin,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              RotationTransition(
-                turns: _controller,
-                child: Icon(
-                  PhosphorIcons.arrowsClockwise(),
-                  size: 16,
-                  color: FlatColors.primary(brightness),
+    return BayinGlassGroup(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                RotationTransition(
+                  turns: _controller,
+                  child: Icon(
+                    PhosphorIcons.arrowsClockwise(),
+                    size: 16,
+                    color: FlatColors.primary(brightness),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Scanning...',
-                style: FlatTypography.bodySmall(brightness).copyWith(
-                  fontWeight: FontWeight.w600,
+                const SizedBox(width: 8),
+                Text(
+                  'Scanning...',
+                  style: FlatTypography.bodySmall(brightness).copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              backgroundColor: FlatColors.stateLayer(
-                brightness,
-                FlatStateIntensity.standard,
+              ],
+            ),
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                backgroundColor: FlatColors.stateLayer(
+                  brightness,
+                  FlatStateIntensity.standard,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

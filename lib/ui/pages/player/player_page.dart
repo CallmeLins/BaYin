@@ -21,6 +21,15 @@ import '../../widgets/spectrum/spectrum_painter.dart';
 const int _userScrollTimeoutMs = 3000;
 const String _desktopSplitViewStorageKey = 'bayin_player_desktop_split_view';
 
+ButtonStyle _playerIconButtonStyle({Size minSize = const Size(36, 36)}) {
+  return IconButton.styleFrom(
+    foregroundColor: Colors.white,
+    hoverColor: Colors.white.withValues(alpha: 0.10),
+    highlightColor: Colors.white.withValues(alpha: 0.10),
+    minimumSize: minSize,
+  );
+}
+
 class PlayerPage extends ConsumerStatefulWidget {
   const PlayerPage({super.key});
 
@@ -826,12 +835,7 @@ class _PlayerTopBar extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: IconButton(
-        style: IconButton.styleFrom(
-          foregroundColor: Colors.white,
-          hoverColor: Colors.white.withValues(alpha: 0.10),
-          highlightColor: Colors.white.withValues(alpha: 0.10),
-          minimumSize: const Size(36, 36),
-        ),
+        style: _playerIconButtonStyle(),
         onPressed: onPressed,
         icon: Icon(icon, size: iconSize),
       ),
@@ -1296,11 +1300,7 @@ class _TransportPanel extends StatelessWidget {
               ),
               if (showLyricsToggle)
                 IconButton(
-                  style: IconButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    hoverColor: Colors.white.withValues(alpha: 0.10),
-                    minimumSize: const Size(36, 36),
-                  ),
+                  style: _playerIconButtonStyle(),
                   onPressed: onToggleLyrics,
                   icon: Icon(
                     showLyrics ? PhosphorIcons.disc() : PhosphorIcons.textT(),
@@ -1362,11 +1362,7 @@ class _TransportPanel extends StatelessWidget {
           Row(
             children: [
               IconButton(
-                style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  hoverColor: Colors.white.withValues(alpha: 0.10),
-                  minimumSize: const Size(36, 36),
-                ),
+                style: _playerIconButtonStyle(),
                 onPressed: onTogglePlayMode,
                 icon: Icon(
                   _playModeIcon(player.mode),
@@ -1375,11 +1371,7 @@ class _TransportPanel extends StatelessWidget {
               ),
               const Spacer(),
               IconButton(
-                style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  hoverColor: Colors.white.withValues(alpha: 0.10),
-                  minimumSize: const Size(40, 40),
-                ),
+                style: _playerIconButtonStyle(minSize: const Size(40, 40)),
                 onPressed: controller.previous,
                 icon: Icon(
                   PhosphorIcons.skipBack(),
@@ -1407,11 +1399,7 @@ class _TransportPanel extends StatelessWidget {
               ),
               const SizedBox(width: 6),
               IconButton(
-                style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  hoverColor: Colors.white.withValues(alpha: 0.10),
-                  minimumSize: const Size(40, 40),
-                ),
+                style: _playerIconButtonStyle(minSize: const Size(40, 40)),
                 onPressed: controller.next,
                 icon: Icon(
                   PhosphorIcons.skipForward(),
@@ -1421,11 +1409,7 @@ class _TransportPanel extends StatelessWidget {
               ),
               const Spacer(),
               IconButton(
-                style: IconButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  hoverColor: Colors.white.withValues(alpha: 0.10),
-                  minimumSize: const Size(36, 36),
-                ),
+                style: _playerIconButtonStyle(),
                 onPressed: onOpenSongMenu,
                 icon: Icon(
                   PhosphorIcons.dotsThreeVertical(),
@@ -1929,7 +1913,7 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
                         ],
                       ),
                     ),
-                    Switch(
+                    BayinToggleSwitch(
                       value: _splitViewEnabled,
                       onChanged: (value) {
                         setState(() => _splitViewEnabled = value);
@@ -1956,7 +1940,7 @@ class _ViewSettingsSheetState extends State<_ViewSettingsSheet> {
                         ],
                       ),
                     ),
-                    Switch(
+                    BayinToggleSwitch(
                       value: _pureModeActive,
                       onChanged: (value) {
                         setState(() => _pureModeActive = value);

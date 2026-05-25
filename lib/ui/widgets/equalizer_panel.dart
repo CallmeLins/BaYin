@@ -4,6 +4,7 @@ import 'package:phosphor_flutter/phosphor_flutter.dart';
 
 import '../providers/providers.dart';
 import '../theme/bayin_tokens.dart';
+import 'toggle_switch.dart';
 
 class EqualizerPanel extends ConsumerWidget {
   const EqualizerPanel({
@@ -58,7 +59,7 @@ class EqualizerPanel extends ConsumerWidget {
                   ],
                 ),
               ),
-              Switch(
+              BayinToggleSwitch(
                 value: enabled,
                 onChanged: onEnabledChanged,
               ),

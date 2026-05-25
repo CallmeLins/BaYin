@@ -38,8 +38,8 @@ class DonatePage extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
-              const SizedBox(height: 10),
               const SizedBox(height: 8),
+              const BayinSectionHeader(title: 'SUPPORT'),
               Text(
                 'Support ongoing development and maintenance.',
                 style: TextStyle(color: tokens.textSecondary),
@@ -86,8 +86,17 @@ class _DonateCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 16),
-              const SizedBox(width: 6),
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEC4899),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(icon, size: 15, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
               Text(
                 title,
                 style: const TextStyle(fontWeight: FontWeight.w600),

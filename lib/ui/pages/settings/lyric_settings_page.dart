@@ -297,7 +297,10 @@ class _SwitchTileCard extends ConsumerWidget {
                 ],
               ),
             ),
-            Switch(value: value, onChanged: onChanged),
+            BayinToggleSwitch(
+              value: value,
+              onChanged: (v) => onChanged(v),
+            ),
           ],
         ),
       ),

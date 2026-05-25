@@ -39,6 +39,7 @@ class OfficialWebsitePage extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
             children: [
               const SizedBox(height: 8),
+              const BayinSectionHeader(title: 'LINKS'),
               _LinkCard(
                 title: 'Website',
                 value: _website,
@@ -74,11 +75,36 @@ class _LinkCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontWeight: FontWeight.w600),
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: title == 'Website'
+                      ? const Color(0xFF06B6D4)
+                      : const Color(0xFF8B5CF6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                alignment: Alignment.center,
+                child: Icon(
+                  title == 'Website'
+                      ? PhosphorIcons.globeHemisphereWest()
+                      : PhosphorIcons.githubLogo(),
+                  size: 15,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           mat.SelectableText(
             value,
             style: TextStyle(color: tokens.textSecondary),
