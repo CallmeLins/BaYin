@@ -181,6 +181,158 @@ pub fn record_play(conn: &Connection, song_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Get top played artists (GROUP BY artist)
+pub fn get_top_artists(
+    conn: &Connection,
+    limit: u32,
+) -> Result<Vec<(String, i64, i64, Option<String>, Option<String>)>> {
+    let mut stmt = conn.prepare(
+        "SELECT artist, COUNT(*) as song_count, SUM(play_count) as total_plays, 
+         (SELECT cover_hash FROM songs s2 WHERE s2.artist = songs.artist AND s2.cover_hash IS NOT NULL LIMIT 1) as cover_hash,
+         (SELECT stream_info FROM songs s3 WHERE s3.artist = songs.artist AND s3.stream_info IS NOT NULL LIMIT 1) as stream_info
+         FROM songs 
+         GROUP BY artist 
+         ORDER BY total_plays DESC, song_count DESC
+         LIMIT ?1"
+    )?;
+
+    let artists = stmt
+        .query_map(params![limit], |row| {
+            let stream_info: Option<String> = row.get(4)?;
+            // Extract coverUrl from stream_info JSON
+            let stream_cover_url = stream_info.and_then(|info| {
+                serde_json::from_str::<serde_json::Value>(&info)
+                    .ok()
+                    .and_then(|v| v.get("coverUrl")?.as_str().map(|s| s.to_string()))
+            });
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                stream_cover_url,
+            ))
+        })?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(artists)
+}
+
+/// Get newly added songs (recent N days, fallback to latest if not enough)
+pub fn get_newly_added(conn: &Connection, days: i64, limit: u32) -> Result<Vec<DbSong>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - days * 86400;
+
+    // First try to get songs within the time range
+    let sql = format!(
+        "SELECT {} FROM songs WHERE created_at >= ?1 ORDER BY created_at DESC LIMIT ?2",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![cutoff, limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    // If we got enough songs, return them
+    if songs.len() >= limit as usize {
+        return Ok(songs);
+    }
+
+    // Otherwise, fallback to the latest songs regardless of time
+    let sql = format!(
+        "SELECT {} FROM songs ORDER BY created_at DESC LIMIT ?1",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Get forgotten favorites (played before but not recently)
+pub fn get_forgotten_favorites(conn: &Connection, days: i64, limit: u32) -> Result<Vec<DbSong>> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let cutoff = now - days * 86400;
+
+    let sql = format!(
+        "SELECT {} FROM songs WHERE play_count > 0 AND last_played_at IS NOT NULL AND last_played_at < ?1 ORDER BY last_played_at ASC LIMIT ?2",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![cutoff, limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Get random discovery songs (low play count, random order)
+pub fn get_discovery_songs(
+    conn: &Connection,
+    max_play_count: i64,
+    limit: u32,
+) -> Result<Vec<DbSong>> {
+    let sql = format!(
+        "SELECT {} FROM songs WHERE play_count <= ?1 ORDER BY RANDOM() LIMIT ?2",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![max_play_count, limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Get daily mix songs (weighted random based on date seed)
+pub fn get_daily_mix(conn: &Connection, _seed: i64, limit: u32) -> Result<Vec<DbSong>> {
+    // Use weighted scoring with RANDOM() for variety:
+    // - Lower play count = higher score (discovery)
+    // - Recently played = lower score (avoid repetition)
+    // - HR/SQ = bonus
+    // - RANDOM() adds variety each call
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let thirty_days_ago = now - 30 * 86400;
+
+    let sql = format!(
+        "SELECT {} FROM songs 
+         ORDER BY 
+           (10 - MIN(play_count, 10)) * 3.0 + 
+           (CASE WHEN last_played_at IS NULL THEN 5.0 
+                 WHEN last_played_at < ?1 THEN 3.0 
+                 ELSE 0.0 END) +
+           (CASE WHEN is_hr = 1 THEN 2.0 WHEN is_sq = 1 THEN 1.0 ELSE 0.0 END) +
+           (ABS(RANDOM()) % 100) / 100.0
+         DESC 
+         LIMIT ?2",
+        SELECT_COLUMNS
+    );
+
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![thirty_days_ago, limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
 /// Save songs to database in batches (within a transaction)
 pub fn save_songs(
     conn: &mut Connection,

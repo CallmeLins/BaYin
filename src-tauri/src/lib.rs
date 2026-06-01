@@ -51,6 +51,9 @@ use commands::{
     db_record_play,
     db_get_recently_played,
     db_get_most_played,
+    // Home recommendation commands
+    db_get_home_recommendations,
+    db_get_discovery_songs,
     fetch_stream_songs,
     fetch_subsonic_songs,
     get_cover_cache_stats,
@@ -183,6 +186,9 @@ pub fn run() {
             db_record_play,
             db_get_recently_played,
             db_get_most_played,
+            // 首页推荐命令
+            db_get_home_recommendations,
+            db_get_discovery_songs,
             // 文件监听命令
             start_file_watcher,
             stop_file_watcher,

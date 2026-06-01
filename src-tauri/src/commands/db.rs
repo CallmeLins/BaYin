@@ -439,6 +439,83 @@ pub fn db_get_most_played(
     db::songs::get_most_played(&conn, limit.unwrap_or(100)).map_err(|e| e.to_string())
 }
 
+// ============ Home Recommendation Commands ============
+
+/// Top played artist entry
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopArtist {
+    pub name: String,
+    pub song_count: i64,
+    pub total_plays: i64,
+    pub cover_hash: Option<String>,
+    pub stream_cover_url: Option<String>,
+}
+
+/// Home page recommendation data
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeRecommendations {
+    pub daily_mix: Vec<DbSong>,
+    pub recently_played: Vec<DbSong>,
+    pub newly_added: Vec<DbSong>,
+    pub discovery: Vec<DbSong>,
+    pub top_artists: Vec<TopArtist>,
+    pub forgotten_favorites: Vec<DbSong>,
+}
+
+/// Get all home page recommendations in one call
+#[tauri::command]
+pub fn db_get_home_recommendations(db: State<'_, DbState>) -> Result<HomeRecommendations, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+
+    // Use date-based seed for daily mix (same result all day)
+    let today = chrono::Local::now().format("%Y%m%d").to_string();
+    let seed: i64 = today
+        .chars()
+        .fold(0i64, |acc, c| acc.wrapping_mul(31).wrapping_add(c as i64));
+
+    let daily_mix = db::songs::get_daily_mix(&conn, seed, 10).map_err(|e| e.to_string())?;
+    let recently_played = db::songs::get_recently_played(&conn, 10).map_err(|e| e.to_string())?;
+    let newly_added = db::songs::get_newly_added(&conn, 90, 10).map_err(|e| e.to_string())?;
+    let discovery = db::songs::get_discovery_songs(&conn, 5, 10).map_err(|e| e.to_string())?;
+    let forgotten_favorites =
+        db::songs::get_forgotten_favorites(&conn, 14, 10).map_err(|e| e.to_string())?;
+
+    let top_artist_tuples = db::songs::get_top_artists(&conn, 10).map_err(|e| e.to_string())?;
+    let top_artists = top_artist_tuples
+        .into_iter()
+        .map(
+            |(name, song_count, total_plays, cover_hash, stream_cover_url)| TopArtist {
+                name,
+                song_count,
+                total_plays,
+                cover_hash,
+                stream_cover_url,
+            },
+        )
+        .collect();
+
+    Ok(HomeRecommendations {
+        daily_mix,
+        recently_played,
+        newly_added,
+        discovery,
+        top_artists,
+        forgotten_favorites,
+    })
+}
+
+/// Get discovery songs (random low-play songs)
+#[tauri::command]
+pub fn db_get_discovery_songs(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<DbSong>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::get_discovery_songs(&conn, 5, limit.unwrap_or(10)).map_err(|e| e.to_string())
+}
+
 // ============ File Watcher Commands ============
 
 #[tauri::command]
