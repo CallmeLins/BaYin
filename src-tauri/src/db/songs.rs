@@ -40,6 +40,10 @@ pub struct DbSong {
     pub bitrate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u8>,
+    #[serde(default)]
+    pub play_count: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_played_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -82,47 +86,99 @@ pub struct SongInput {
     pub created_at: Option<i64>,
 }
 
+/// Helper function to map a row to DbSong
+fn row_to_db_song(row: &rusqlite::Row) -> rusqlite::Result<DbSong> {
+    Ok(DbSong {
+        id: row.get(0)?,
+        title: row.get(1)?,
+        artist: row.get(2)?,
+        album: row.get(3)?,
+        duration: row.get(4)?,
+        file_path: row.get(5)?,
+        file_size: row.get(6)?,
+        is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
+        is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
+        cover_hash: row.get(9)?,
+        source_type: row.get(10)?,
+        server_id: row.get(11)?,
+        server_song_id: row.get(12)?,
+        stream_info: row.get(13)?,
+        file_modified: row.get(14)?,
+        format: row.get(15)?,
+        bit_depth: row.get::<_, Option<u8>>(16)?,
+        sample_rate: row.get::<_, Option<u32>>(17)?,
+        bitrate: row.get::<_, Option<u32>>(18)?,
+        channels: row.get::<_, Option<u8>>(19)?,
+        play_count: row.get::<_, Option<i64>>(20)?.unwrap_or(0),
+        last_played_at: row.get(21)?,
+        created_at: row.get(22)?,
+        updated_at: row.get(23)?,
+    })
+}
+
+const SELECT_COLUMNS: &str = "id, title, artist, album, duration, file_path, file_size,
+        is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
+        stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
+        play_count, last_played_at, created_at, updated_at";
+
 /// Get all songs from the database (fast loading, no cover data)
 pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
-    let mut stmt = conn.prepare(
-        "SELECT id, title, artist, album, duration, file_path, file_size,
-                is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
-                stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
-                created_at, updated_at
-         FROM songs
-         ORDER BY title COLLATE NOCASE",
-    )?;
+    let sql = format!(
+        "SELECT {} FROM songs ORDER BY title COLLATE NOCASE",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
 
     let songs = stmt
-        .query_map([], |row| {
-            Ok(DbSong {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                artist: row.get(2)?,
-                album: row.get(3)?,
-                duration: row.get(4)?,
-                file_path: row.get(5)?,
-                file_size: row.get(6)?,
-                is_hr: row.get::<_, Option<i32>>(7)?.map(|v| v != 0),
-                is_sq: row.get::<_, Option<i32>>(8)?.map(|v| v != 0),
-                cover_hash: row.get(9)?,
-                source_type: row.get(10)?,
-                server_id: row.get(11)?,
-                server_song_id: row.get(12)?,
-                stream_info: row.get(13)?,
-                file_modified: row.get(14)?,
-                format: row.get(15)?,
-                bit_depth: row.get::<_, Option<u8>>(16)?,
-                sample_rate: row.get::<_, Option<u32>>(17)?,
-                bitrate: row.get::<_, Option<u32>>(18)?,
-                channels: row.get::<_, Option<u8>>(19)?,
-                created_at: row.get(20)?,
-                updated_at: row.get(21)?,
-            })
-        })?
+        .query_map([], row_to_db_song)?
         .collect::<Result<Vec<_>>>()?;
 
     Ok(songs)
+}
+
+/// Get recently played songs (ordered by last_played_at DESC)
+pub fn get_recently_played(conn: &Connection, limit: u32) -> Result<Vec<DbSong>> {
+    let sql = format!(
+        "SELECT {} FROM songs WHERE last_played_at IS NOT NULL ORDER BY last_played_at DESC LIMIT ?1",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Get most played songs (ordered by play_count DESC)
+pub fn get_most_played(conn: &Connection, limit: u32) -> Result<Vec<DbSong>> {
+    let sql = format!(
+        "SELECT {} FROM songs WHERE play_count > 0 ORDER BY play_count DESC LIMIT ?1",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Increment play count and update last_played_at for a song
+pub fn record_play(conn: &Connection, song_id: &str) -> Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    conn.execute(
+        "UPDATE songs SET play_count = play_count + 1, last_played_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![now, song_id],
+    )?;
+
+    Ok(())
 }
 
 /// Save songs to database in batches (within a transaction)

@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 7;
+const CURRENT_SCHEMA_VERSION: i32 = 8;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -17,9 +17,11 @@ pub fn init_db(conn: &Connection) -> Result<()> {
 
     // Check current version
     let current_version: i32 = conn
-        .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |row| {
-            row.get(0)
-        })
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM schema_version",
+            [],
+            |row| row.get(0),
+        )
         .unwrap_or(0);
 
     if current_version < CURRENT_SCHEMA_VERSION {
@@ -51,6 +53,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 7 {
         migrate_v7(conn)?;
+    }
+    if from_version < 8 {
+        migrate_v8(conn)?;
     }
 
     Ok(())
@@ -138,10 +143,7 @@ fn migrate_v1(conn: &Connection) -> Result<()> {
 /// Version 2: Add cover_hash column for cached covers
 fn migrate_v2(conn: &Connection) -> Result<()> {
     // Add cover_hash column to songs table
-    conn.execute(
-        "ALTER TABLE songs ADD COLUMN cover_hash TEXT",
-        [],
-    )?;
+    conn.execute("ALTER TABLE songs ADD COLUMN cover_hash TEXT", [])?;
 
     // Create cover_cache table for tracking cached covers
     conn.execute(
@@ -272,6 +274,33 @@ fn migrate_v7(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Version 8: Add play_count and last_played_at columns for play statistics.
+fn migrate_v8(conn: &Connection) -> Result<()> {
+    // Add play_count column to songs table
+    conn.execute(
+        "ALTER TABLE songs ADD COLUMN play_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+
+    // Add last_played_at column to songs table
+    conn.execute("ALTER TABLE songs ADD COLUMN last_played_at INTEGER", [])?;
+
+    // Create index for play_count sorting
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_songs_play_count ON songs(play_count DESC)",
+        [],
+    )?;
+
+    // Create index for last_played_at sorting
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_songs_last_played ON songs(last_played_at DESC)",
+        [],
+    )?;
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [8])?;
+    Ok(())
+}
+
 /// Open or create a database at the given path
 pub fn open_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
@@ -281,7 +310,7 @@ pub fn open_db(path: &Path) -> Result<Connection> {
         "PRAGMA foreign_keys = ON;
          PRAGMA journal_mode = WAL;
          PRAGMA synchronous = NORMAL;
-         PRAGMA cache_size = -64000;"
+         PRAGMA cache_size = -64000;",
     )?;
 
     init_db(&conn)?;

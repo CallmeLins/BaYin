@@ -47,6 +47,10 @@ use commands::{
     db_save_scan_config,
     db_save_songs,
     db_save_stream_server,
+    // Play statistics commands
+    db_record_play,
+    db_get_recently_played,
+    db_get_most_played,
     fetch_stream_songs,
     fetch_subsonic_songs,
     get_cover_cache_stats,
@@ -175,6 +179,10 @@ pub fn run() {
             cleanup_orphaned_covers,
             clear_cover_cache,
             cleanup_missing_songs,
+            // 播放统计命令
+            db_record_play,
+            db_get_recently_played,
+            db_get_most_played,
             // 文件监听命令
             start_file_watcher,
             stop_file_watcher,

@@ -233,9 +233,7 @@ pub fn db_migrate_from_localstorage(
             user_id: config.user_id,
             enabled: None,
         };
-        Some(
-            db::servers::save_stream_server(&conn, &input).map_err(|e| e.to_string())?,
-        )
+        Some(db::servers::save_stream_server(&conn, &input).map_err(|e| e.to_string())?)
     } else {
         None
     };
@@ -265,8 +263,10 @@ pub fn db_get_library_stats(db: State<'_, DbState>) -> Result<LibraryStats, Stri
     let conn = db.0.lock().map_err(|e| e.to_string())?;
 
     let total_songs = db::songs::get_song_count(&conn).map_err(|e| e.to_string())?;
-    let local_songs = db::songs::get_song_count_by_source(&conn, "local").map_err(|e| e.to_string())?;
-    let stream_songs = db::songs::get_song_count_by_source(&conn, "stream").map_err(|e| e.to_string())?;
+    let local_songs =
+        db::songs::get_song_count_by_source(&conn, "local").map_err(|e| e.to_string())?;
+    let stream_songs =
+        db::songs::get_song_count_by_source(&conn, "stream").map_err(|e| e.to_string())?;
 
     let albums = db::albums::get_all_albums(&conn).map_err(|e| e.to_string())?;
     let artists = db::albums::get_all_artists(&conn).map_err(|e| e.to_string())?;
@@ -381,9 +381,7 @@ pub fn cleanup_orphaned_covers(
 
 /// Clear all cover cache
 #[tauri::command]
-pub fn clear_cover_cache(
-    cover_cache: State<'_, CoverCacheState>,
-) -> Result<usize, String> {
+pub fn clear_cover_cache(cover_cache: State<'_, CoverCacheState>) -> Result<usize, String> {
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?;
     cache.clear_all()
 }
@@ -410,6 +408,35 @@ pub fn cleanup_missing_songs(db: State<'_, DbState>) -> Result<usize, String> {
     }
 
     Ok(count)
+}
+
+// ============ Play Statistics Commands ============
+
+/// Record a play for a song (increment play_count and update last_played_at)
+#[tauri::command]
+pub fn db_record_play(db: State<'_, DbState>, song_id: String) -> Result<(), String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::record_play(&conn, &song_id).map_err(|e| e.to_string())
+}
+
+/// Get recently played songs
+#[tauri::command]
+pub fn db_get_recently_played(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<DbSong>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::get_recently_played(&conn, limit.unwrap_or(100)).map_err(|e| e.to_string())
+}
+
+/// Get most played songs
+#[tauri::command]
+pub fn db_get_most_played(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<DbSong>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::get_most_played(&conn, limit.unwrap_or(100)).map_err(|e| e.to_string())
 }
 
 // ============ File Watcher Commands ============
