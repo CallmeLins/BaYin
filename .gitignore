@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+src-ui/node_modules/
 dist
 dist-ssr
 *.local
@@ -28,14 +29,17 @@ dist-ssr
 
 # Tauri
 src-tauri/target/
+src-tauri/gen/
 
 # Build output
 build/
+src-ui/build/
 
 # Environment
 .env
 .env.local
 .env.*.local
+.webui_secret_key
 
 # OS
 Thumbs.db
