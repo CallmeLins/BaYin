@@ -429,6 +429,13 @@ pub fn db_get_recently_played(
     db::songs::get_recently_played(&conn, limit.unwrap_or(100)).map_err(|e| e.to_string())
 }
 
+/// Clear recently played history while preserving play counts.
+#[tauri::command]
+pub fn db_clear_recently_played(db: State<'_, DbState>) -> Result<usize, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::clear_recently_played(&conn).map_err(|e| e.to_string())
+}
+
 /// Get most played songs
 #[tauri::command]
 pub fn db_get_most_played(

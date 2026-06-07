@@ -166,19 +166,54 @@ pub fn get_most_played(conn: &Connection, limit: u32) -> Result<Vec<DbSong>> {
     Ok(songs)
 }
 
-/// Increment play count and update last_played_at for a song
+/// Increment play count and update last_played_at for a song.
+///
+/// Debounce rule:
+/// - if the same song was recorded very recently, only refresh last_played_at
+/// - do not increment play_count again within the debounce window
 pub fn record_play(conn: &Connection, song_id: &str) -> Result<()> {
+    const PLAY_DEBOUNCE_SECS: i64 = 15;
+
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
 
-    conn.execute(
-        "UPDATE songs SET play_count = play_count + 1, last_played_at = ?1, updated_at = ?1 WHERE id = ?2",
-        params![now, song_id],
-    )?;
+    let last_played_at: Option<i64> = conn
+        .query_row(
+            "SELECT last_played_at FROM songs WHERE id = ?1",
+            params![song_id],
+            |row| row.get(0),
+        )
+        .ok()
+        .flatten();
+
+    let should_increment = match last_played_at {
+        Some(last) => now.saturating_sub(last) >= PLAY_DEBOUNCE_SECS,
+        None => true,
+    };
+
+    if should_increment {
+        conn.execute(
+            "UPDATE songs SET play_count = play_count + 1, last_played_at = ?1, updated_at = ?1 WHERE id = ?2",
+            params![now, song_id],
+        )?;
+    } else {
+        conn.execute(
+            "UPDATE songs SET last_played_at = ?1, updated_at = ?1 WHERE id = ?2",
+            params![now, song_id],
+        )?;
+    }
 
     Ok(())
+}
+
+/// Clear recently played history while preserving play_count statistics.
+pub fn clear_recently_played(conn: &Connection) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET last_played_at = NULL, updated_at = strftime('%s','now') WHERE last_played_at IS NOT NULL",
+        [],
+    )
 }
 
 /// Get top played artists (GROUP BY artist)

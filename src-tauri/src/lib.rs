@@ -50,6 +50,7 @@ use commands::{
     // Play statistics commands
     db_record_play,
     db_get_recently_played,
+    db_clear_recently_played,
     db_get_most_played,
     // Home recommendation commands
     db_get_home_recommendations,
@@ -185,6 +186,7 @@ pub fn run() {
             // 播放统计命令
             db_record_play,
             db_get_recently_played,
+            db_clear_recently_played,
             db_get_most_played,
             // 首页推荐命令
             db_get_home_recommendations,
