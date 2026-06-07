@@ -398,7 +398,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                 app.try_state::<PlaybackDomainState>(),
                                 app.try_state::<AudioEngineState>(),
                             ) {
-                                if crate::playback_control::previous(&domain, &engine) {
+                                if crate::playback_control::previous(&domain, &engine, app) {
                                     emit_domain_changed(app);
                                 }
                             }
@@ -409,7 +409,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                 app.try_state::<PlaybackDomainState>(),
                                 app.try_state::<AudioEngineState>(),
                             ) {
-                                if crate::playback_control::next(&domain, &engine) {
+                                if crate::playback_control::next(&domain, &engine, app) {
                                     emit_domain_changed(app);
                                 }
                             }
@@ -449,7 +449,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 
                             if let Some(domain) = domain {
                                 let idx = domain.0.lock().ok().map(|d| d.index).unwrap_or(0);
-                                if crate::playback_control::play_index(idx, &domain, &engine) {
+                                if crate::playback_control::play_index(idx, &domain, &engine, app) {
                                     emit_domain_changed(app);
                                 }
                             }

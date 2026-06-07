@@ -993,7 +993,7 @@ impl AudioThreadState {
             None => return false,
         };
 
-        if !playback_control::next(&domain, &engine) {
+        if !playback_control::next(&domain, &engine, app_handle) {
             return false;
         }
 

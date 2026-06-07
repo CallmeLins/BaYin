@@ -1,7 +1,9 @@
 use bayin_playback::PlayMode;
 use rand::Rng;
+use tauri::{AppHandle, Manager};
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
+use crate::db::DbState;
 use crate::playback::PlaybackDomainState;
 
 fn random_other_index(len: usize, current: usize) -> usize {
@@ -49,12 +51,33 @@ fn resolve_source(file_path: &str) -> String {
     }
 }
 
+fn record_play(app_handle: &AppHandle, track_id: &str) {
+    if track_id.is_empty() {
+        return;
+    }
+
+    let db = match app_handle.try_state::<DbState>() {
+        Some(state) => state,
+        None => return,
+    };
+
+    let conn = match db.0.lock() {
+        Ok(conn) => conn,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if let Err(err) = crate::db::songs::record_play(&conn, track_id) {
+        log::warn!("Failed to record play for track {}: {}", track_id, err);
+    }
+}
+
 pub(crate) fn play_index(
     index: usize,
     domain: &PlaybackDomainState,
     engine: &AudioEngineState,
+    app_handle: &AppHandle,
 ) -> bool {
-    let file = {
+    let (file, track_id) = {
         // 使用 unwrap_or_else 但避免格式化字符串的开销
         let mut d = match domain.0.lock() {
             Ok(guard) => guard,
@@ -66,7 +89,7 @@ pub(crate) fn play_index(
         d.index = index;
         let resolved = resolve_source(&d.queue[index].file_path);
         d.queue[index].file_path = resolved.clone();
-        resolved
+        (resolved, d.queue[index].id.clone())
     };
 
     let engine = match engine.lock() {
@@ -74,10 +97,11 @@ pub(crate) fn play_index(
         Err(poisoned) => poisoned.into_inner(),
     };
     engine.send(AudioCommand::Play { source: file });
+    record_play(app_handle, &track_id);
     true
 }
 
-pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
+pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState, app_handle: &AppHandle) -> bool {
     let (cur, mode, len) = {
         let d = match domain.0.lock() {
             Ok(guard) => guard,
@@ -95,10 +119,10 @@ pub(crate) fn next(domain: &PlaybackDomainState, engine: &AudioEngineState) -> b
         _ => (cur + 1) % len,
     };
 
-    play_index(idx, domain, engine)
+    play_index(idx, domain, engine, app_handle)
 }
 
-pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState) -> bool {
+pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState, app_handle: &AppHandle) -> bool {
     let (cur, mode, len) = {
         let d = match domain.0.lock() {
             Ok(guard) => guard,
@@ -116,5 +140,5 @@ pub(crate) fn previous(domain: &PlaybackDomainState, engine: &AudioEngineState) 
         _ => (cur + len - 1) % len,
     };
 
-    play_index(idx, domain, engine)
+    play_index(idx, domain, engine, app_handle)
 }
