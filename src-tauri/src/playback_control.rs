@@ -1,5 +1,6 @@
 use bayin_playback::PlayMode;
 use rand::Rng;
+use std::sync::{Mutex, OnceLock};
 use tauri::{AppHandle, Manager};
 
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
@@ -51,9 +52,37 @@ fn resolve_source(file_path: &str) -> String {
     }
 }
 
+static LAST_RECORDED_PLAY: OnceLock<Mutex<Option<(String, i64)>>> = OnceLock::new();
+
+fn last_recorded_play() -> &'static Mutex<Option<(String, i64)>> {
+    LAST_RECORDED_PLAY.get_or_init(|| Mutex::new(None))
+}
+
 fn record_play(app_handle: &AppHandle, track_id: &str) {
+    const CONSECUTIVE_PLAY_DEBOUNCE_SECS: i64 = 15;
+
     if track_id.is_empty() {
         return;
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    {
+        let mut last = match last_recorded_play().lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+
+        if let Some((last_track_id, last_at)) = last.as_ref() {
+            if last_track_id == track_id && now.saturating_sub(*last_at) < CONSECUTIVE_PLAY_DEBOUNCE_SECS {
+                return;
+            }
+        }
+
+        *last = Some((track_id.to_string(), now));
     }
 
     let db = match app_handle.try_state::<DbState>() {
