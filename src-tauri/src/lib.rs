@@ -95,14 +95,12 @@ use utils::cover::CoverCache;
 
 #[cfg(desktop)]
 #[tauri::command]
-#[allow(dead_code)]
 async fn set_tray_language(app: tauri::AppHandle, lang: String) {
     tray::update_tray_language(&app, &lang);
 }
 
 #[cfg(desktop)]
 #[tauri::command]
-#[allow(dead_code)]
 async fn set_tray_muted(app: tauri::AppHandle, muted: bool) {
     tray::set_tray_muted(muted);
     tray::refresh_tray_menu(&app);

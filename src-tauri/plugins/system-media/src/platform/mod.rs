@@ -35,9 +35,10 @@ pub fn create_controller() -> Box<dyn MediaController> {
 }
 
 /// Stub for platforms without media control support.
-#[allow(dead_code)]
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 struct StubController;
 
+#[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux", target_os = "android")))]
 impl MediaController for StubController {
     fn initialize(&mut self) -> Result<(), Box<dyn StdError + Send>> { Ok(()) }
     fn set_metadata(&mut self, _: &MediaMetadata) -> Result<(), Box<dyn StdError + Send>> { Ok(()) }

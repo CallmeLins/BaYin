@@ -1020,32 +1020,6 @@ impl AudioThreadState {
         true
     }
 
-    /// Handle the Android auto-advance failure fallback. Returns `true` if `continue` needed.
-    #[cfg(target_os = "android")]
-    #[allow(dead_code)]
-    fn android_auto_advance_fallback(
-        end_pending: &mut bool,
-        is_playing: &mut bool,
-        pause_target_secs: &mut Option<f64>,
-        fade_state: &mut FadeState,
-        state: &Arc<Mutex<PlaybackState>>,
-        duration_secs: f64,
-        volume: f32,
-        app_handle: &AppHandle,
-    ) -> bool {
-        *end_pending = false;
-        *is_playing = false;
-        *pause_target_secs = None;
-        *fade_state = FadeState::None;
-        update_state(state, false, duration_secs, duration_secs, volume);
-        let _ = app_handle.emit("audio:ended", ());
-        let _ = app_handle.emit(
-            "audio:state_changed",
-            StateChangedPayload { is_playing: false },
-        );
-        true
-    }
-
     /// Emit time event ~4 Hz.
     fn emit_time_event(
         &mut self,

@@ -204,27 +204,22 @@ pub fn set_tray_muted(muted: bool) {
 
 /// 非桌面平台的空实现
 #[cfg(not(desktop))]
-#[allow(dead_code)]
 pub fn init_tray_state() {}
 
 /// 非桌面平台的空实现
 #[cfg(not(desktop))]
-#[allow(dead_code)]
 pub fn create_tray(_app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
 /// 非桌面平台的空实现
 #[cfg(not(desktop))]
-#[allow(dead_code)]
 pub fn update_tray_language(_app: &tauri::AppHandle, _lang: &str) {}
 
 /// 非桌面平台的空实现
 #[cfg(not(desktop))]
-#[allow(dead_code)]
 pub fn set_tray_muted(_muted: bool) {}
 
 /// 非桌面平台的空实现
 #[cfg(not(desktop))]
-#[allow(dead_code)]
 pub fn refresh_tray_menu(_app: &tauri::AppHandle) {}
