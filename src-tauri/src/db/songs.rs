@@ -4,6 +4,13 @@ use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+#[derive(Debug, Clone)]
+pub struct SongUserStats {
+    pub play_count: i64,
+    pub last_played_at: Option<i64>,
+    pub liked_at: Option<i64>,
+}
+
 /// Database song record
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +51,8 @@ pub struct DbSong {
     pub play_count: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub last_played_at: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub liked_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -111,15 +120,16 @@ fn row_to_db_song(row: &rusqlite::Row) -> rusqlite::Result<DbSong> {
         channels: row.get::<_, Option<u8>>(19)?,
         play_count: row.get::<_, Option<i64>>(20)?.unwrap_or(0),
         last_played_at: row.get(21)?,
-        created_at: row.get(22)?,
-        updated_at: row.get(23)?,
+        liked_at: row.get(22)?,
+        created_at: row.get(23)?,
+        updated_at: row.get(24)?,
     })
 }
 
 const SELECT_COLUMNS: &str = "id, title, artist, album, duration, file_path, file_size,
         is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
         stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
-        play_count, last_played_at, created_at, updated_at";
+        play_count, last_played_at, liked_at, created_at, updated_at";
 
 /// Get all songs from the database (fast loading, no cover data)
 pub fn get_all_songs(conn: &Connection) -> Result<Vec<DbSong>> {
@@ -149,6 +159,42 @@ pub fn get_recently_played(conn: &Connection, limit: u32) -> Result<Vec<DbSong>>
         .collect::<Result<Vec<_>>>()?;
 
     Ok(songs)
+}
+
+/// Get liked songs (ordered by liked_at DESC)
+pub fn get_liked_songs(conn: &Connection, limit: u32) -> Result<Vec<DbSong>> {
+    let sql = format!(
+        "SELECT {} FROM songs WHERE liked_at IS NOT NULL ORDER BY liked_at DESC LIMIT ?1",
+        SELECT_COLUMNS
+    );
+    let mut stmt = conn.prepare(&sql)?;
+
+    let songs = stmt
+        .query_map(params![limit], row_to_db_song)?
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(songs)
+}
+
+/// Set or clear liked state for a song.
+pub fn set_song_liked(conn: &Connection, song_id: &str, liked: bool) -> Result<Option<i64>> {
+    let liked_at = if liked {
+        Some(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or(0),
+        )
+    } else {
+        None
+    };
+
+    conn.execute(
+        "UPDATE songs SET liked_at = ?1, updated_at = strftime('%s','now') WHERE id = ?2",
+        params![liked_at, song_id],
+    )?;
+
+    Ok(liked_at)
 }
 
 /// Get most played songs (ordered by play_count DESC)
@@ -309,6 +355,7 @@ pub fn get_daily_mix(conn: &Connection, _seed: i64, limit: u32) -> Result<Vec<Db
     // Use weighted scoring with RANDOM() for variety:
     // - Lower play count = higher score (discovery)
     // - Recently played = lower score (avoid repetition)
+    // - Liked songs = strong preference signal
     // - HR/SQ = bonus
     // - RANDOM() adds variety each call
 
@@ -325,6 +372,7 @@ pub fn get_daily_mix(conn: &Connection, _seed: i64, limit: u32) -> Result<Vec<Db
            (CASE WHEN last_played_at IS NULL THEN 5.0 
                  WHEN last_played_at < ?1 THEN 3.0 
                  ELSE 0.0 END) +
+           (CASE WHEN liked_at IS NOT NULL THEN 8.0 ELSE 0.0 END) +
            (CASE WHEN is_hr = 1 THEN 2.0 WHEN is_sq = 1 THEN 1.0 ELSE 0.0 END) +
            (ABS(RANDOM()) % 100) / 100.0
          DESC 
@@ -352,13 +400,35 @@ pub fn save_songs(
 
     {
         let mut stmt = tx.prepare(
-            "INSERT OR REPLACE INTO songs
+            "INSERT INTO songs
              (id, title, artist, album, duration, file_path, file_size,
               is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
-              stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels, created_at, updated_at)
+              stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
+              created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
                      COALESCE(?21, strftime('%s','now')),
-                     strftime('%s','now'))"
+                     strftime('%s','now'))
+             ON CONFLICT(id) DO UPDATE SET
+              title = excluded.title,
+              artist = excluded.artist,
+              album = excluded.album,
+              duration = excluded.duration,
+              file_path = excluded.file_path,
+              file_size = excluded.file_size,
+              is_hr = excluded.is_hr,
+              is_sq = excluded.is_sq,
+              cover_hash = excluded.cover_hash,
+              source_type = excluded.source_type,
+              server_id = excluded.server_id,
+              server_song_id = excluded.server_song_id,
+              stream_info = excluded.stream_info,
+              file_modified = excluded.file_modified,
+              format = excluded.format,
+              bit_depth = excluded.bit_depth,
+              sample_rate = excluded.sample_rate,
+              bitrate = excluded.bitrate,
+              channels = excluded.channels,
+              updated_at = excluded.updated_at"
         )?;
 
         for song in songs {
@@ -523,6 +593,80 @@ pub fn get_created_ats_by_source(
     }
 
     Ok(map)
+}
+
+/// Get user-owned song state that should survive delete-and-reinsert scans.
+pub fn get_user_stats_by_source(
+    conn: &Connection,
+    source_type: &str,
+    server_id: Option<&str>,
+) -> Result<HashMap<String, SongUserStats>> {
+    let mut map = HashMap::new();
+
+    if let Some(sid) = server_id {
+        let mut stmt = conn.prepare(
+            "SELECT id, play_count, last_played_at, liked_at FROM songs
+             WHERE source_type = ?1 AND server_id = ?2",
+        )?;
+        let rows = stmt.query_map(params![source_type, sid], |row| {
+            let id: String = row.get(0)?;
+            Ok((id, SongUserStats {
+                play_count: row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                last_played_at: row.get(2)?,
+                liked_at: row.get(3)?,
+            }))
+        })?;
+
+        for row in rows {
+            let (id, stats) = row?;
+            map.insert(id, stats);
+        }
+    } else {
+        let mut stmt = conn.prepare(
+            "SELECT id, play_count, last_played_at, liked_at FROM songs
+             WHERE source_type = ?1",
+        )?;
+        let rows = stmt.query_map(params![source_type], |row| {
+            let id: String = row.get(0)?;
+            Ok((id, SongUserStats {
+                play_count: row.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                last_played_at: row.get(2)?,
+                liked_at: row.get(3)?,
+            }))
+        })?;
+
+        for row in rows {
+            let (id, stats) = row?;
+            map.insert(id, stats);
+        }
+    }
+
+    Ok(map)
+}
+
+pub fn restore_user_stats(conn: &mut Connection, stats: &HashMap<String, SongUserStats>) -> Result<usize> {
+    let tx = conn.transaction()?;
+    let mut affected = 0;
+
+    {
+        let mut stmt = tx.prepare(
+            "UPDATE songs
+             SET play_count = ?1, last_played_at = ?2, liked_at = ?3
+             WHERE id = ?4",
+        )?;
+
+        for (id, item) in stats {
+            affected += stmt.execute(params![
+                item.play_count,
+                item.last_played_at,
+                item.liked_at,
+                id,
+            ])?;
+        }
+    }
+
+    tx.commit()?;
+    Ok(affected)
 }
 
 /// Update a song's cover hash (reference into CoverCache).

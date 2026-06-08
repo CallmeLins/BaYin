@@ -436,6 +436,27 @@ pub fn db_clear_recently_played(db: State<'_, DbState>) -> Result<usize, String>
     db::songs::clear_recently_played(&conn).map_err(|e| e.to_string())
 }
 
+/// Get liked songs
+#[tauri::command]
+pub fn db_get_liked_songs(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<DbSong>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::get_liked_songs(&conn, limit.unwrap_or(1000)).map_err(|e| e.to_string())
+}
+
+/// Set or clear liked state for a song.
+#[tauri::command]
+pub fn db_set_song_liked(
+    db: State<'_, DbState>,
+    song_id: String,
+    liked: bool,
+) -> Result<Option<i64>, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::set_song_liked(&conn, &song_id, liked).map_err(|e| e.to_string())
+}
+
 /// Get most played songs
 #[tauri::command]
 pub fn db_get_most_played(

@@ -52,6 +52,8 @@ use commands::{
     db_get_recently_played,
     db_clear_recently_played,
     db_get_most_played,
+    db_get_liked_songs,
+    db_set_song_liked,
     // Home recommendation commands
     db_get_home_recommendations,
     db_get_discovery_songs,
@@ -186,6 +188,8 @@ pub fn run() {
             db_get_recently_played,
             db_clear_recently_played,
             db_get_most_played,
+            db_get_liked_songs,
+            db_set_song_liked,
             // 首页推荐命令
             db_get_home_recommendations,
             db_get_discovery_songs,

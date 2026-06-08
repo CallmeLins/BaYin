@@ -239,6 +239,12 @@ pub async fn scan_local_to_db(
     {
         let mut conn = db.0.lock().map_err(|e| e.to_string())?;
 
+        let user_stats = if matches!(options.mode, ScanMode::Full) {
+            db::songs::get_user_stats_by_source(&conn, "local", None).map_err(|e| e.to_string())?
+        } else {
+            Default::default()
+        };
+
         // For full scan, clear local songs first
         if matches!(options.mode, ScanMode::Full) {
             db::songs::delete_songs_by_source(&conn, "local", None).map_err(|e| e.to_string())?;
@@ -261,6 +267,10 @@ pub async fn scan_local_to_db(
                     errors,
                 },
             );
+        }
+
+        if !user_stats.is_empty() {
+            db::songs::restore_user_stats(&mut conn, &user_stats).map_err(|e| e.to_string())?;
         }
 
         added_count = total_saved;
@@ -432,6 +442,13 @@ pub async fn scan_stream_to_db(
                 .map_err(|e| e.to_string())?
         };
 
+        // Preserve existing user-owned state and created_at across delete-and-reinsert scans.
+        let existing_user_stats = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::songs::get_user_stats_by_source(&conn, "stream", Some(&server.id))
+                .map_err(|e| e.to_string())?
+        };
+
         // Preserve existing created_at so "date added" sorting stays stable across re-scans.
         let existing_created_ats = {
             let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -503,6 +520,10 @@ pub async fn scan_stream_to_db(
             let mut conn = db.0.lock().map_err(|e| e.to_string())?;
             let saved = db::songs::save_songs(&mut conn, &song_inputs, "stream", Some(&server.id))
                 .map_err(|e| e.to_string())?;
+            if !existing_user_stats.is_empty() {
+                db::songs::restore_user_stats(&mut conn, &existing_user_stats)
+                    .map_err(|e| e.to_string())?;
+            }
             total_added += saved;
         }
 

@@ -3,7 +3,7 @@
 use rusqlite::{Connection, Result};
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 8;
+const CURRENT_SCHEMA_VERSION: i32 = 9;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -56,6 +56,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 8 {
         migrate_v8(conn)?;
+    }
+    if from_version < 9 {
+        migrate_v9(conn)?;
     }
 
     Ok(())
@@ -298,6 +301,19 @@ fn migrate_v8(conn: &Connection) -> Result<()> {
     )?;
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [8])?;
+    Ok(())
+}
+
+/// Version 9: Add liked_at column for favorite songs.
+fn migrate_v9(conn: &Connection) -> Result<()> {
+    conn.execute("ALTER TABLE songs ADD COLUMN liked_at INTEGER", [])?;
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_songs_liked_at ON songs(liked_at DESC)",
+        [],
+    )?;
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [9])?;
     Ok(())
 }
 
