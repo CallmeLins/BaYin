@@ -5,7 +5,9 @@
 pub mod desktop {
     use std::collections::HashSet;
     use std::path::PathBuf;
+    use std::sync::mpsc::{self, Sender};
     use std::sync::{Arc, Mutex};
+    use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
 
     use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
@@ -20,6 +22,8 @@ pub mod desktop {
     pub struct WatcherState {
         watcher: Option<RecommendedWatcher>,
         watched_dirs: Vec<String>,
+        stop_tx: Option<Sender<()>>,
+        debounce_thread: Option<JoinHandle<()>>,
     }
 
     impl WatcherState {
@@ -27,6 +31,20 @@ pub mod desktop {
             Self {
                 watcher: None,
                 watched_dirs: Vec::new(),
+                stop_tx: None,
+                debounce_thread: None,
+            }
+        }
+
+        fn stop(&mut self) {
+            self.watcher = None;
+            self.watched_dirs.clear();
+
+            if let Some(tx) = self.stop_tx.take() {
+                let _ = tx.send(());
+            }
+            if let Some(handle) = self.debounce_thread.take() {
+                let _ = handle.join();
             }
         }
     }
@@ -46,9 +64,8 @@ pub mod desktop {
             .lock()
             .map_err(|e| format!("Failed to lock watcher state: {}", e))?;
 
-        // Stop existing watcher if any
-        state.watcher = None;
-        state.watched_dirs.clear();
+        // Stop existing watcher/debounce worker if any.
+        state.stop();
 
         if directories.is_empty() {
             return Ok(());
@@ -60,11 +77,15 @@ pub mod desktop {
         let app_for_debounce = app_handle.clone();
         let pending_for_debounce = pending_paths.clone();
         let last_time_for_debounce = last_event_time.clone();
+        let (stop_tx, stop_rx) = mpsc::channel();
 
         // Spawn debounce processor thread
-        std::thread::spawn(move || {
+        let debounce_thread = std::thread::spawn(move || {
             loop {
-                std::thread::sleep(Duration::from_millis(500));
+                match stop_rx.recv_timeout(Duration::from_millis(500)) {
+                    Ok(_) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                    Err(mpsc::RecvTimeoutError::Timeout) => {}
+                }
 
                 let should_process = {
                     let last = match last_time_for_debounce.lock() {
@@ -103,6 +124,8 @@ pub mod desktop {
                 }
             }
         });
+        state.stop_tx = Some(stop_tx);
+        state.debounce_thread = Some(debounce_thread);
 
         // Create the file watcher
         let pending_for_handler = pending_paths;
@@ -161,8 +184,7 @@ pub mod desktop {
             .lock()
             .map_err(|e| format!("Failed to lock watcher state: {}", e))?;
 
-        state.watcher = None;
-        state.watched_dirs.clear();
+        state.stop();
         Ok(())
     }
 

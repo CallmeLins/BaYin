@@ -27,10 +27,10 @@ struct StreamFilePath {
     #[serde(rename = "type")]
     kind: String,
     song_id: String,
-    config: crate::models::StreamServerConfig,
+    server_id: String,
 }
 
-fn resolve_source(file_path: &str) -> String {
+fn resolve_source(app_handle: &AppHandle, file_path: &str) -> String {
     // The frontend sometimes stores a JSON "virtual path" for stream items.
     // Resolve it to a real playable URL so that native/system controls can work too.
     if !file_path.trim_start().starts_with('{') {
@@ -43,10 +43,29 @@ fn resolve_source(file_path: &str) -> String {
         _ => return file_path.to_string(),
     };
 
-    if parsed.config.is_subsonic() {
-        crate::utils::subsonic::get_stream_url(&parsed.config, &parsed.song_id)
-    } else if parsed.config.is_jellyfin_like() {
-        crate::utils::jellyfin::get_stream_url(&parsed.config, &parsed.song_id)
+    let db = match app_handle.try_state::<DbState>() {
+        Some(state) => state,
+        None => return file_path.to_string(),
+    };
+    let config = {
+        let conn = match db.0.lock() {
+            Ok(conn) => conn,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        match crate::db::servers::get_stream_server_by_id(&conn, &parsed.server_id) {
+            Ok(Some(server)) => crate::models::StreamServerConfig::from(&server),
+            Ok(None) => return file_path.to_string(),
+            Err(err) => {
+                log::warn!("Failed to load stream server {}: {}", parsed.server_id, err);
+                return file_path.to_string();
+            }
+        }
+    };
+
+    if config.is_subsonic() {
+        crate::utils::subsonic::get_stream_url(&config, &parsed.song_id)
+    } else if config.is_jellyfin_like() {
+        crate::utils::jellyfin::get_stream_url(&config, &parsed.song_id)
     } else {
         file_path.to_string()
     }
@@ -116,8 +135,7 @@ pub(crate) fn play_index(
             return false;
         }
         d.index = index;
-        let resolved = resolve_source(&d.queue[index].file_path);
-        d.queue[index].file_path = resolved.clone();
+        let resolved = resolve_source(app_handle, &d.queue[index].file_path);
         (resolved, d.queue[index].id.clone())
     };
 

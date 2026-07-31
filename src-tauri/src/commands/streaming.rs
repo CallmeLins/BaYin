@@ -1,3 +1,6 @@
+use tauri::State;
+
+use crate::db::{self, DbState};
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
 use crate::utils::{jellyfin, subsonic};
 
@@ -10,6 +13,17 @@ pub async fn fetch_stream_songs_internal(config: &StreamServerConfig) -> Result<
     } else {
         jellyfin::fetch_all_songs(config).await
     }
+}
+
+fn load_stream_config(
+    db: &State<'_, DbState>,
+    server_id: &str,
+) -> Result<StreamServerConfig, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    let server = db::servers::get_stream_server_by_id(&conn, server_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("流媒体服务器不存在: {server_id}"))?;
+    Ok(StreamServerConfig::from(&server))
 }
 
 // ============ 统一命令（新） ============
@@ -44,6 +58,21 @@ pub fn get_stream_url(config: StreamServerConfig, song_id: String) -> String {
     }
 }
 
+/// 获取流媒体歌曲的流 URL（按已保存的服务器配置）
+#[tauri::command]
+pub fn get_stream_url_by_server(
+    db: State<'_, DbState>,
+    server_id: String,
+    song_id: String,
+) -> Result<String, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    Ok(if config.is_subsonic() {
+        subsonic::get_stream_url(&config, &song_id)
+    } else {
+        jellyfin::get_stream_url(&config, &song_id)
+    })
+}
+
 /// 获取流媒体歌曲歌词
 #[tauri::command]
 pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> Option<String> {
@@ -52,6 +81,21 @@ pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> O
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
     }
+}
+
+/// 获取流媒体歌曲歌词（按已保存的服务器配置）
+#[tauri::command]
+pub async fn get_stream_lyrics_by_server(
+    db: State<'_, DbState>,
+    server_id: String,
+    song_id: String,
+) -> Result<Option<String>, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    Ok(if config.is_subsonic() {
+        subsonic::get_lyrics(&config, &song_id).await
+    } else {
+        jellyfin::get_lyrics(&config, &song_id).await
+    })
 }
 
 /// Jellyfin/Emby 认证并返回 token 和 userId

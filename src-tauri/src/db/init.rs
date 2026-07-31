@@ -1,9 +1,10 @@
 //! Database initialization and migration
 
-use rusqlite::{Connection, Result};
+use rusqlite::{params, Connection, Result};
+use serde_json::json;
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 9;
+const CURRENT_SCHEMA_VERSION: i32 = 10;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -59,6 +60,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 9 {
         migrate_v9(conn)?;
+    }
+    if from_version < 10 {
+        migrate_v10(conn)?;
     }
 
     Ok(())
@@ -317,6 +321,71 @@ fn migrate_v9(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Version 10: Remove duplicated credentials from stream song metadata.
+fn migrate_v10(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT id, server_id, stream_info FROM songs WHERE source_type = 'stream'",
+    )?;
+
+    let rows: Vec<(String, Option<String>, Option<String>)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+        .collect::<Result<_>>()?;
+
+    for (song_id, server_id, stream_info) in rows {
+        let Some(server_id) = server_id else { continue };
+        let Some(stream_info) = stream_info else { continue };
+
+        if let Some(cleaned) = sanitize_stream_info(&server_id, &stream_info) {
+            conn.execute(
+                "UPDATE songs SET stream_info = ?1 WHERE id = ?2",
+                params![cleaned, song_id],
+            )?;
+        }
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [10])?;
+    Ok(())
+}
+
+/// Keep only non-sensitive stream metadata in `songs.stream_info`.
+fn sanitize_stream_info(server_id: &str, raw: &str) -> Option<String> {
+    let value = serde_json::from_str::<serde_json::Value>(raw).ok()?;
+    if value.get("type")?.as_str()? != "stream" {
+        return None;
+    }
+
+    let song_id = value.get("songId")?.as_str()?.to_string();
+    let server_type = value
+        .get("serverType")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let server_name = value
+        .get("serverName")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+    let cover_url = value
+        .get("coverUrl")
+        .and_then(|v| v.as_str())
+        .map(str::to_string);
+
+    let mut cleaned = json!({
+        "type": "stream",
+        "serverId": server_id,
+        "songId": song_id,
+    });
+    if let Some(server_type) = server_type {
+        cleaned["serverType"] = json!(server_type);
+    }
+    if let Some(server_name) = server_name {
+        cleaned["serverName"] = json!(server_name);
+    }
+    if let Some(cover_url) = cover_url {
+        cleaned["coverUrl"] = json!(cover_url);
+    }
+
+    Some(cleaned.to_string())
+}
+
 /// Open or create a database at the given path
 pub fn open_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
@@ -332,4 +401,39 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     init_db(&conn)?;
 
     Ok(conn)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_stream_info;
+    use serde_json::Value;
+
+    #[test]
+    fn sanitize_stream_info_strips_embedded_credentials() {
+        let raw = r#"{
+            "type": "stream",
+            "serverType": "navidrome",
+            "songId": "song-1",
+            "serverName": "Navidrome",
+            "coverUrl": "https://music.example/cover",
+            "config": {
+                "serverUrl": "https://music.example",
+                "username": "user",
+                "password": "secret",
+                "accessToken": "token"
+            }
+        }"#;
+
+        let cleaned = sanitize_stream_info("server-1", raw).expect("should sanitize");
+        let value: Value = serde_json::from_str(&cleaned).expect("should be valid JSON");
+
+        assert_eq!(value["type"], "stream");
+        assert_eq!(value["serverId"], "server-1");
+        assert_eq!(value["songId"], "song-1");
+        assert_eq!(value["serverName"], "Navidrome");
+        assert_eq!(value["coverUrl"], "https://music.example/cover");
+        assert!(value.get("config").is_none());
+        assert!(value.get("password").is_none());
+        assert!(value.get("accessToken").is_none());
+    }
 }

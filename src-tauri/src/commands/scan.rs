@@ -484,21 +484,11 @@ pub async fn scan_stream_to_db(
                     stream_info: Some(
                         serde_json::json!({
                             "type": "stream",
+                            "serverId": server.id,
                             "serverType": server.server_type,
                             "songId": s.id,
                             "serverName": server.server_name,
-                            "coverUrl": s.cover_url, // Store cover URL in stream_info
-                            "config": {
-                                "serverType": server.server_type,
-                                "serverName": server.server_name,
-                                "serverUrl": server.server_url,
-                                "username": server.username,
-                                "password": server.password,
-                                "legacyAuth": server.legacy_auth,
-                                "musicFolderId": server.music_folder_id,
-                                "accessToken": server.access_token,
-                                "userId": server.user_id
-                            }
+                            "coverUrl": s.cover_url
                         })
                         .to_string(),
                     ),
