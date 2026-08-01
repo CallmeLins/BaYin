@@ -386,6 +386,8 @@ pub fn read_metadata(path: &Path) -> Result<ScannedSong, String> {
         file_path: file_path_str,
         file_size,
         cover_url,
+        cover_hash: None,
+        file_modified: None,
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         format,

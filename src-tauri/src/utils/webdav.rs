@@ -12,10 +12,12 @@ use lofty::probe::Probe;
 use rayon::prelude::*;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
+use crate::utils::cover::CoverCache;
+use sha2::{Digest, Sha256};
 
 /// 支持的音频扩展名（与扫描器保持一致）
 const AUDIO_EXTS: &[&str] = &[
@@ -308,7 +310,11 @@ fn parse_http_date(s: &str) -> Option<i64> {
 }
 
 /// 递归扫描并返回所有音频文件（限制深度避免循环）
-pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
+pub async fn fetch_all_songs(
+    config: &StreamServerConfig,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+) -> Result<Vec<ScannedSong>, String> {
     let client = build_client()?;
     let headers = build_auth_headers(config);
     let root = effective_initial_path(config);
@@ -355,7 +361,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
     let mut songs: Vec<ScannedSong> = pool.install(|| {
         audio_urls
             .par_iter()
-            .map(|(url, modified)| read_remote_song(config, url, *modified))
+            .map(|(url, modified)| read_remote_song(config, url, *modified, cover_cache, existing_modified))
             .collect()
     });
 
@@ -365,7 +371,21 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
 
 /// 读取远程歌曲元数据：下载文件头部到临时文件后用 lofty 解析。
 /// 用 `Read::take` 限制读取量，即使服务器忽略 Range 也不会全量下载大文件。
-fn read_remote_song(config: &StreamServerConfig, url: &str, _modified: Option<i64>) -> ScannedSong {
+/// 若文件修改时间未变（增量同步），跳过下载直接返回文件名级数据。
+fn read_remote_song(
+    config: &StreamServerConfig,
+    url: &str,
+    modified: Option<i64>,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+) -> ScannedSong {
+    // 增量同步：文件未变化时跳过网络探测
+    if let (Some(modified), Some(existing)) = (modified, existing_modified) {
+        if existing.get(url) == Some(&modified) {
+            return fallback_song_with_modified(url, Some(modified));
+        }
+    }
+
     use std::io::Read;
 
     let client = match build_client() {
@@ -401,9 +421,9 @@ fn read_remote_song(config: &StreamServerConfig, url: &str, _modified: Option<i6
     drop(tmp_file);
 
     let song = if ok {
-        parse_probe_file(&tmp_path, url)
+        parse_probe_file(&tmp_path, url, modified, cover_cache)
     } else {
-        fallback_song(url)
+        fallback_song_with_modified(url, modified)
     };
 
     let _ = std::fs::remove_file(&tmp_path);
@@ -418,7 +438,12 @@ fn hash_url(url: &str) -> u64 {
 }
 
 /// 用 lofty 解析探测文件
-fn parse_probe_file(path: &std::path::Path, url: &str) -> ScannedSong {
+fn parse_probe_file(
+    path: &std::path::Path,
+    url: &str,
+    modified: Option<i64>,
+    cover_cache: Option<&CoverCache>,
+) -> ScannedSong {
     let fallback = fallback_song(url);
 
     let tagged_file = match Probe::open(path) {
@@ -458,6 +483,17 @@ fn parse_probe_file(path: &std::path::Path, url: &str) -> ScannedSong {
     let is_hr = properties.sample_rate().map(|r| r > 44100).unwrap_or(false)
         || properties.bit_depth().map(|d| d > 16).unwrap_or(false);
 
+    // 提取封面并缓存到本地（失败时忽略，不影响歌曲本身）
+    let cover_hash = cover_cache.and_then(|cache| {
+        tag
+            .and_then(|t| t.pictures().first().cloned())
+            .and_then(|pic| {
+                cache
+                    .save_cover(pic.data(), pic.mime_type().map(|m| m.as_str()))
+                    .ok()
+            })
+    });
+
     ScannedSong {
         id: url.to_string(),
         title,
@@ -467,6 +503,8 @@ fn parse_probe_file(path: &std::path::Path, url: &str) -> ScannedSong {
         file_path: url.to_string(),
         file_size: 0,
         cover_url: None,
+        cover_hash,
+        file_modified: modified,
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         format: Some(ext),
@@ -486,6 +524,11 @@ fn fallback_title(url: &str) -> String {
 }
 
 fn fallback_song(url: &str) -> ScannedSong {
+    fallback_song_with_modified(url, None)
+}
+
+/// 文件名级兜底歌曲（增量同步跳过探测时使用），保留远程修改时间
+fn fallback_song_with_modified(url: &str, modified: Option<i64>) -> ScannedSong {
     let ext = url
         .rsplit('.')
         .next()
@@ -500,6 +543,8 @@ fn fallback_song(url: &str) -> ScannedSong {
         file_path: url.to_string(),
         file_size: 0,
         cover_url: None,
+        cover_hash: None,
+        file_modified: modified,
         is_hr: None,
         is_sq: None,
         format: Some(ext),
@@ -520,6 +565,78 @@ pub fn stream_headers(config: &StreamServerConfig) -> Vec<(String, String)> {
 /// 播放 URL：song_id 即完整 URL
 pub fn stream_url(_config: &StreamServerConfig, song_id: &str) -> String {
     song_id.to_string()
+}
+
+/// 计算歌曲缓存文件名（基于 server_id + URL 的稳定 hash）
+fn cache_file_name(server_id: &str, song_id: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(server_id.as_bytes());
+    hasher.update(b":");
+    hasher.update(song_id.as_bytes());
+    let hex = format!("{:x}", hasher.finalize());
+    let short = &hex[..24];
+    // 保留扩展名，方便识别格式
+    let ext = song_id
+        .split('?')
+        .next()
+        .unwrap_or(song_id)
+        .rsplit('.')
+        .next()
+        .unwrap_or("bin");
+    let ext = if ext.contains('/') || ext.is_empty() { "bin" } else { ext };
+    format!("{short}.{ext}")
+}
+
+/// WebDAV 歌曲的本地缓存路径（不存在时返回 None）
+pub fn cached_path(cache_root: &std::path::Path, server_id: &str, song_id: &str) -> std::path::PathBuf {
+    cache_root.join("webdav").join(cache_file_name(server_id, song_id))
+}
+
+/// 是否已有本地缓存（供前端缓存命中判断）
+#[allow(dead_code)]
+pub fn has_cached_song(cache_root: &std::path::Path, server_id: &str, song_id: &str) -> bool {
+    cached_path(cache_root, server_id, song_id).exists()
+}
+
+/// 下载歌曲完整文件到本地缓存，返回缓存路径。
+/// 已有缓存时直接返回，避免重复下载。
+pub fn cache_song(
+    config: &StreamServerConfig,
+    cache_root: &std::path::Path,
+    server_id: &str,
+    song_id: &str,
+) -> Result<String, String> {
+    let dir = cache_root.join("webdav");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建缓存目录: {e}"))?;
+    let path = cached_path(cache_root, server_id, song_id);
+    if path.exists() && path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let resp = client
+        .get(song_id)
+        .headers(headers)
+        .send()
+        .map_err(|e| format!("下载失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if status != 200 && status != 206 {
+        return Err(format!("下载失败，状态码 {status}"));
+    }
+
+    // 写入临时文件再重命名，避免半成品缓存
+    let tmp_path = dir.join(format!("{}.part", cache_file_name(server_id, song_id)));
+    let mut out = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+    {
+        use std::io::Read;
+        std::io::copy(&mut resp.take(u64::MAX), &mut out)
+            .map_err(|e| format!("写入缓存失败: {e}"))?;
+    }
+    drop(out);
+    std::fs::rename(&tmp_path, &path).map_err(|e| format!("缓存完成失败: {e}"))?;
+
+    Ok(path.to_string_lossy().to_string())
 }
 
 #[cfg(test)]

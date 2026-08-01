@@ -357,6 +357,7 @@ pub async fn scan_local_to_db(
 pub async fn scan_stream_to_db(
     app: AppHandle,
     db: State<'_, DbState>,
+    cover_cache: State<'_, CoverCacheState>,
     options: StreamScanOptions,
 ) -> Result<ScanResult, String> {
     let start_time = Instant::now();
@@ -421,8 +422,28 @@ pub async fn scan_stream_to_db(
         // Build config for fetching
         let config = crate::models::StreamServerConfig::from(server);
 
+        // Incremental sync: existing metadata (title/artist/album/duration + modified) for WebDAV,
+        // so unchanged files skip metadata probing and keep their stored tags.
+        let existing_metadata = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::songs::get_stream_metadata_by_source(&conn, "stream", Some(&server.id))
+                .map_err(|e| e.to_string())?
+        };
+        let existing_modified: std::collections::HashMap<String, i64> = existing_metadata
+            .iter()
+            .filter_map(|(id, meta)| meta.file_modified.map(|m| (id.clone(), m)))
+            .collect();
+
+        // 先取出封面缓存 Arc 并释放锁，避免非 Send 的 MutexGuard 跨越 await
+        let cache_arc = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
+
         // Fetch songs from server
-        let stream_songs = match crate::commands::streaming::fetch_stream_songs_internal(&config).await {
+        let stream_songs = match crate::commands::streaming::fetch_stream_songs_internal(
+            &config,
+            Some(&cache_arc),
+            Some(&existing_modified),
+        )
+        .await {
             Ok(songs) => songs,
             Err(e) => {
                 total_errors += 1;
@@ -469,17 +490,36 @@ pub async fn scan_stream_to_db(
             .iter()
             .map(|s| {
                 let id = format!("{}-{}", server.id, s.id);
+                // 增量同步：文件未变化时复用库内已有标签（WebDAV 探测被跳过）
+                let existing = existing_metadata.get(&id);
+                let use_existing = existing
+                    .map(|meta| meta.file_modified == s.file_modified)
+                    .unwrap_or(false);
+                let (title, artist, album, duration) = if use_existing {
+                    let meta = existing.expect("checked above");
+                    (
+                        meta.title.clone(),
+                        meta.artist.clone(),
+                        meta.album.clone(),
+                        meta.duration,
+                    )
+                } else {
+                    (s.title.clone(), s.artist.clone(), s.album.clone(), s.duration)
+                };
                 SongInput {
                     id: id.clone(),
-                    title: s.title.clone(),
-                    artist: s.artist.clone(),
-                    album: s.album.clone(),
-                    duration: s.duration,
+                    title,
+                    artist,
+                    album,
+                    duration,
                     file_path: String::new(),
                     file_size: s.file_size as i64,
                     is_hr: s.is_hr,
                     is_sq: s.is_sq,
-                    cover_hash: existing_cover_hashes.get(&id).cloned(),
+                    cover_hash: existing_cover_hashes
+                        .get(&id)
+                        .cloned()
+                        .or_else(|| s.cover_hash.clone()),
                     server_song_id: Some(s.id.clone()),
                     stream_info: Some(
                         serde_json::json!({
@@ -492,7 +532,7 @@ pub async fn scan_stream_to_db(
                         })
                         .to_string(),
                     ),
-                    file_modified: None,
+                    file_modified: s.file_modified,
                     format: s.format.clone(),
                     bit_depth: s.bit_depth,
                     sample_rate: s.sample_rate,

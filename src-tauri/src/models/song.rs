@@ -13,6 +13,12 @@ pub struct ScannedSong {
     pub file_size: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cover_url: Option<String>,
+    /// 本地封面缓存 hash（WebDAV 等从标签提取并缓存的封面）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover_hash: Option<String>,
+    /// 远程文件修改时间（unix 秒），用于增量同步
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_modified: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_hr: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]

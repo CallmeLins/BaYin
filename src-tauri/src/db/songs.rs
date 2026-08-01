@@ -553,6 +553,51 @@ pub fn get_cover_hashes_by_source(
 ///
 /// This is used to preserve "date added" across re-scans when we delete-and-reinsert
 /// streaming libraries (so new songs sort after old ones).
+/// Stream song metadata used for incremental sync
+#[derive(Debug, Clone)]
+pub struct StreamSongMeta {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub duration: f64,
+    pub file_modified: Option<i64>,
+}
+
+/// Load existing stream song metadata by song id (used to skip unchanged files).
+pub fn get_stream_metadata_by_source(
+    conn: &Connection,
+    source_type: &str,
+    server_id: Option<&str>,
+) -> Result<HashMap<String, StreamSongMeta>> {
+    let mut map = HashMap::new();
+
+    if let Some(sid) = server_id {
+        let mut stmt = conn.prepare(
+            "SELECT id, title, artist, album, duration, file_modified FROM songs
+             WHERE source_type = ?1 AND server_id = ?2",
+        )?;
+        let rows = stmt.query_map(params![source_type, sid], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                StreamSongMeta {
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    album: row.get(3)?,
+                    duration: row.get(4)?,
+                    file_modified: row.get(5)?,
+                },
+            ))
+        })?;
+
+        for row in rows {
+            let (id, meta) = row?;
+            map.insert(id, meta);
+        }
+    }
+
+    Ok(map)
+}
+
 pub fn get_created_ats_by_source(
     conn: &Connection,
     source_type: &str,

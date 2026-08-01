@@ -191,6 +191,8 @@ fn convert_item(item: &JellyfinItem, config: &StreamServerConfig) -> ScannedSong
         file_path: item.path.clone().unwrap_or_default(),
         file_size,
         cover_url,
+        cover_hash: None,
+        file_modified: None,
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         format: item.container.as_ref().map(|c| c.to_uppercase()),

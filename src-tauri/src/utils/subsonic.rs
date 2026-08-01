@@ -268,6 +268,8 @@ fn convert_song(song: &SubsonicSong, config: &StreamServerConfig) -> ScannedSong
         file_path: song.path.clone().unwrap_or_default(),
         file_size: song.size.unwrap_or(0),
         cover_url,
+        cover_hash: None,
+        file_modified: None,
         is_hr: Some(is_hr),
         is_sq: Some(is_sq),
         format: song.suffix.as_ref().map(|s| s.to_uppercase()),

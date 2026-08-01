@@ -70,6 +70,8 @@ use commands::{
     get_stream_url,
     get_stream_url_by_server,
     get_stream_play_info_by_server,
+    get_cached_stream_path,
+    cache_stream_song,
     get_subsonic_lyrics,
     get_subsonic_stream_url,
     jellyfin_authenticate,
@@ -156,6 +158,8 @@ pub fn run() {
             get_stream_lyrics,
             get_stream_url_by_server,
             get_stream_play_info_by_server,
+            get_cached_stream_path,
+            cache_stream_song,
             get_stream_lyrics_by_server,
             jellyfin_authenticate,
             // Subsonic API 命令
@@ -286,6 +290,7 @@ pub fn run() {
             cover_cache.ensure_dirs().expect("Failed to create cover cache directories");
 
             app.manage(CoverCacheState(Mutex::new(cover_cache)));
+            app.manage(crate::commands::CacheRootState(cache_dir));
 
 
 

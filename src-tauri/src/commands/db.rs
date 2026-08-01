@@ -291,6 +291,9 @@ use std::sync::Mutex;
 /// Cover cache state wrapper
 pub struct CoverCacheState(pub Mutex<CoverCache>);
 
+/// WebDAV 歌曲本地缓存根目录（app_cache_dir）
+pub struct CacheRootState(pub std::path::PathBuf);
+
 /// Get cover URL by cover hash and size
 /// This is the primary method - frontend should use cover_hash from songs/albums
 #[tauri::command]
