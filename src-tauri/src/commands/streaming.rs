@@ -126,6 +126,24 @@ pub fn get_stream_play_info_by_server(
 
 // ============ WebDAV 本地缓存 ============
 
+/// 列出 WebDAV 服务器指定目录的内容（文件夹浏览用）
+#[tauri::command]
+pub async fn webdav_list_dir(
+    db: State<'_, DbState>,
+    server_id: String,
+    dir_url: Option<String>,
+) -> Result<Vec<webdav::WebDavEntry>, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
+    }
+    let url = dir_url.clone();
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || webdav::list_dir_entries(&cfg, url.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// 获取 WebDAV 歌曲的本地缓存路径（未缓存时返回 None）
 #[tauri::command]
 pub fn get_cached_stream_path(

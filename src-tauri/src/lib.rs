@@ -72,6 +72,7 @@ use commands::{
     get_stream_play_info_by_server,
     get_cached_stream_path,
     cache_stream_song,
+    webdav_list_dir,
     get_subsonic_lyrics,
     get_subsonic_stream_url,
     jellyfin_authenticate,
@@ -160,6 +161,7 @@ pub fn run() {
             get_stream_play_info_by_server,
             get_cached_stream_path,
             cache_stream_song,
+            webdav_list_dir,
             get_stream_lyrics_by_server,
             jellyfin_authenticate,
             // Subsonic API 命令

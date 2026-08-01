@@ -40,6 +40,8 @@ pub struct WebDavFile {
     pub is_directory: bool,
     /// RFC 1123 修改时间（可能缺失）
     pub modified: Option<i64>,
+    /// 文件大小（可能缺失）
+    pub size: Option<u64>,
 }
 
 /// 拆分后的服务器地址：协议+主机 与 初始路径
@@ -210,6 +212,7 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
         let mut href: Option<String> = None;
         let mut is_dir = false;
         let mut modified: Option<i64> = None;
+        let mut size: Option<u64> = None;
 
         for child in node.children() {
             if !child.is_element() {
@@ -226,6 +229,10 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
                         } else if name == "getlastmodified" {
                             if let Some(t) = prop.text() {
                                 modified = parse_http_date(t.trim());
+                            }
+                        } else if name == "getcontentlength" {
+                            if let Some(t) = prop.text() {
+                                size = t.trim().parse::<u64>().ok();
                             }
                         }
                     }
@@ -252,6 +259,7 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
             name,
             is_directory: is_dir,
             modified,
+            size,
         });
     }
 
@@ -565,6 +573,47 @@ pub fn stream_headers(config: &StreamServerConfig) -> Vec<(String, String)> {
 /// 播放 URL：song_id 即完整 URL
 pub fn stream_url(_config: &StreamServerConfig, song_id: &str) -> String {
     song_id.to_string()
+}
+
+/// 目录浏览项（前端展示用）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebDavEntry {
+    pub name: String,
+    pub url: String,
+    pub is_directory: bool,
+    pub size: Option<u64>,
+    pub modified: Option<i64>,
+}
+
+/// 列出目录内容（供文件夹浏览）。
+/// `dir_url`: 目标目录完整 URL；None 表示服务器的初始目录（basePath）。
+pub fn list_dir_entries(
+    config: &StreamServerConfig,
+    dir_url: Option<&str>,
+) -> Result<Vec<WebDavEntry>, String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let base = parse_target(config).clean_base_url;
+    let url = match dir_url {
+        Some(u) if !u.trim().is_empty() => u.trim_end_matches('/').to_string(),
+        _ => format!("{}{}", base, effective_initial_path(config)),
+    };
+
+    let files = list_dir(&client, &headers, &url)?;
+    let mut entries: Vec<WebDavEntry> = files
+        .into_iter()
+        .map(|f| WebDavEntry {
+            name: f.name,
+            url: f.url,
+            is_directory: f.is_directory,
+            size: f.size,
+            modified: f.modified,
+        })
+        .collect();
+    // 文件夹在前，其余按名称排序
+    entries.sort_by(|a, b| b.is_directory.cmp(&a.is_directory).then(a.name.cmp(&b.name)));
+    Ok(entries)
 }
 
 /// 计算歌曲缓存文件名（基于 server_id + URL 的稳定 hash）
