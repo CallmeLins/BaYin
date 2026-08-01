@@ -25,10 +25,20 @@ pub struct AudioDecoder {
 
 impl AudioDecoder {
     /// Open a local file or HTTP URL for decoding.
+    #[allow(dead_code)]
     pub fn open(source: &str) -> Result<Self, String> {
+        Self::open_with_headers(source, None)
+    }
+
+    /// Open a local file or HTTP URL for decoding, with optional request headers
+    /// (used by authenticated sources such as WebDAV).
+    pub fn open_with_headers(
+        source: &str,
+        headers: Option<&[(String, String)]>,
+    ) -> Result<Self, String> {
         let mss = if source.starts_with("http://") || source.starts_with("https://") {
             // HTTP source: stream via sequential reads (not full download)
-            let http_source = HttpStreamSource::open(source)?;
+            let http_source = HttpStreamSource::open_with_headers(source, headers)?;
             MediaSourceStream::new(Box::new(http_source), Default::default())
         } else {
             // Local file

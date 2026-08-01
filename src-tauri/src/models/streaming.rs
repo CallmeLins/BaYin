@@ -55,6 +55,7 @@ pub enum ServerType {
     OpenSubsonic,
     Jellyfin,
     Emby,
+    Webdav,
 }
 
 /// 统一流媒体服务器配置
@@ -70,6 +71,9 @@ pub struct StreamServerConfig {
     pub legacy_auth: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub music_folder_id: Option<String>,
+    /// WebDAV 初始目录（挂载路径，如 /dav/music）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base_path: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub access_token: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -88,6 +92,11 @@ impl StreamServerConfig {
     /// 是否使用 Jellyfin/Emby API
     pub fn is_jellyfin_like(&self) -> bool {
         matches!(self.server_type, ServerType::Jellyfin | ServerType::Emby)
+    }
+
+    /// 是否使用 WebDAV 协议（PROPFIND 扫描 + Basic Auth 流式播放）
+    pub fn is_webdav(&self) -> bool {
+        self.server_type == ServerType::Webdav
     }
 }
 

@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
 use crate::db::DbState;
 use crate::playback::PlaybackDomainState;
+use crate::utils::webdav;
 
 fn random_other_index(len: usize, current: usize) -> usize {
     if len <= 1 {
@@ -30,22 +31,41 @@ struct StreamFilePath {
     server_id: String,
 }
 
-fn resolve_source(app_handle: &AppHandle, file_path: &str) -> String {
+/// 解析后的播放源：URL + 可选的认证请求头
+struct ResolvedSource {
+    url: String,
+    headers: Option<Vec<(String, String)>>,
+}
+
+fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
     // The frontend sometimes stores a JSON "virtual path" for stream items.
     // Resolve it to a real playable URL so that native/system controls can work too.
     if !file_path.trim_start().starts_with('{') {
-        return file_path.to_string();
+        return ResolvedSource {
+            url: file_path.to_string(),
+            headers: None,
+        };
     }
 
     let parsed: Result<StreamFilePath, _> = serde_json::from_str(file_path);
     let parsed = match parsed {
         Ok(p) if p.kind == "stream" => p,
-        _ => return file_path.to_string(),
+        _ => {
+            return ResolvedSource {
+                url: file_path.to_string(),
+                headers: None,
+            }
+        }
     };
 
     let db = match app_handle.try_state::<DbState>() {
         Some(state) => state,
-        None => return file_path.to_string(),
+        None => {
+            return ResolvedSource {
+                url: file_path.to_string(),
+                headers: None,
+            }
+        }
     };
     let config = {
         let conn = match db.0.lock() {
@@ -54,20 +74,42 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> String {
         };
         match crate::db::servers::get_stream_server_by_id(&conn, &parsed.server_id) {
             Ok(Some(server)) => crate::models::StreamServerConfig::from(&server),
-            Ok(None) => return file_path.to_string(),
+            Ok(None) => {
+                return ResolvedSource {
+                    url: file_path.to_string(),
+                    headers: None,
+                }
+            }
             Err(err) => {
                 log::warn!("Failed to load stream server {}: {}", parsed.server_id, err);
-                return file_path.to_string();
+                return ResolvedSource {
+                    url: file_path.to_string(),
+                    headers: None,
+                };
             }
         }
     };
 
     if config.is_subsonic() {
-        crate::utils::subsonic::get_stream_url(&config, &parsed.song_id)
+        ResolvedSource {
+            url: crate::utils::subsonic::get_stream_url(&config, &parsed.song_id),
+            headers: None,
+        }
     } else if config.is_jellyfin_like() {
-        crate::utils::jellyfin::get_stream_url(&config, &parsed.song_id)
+        ResolvedSource {
+            url: crate::utils::jellyfin::get_stream_url(&config, &parsed.song_id),
+            headers: None,
+        }
+    } else if config.is_webdav() {
+        ResolvedSource {
+            url: webdav::stream_url(&config, &parsed.song_id),
+            headers: Some(webdav::stream_headers(&config)),
+        }
     } else {
-        file_path.to_string()
+        ResolvedSource {
+            url: file_path.to_string(),
+            headers: None,
+        }
     }
 }
 
@@ -125,7 +167,7 @@ pub(crate) fn play_index(
     engine: &AudioEngineState,
     app_handle: &AppHandle,
 ) -> bool {
-    let (file, track_id) = {
+    let (resolved, track_id) = {
         // 使用 unwrap_or_else 但避免格式化字符串的开销
         let mut d = match domain.0.lock() {
             Ok(guard) => guard,
@@ -135,15 +177,20 @@ pub(crate) fn play_index(
             return false;
         }
         d.index = index;
-        let resolved = resolve_source(app_handle, &d.queue[index].file_path);
-        (resolved, d.queue[index].id.clone())
+        (
+            resolve_source(app_handle, &d.queue[index].file_path),
+            d.queue[index].id.clone(),
+        )
     };
 
     let engine = match engine.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    engine.send(AudioCommand::Play { source: file });
+    engine.send(AudioCommand::Play {
+        source: resolved.url,
+        headers: resolved.headers,
+    });
     record_play(app_handle, &track_id);
     true
 }

@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, Result};
 use serde_json::json;
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 10;
+const CURRENT_SCHEMA_VERSION: i32 = 11;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -63,6 +63,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 10 {
         migrate_v10(conn)?;
+    }
+    if from_version < 11 {
+        migrate_v11(conn)?;
     }
 
     Ok(())
@@ -344,6 +347,22 @@ fn migrate_v10(conn: &Connection) -> Result<()> {
     }
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [10])?;
+    Ok(())
+}
+
+/// Version 11: Add base_path column for WebDAV servers (initial mount directory).
+fn migrate_v11(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(stream_servers)")?;
+    let has_base_path = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|row| row.ok())
+        .any(|name| name == "base_path");
+
+    if !has_base_path {
+        conn.execute("ALTER TABLE stream_servers ADD COLUMN base_path TEXT", [])?;
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [11])?;
     Ok(())
 }
 

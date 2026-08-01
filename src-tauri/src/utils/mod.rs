@@ -4,3 +4,4 @@ pub mod datetime;
 pub mod http;
 pub mod jellyfin;
 pub mod subsonic;
+pub mod webdav;

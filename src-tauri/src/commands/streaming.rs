@@ -2,7 +2,7 @@ use tauri::State;
 
 use crate::db::{self, DbState};
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
-use crate::utils::{jellyfin, subsonic};
+use crate::utils::{jellyfin, subsonic, webdav};
 
 // ============ 内部函数（供其他模块调用） ============
 
@@ -10,6 +10,8 @@ use crate::utils::{jellyfin, subsonic};
 pub async fn fetch_stream_songs_internal(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
     if config.is_subsonic() {
         subsonic::fetch_all_songs(config).await
+    } else if config.is_webdav() {
+        webdav::fetch_all_songs(config).await
     } else {
         jellyfin::fetch_all_songs(config).await
     }
@@ -33,6 +35,8 @@ fn load_stream_config(
 pub async fn test_stream_connection(config: StreamServerConfig) -> Result<ConnectionTestResult, String> {
     if config.is_subsonic() {
         Ok(subsonic::test_connection(&config).await)
+    } else if config.is_webdav() {
+        Ok(webdav::test_connection(&config).await)
     } else {
         Ok(jellyfin::test_connection(&config).await)
     }
@@ -43,6 +47,8 @@ pub async fn test_stream_connection(config: StreamServerConfig) -> Result<Connec
 pub async fn fetch_stream_songs(config: StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
     if config.is_subsonic() {
         subsonic::fetch_all_songs(&config).await
+    } else if config.is_webdav() {
+        webdav::fetch_all_songs(&config).await
     } else {
         jellyfin::fetch_all_songs(&config).await
     }
@@ -53,6 +59,8 @@ pub async fn fetch_stream_songs(config: StreamServerConfig) -> Result<Vec<Scanne
 pub fn get_stream_url(config: StreamServerConfig, song_id: String) -> String {
     if config.is_subsonic() {
         subsonic::get_stream_url(&config, &song_id)
+    } else if config.is_webdav() {
+        webdav::stream_url(&config, &song_id)
     } else {
         jellyfin::get_stream_url(&config, &song_id)
     }
@@ -68,8 +76,44 @@ pub fn get_stream_url_by_server(
     let config = load_stream_config(&db, &server_id)?;
     Ok(if config.is_subsonic() {
         subsonic::get_stream_url(&config, &song_id)
+    } else if config.is_webdav() {
+        webdav::stream_url(&config, &song_id)
     } else {
         jellyfin::get_stream_url(&config, &song_id)
+    })
+}
+
+/// 流媒体播放信息：URL + 附加请求头（如 WebDAV Basic Auth）
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StreamPlayInfo {
+    pub url: String,
+    /// 附加到 HTTP 音源的请求头，无认证时为空
+    pub headers: Option<Vec<(String, String)>>,
+}
+
+/// 获取流媒体歌曲的播放信息（URL + 认证请求头，按已保存的服务器配置）
+#[tauri::command]
+pub fn get_stream_play_info_by_server(
+    db: State<'_, DbState>,
+    server_id: String,
+    song_id: String,
+) -> Result<StreamPlayInfo, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    let url = if config.is_subsonic() {
+        subsonic::get_stream_url(&config, &song_id)
+    } else if config.is_webdav() {
+        webdav::stream_url(&config, &song_id)
+    } else {
+        jellyfin::get_stream_url(&config, &song_id)
+    };
+    Ok(StreamPlayInfo {
+        url,
+        headers: if config.is_webdav() {
+            Some(webdav::stream_headers(&config))
+        } else {
+            None
+        },
     })
 }
 
@@ -78,6 +122,9 @@ pub fn get_stream_url_by_server(
 pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> Option<String> {
     if config.is_subsonic() {
         subsonic::get_lyrics(&config, &song_id).await
+    } else if config.is_webdav() {
+        // WebDAV 无歌词 API，可在后续版本支持 .lrc 侧车文件
+        None
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
     }
@@ -93,6 +140,8 @@ pub async fn get_stream_lyrics_by_server(
     let config = load_stream_config(&db, &server_id)?;
     Ok(if config.is_subsonic() {
         subsonic::get_lyrics(&config, &song_id).await
+    } else if config.is_webdav() {
+        None
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
     })

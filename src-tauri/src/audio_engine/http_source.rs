@@ -130,12 +130,35 @@ fn create_temp_cache_file() -> Result<(std::fs::File, std::fs::File, String), St
 }
 
 impl HttpStreamSource {
+    /// 打开 HTTP 流（无认证头，保持原行为）
+    #[allow(dead_code)]
     pub fn open(url: &str) -> Result<Self, String> {
-        let client = reqwest::blocking::Client::builder()
+        Self::open_with_headers(url, None)
+    }
+
+    /// 打开 HTTP 流，可附带额外请求头（如 WebDAV Basic Auth）
+    pub fn open_with_headers(
+        url: &str,
+        headers: Option<&[(String, String)]>,
+    ) -> Result<Self, String> {
+        let mut builder = reqwest::blocking::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            .timeout(std::time::Duration::from_secs(30));
+        if let Some(h) = headers {
+            if !h.is_empty() {
+                let mut map = reqwest::header::HeaderMap::new();
+                for (k, v) in h {
+                    if let (Ok(kv), Ok(hv)) = (
+                        reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                        reqwest::header::HeaderValue::from_str(v),
+                    ) {
+                        map.insert(kv, hv);
+                    }
+                }
+                builder = builder.default_headers(map);
+            }
+        }
+        let client = builder.build().map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
         let resp = client
             .get(url)

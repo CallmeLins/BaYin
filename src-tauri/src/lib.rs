@@ -69,6 +69,7 @@ use commands::{
     get_stream_lyrics_by_server,
     get_stream_url,
     get_stream_url_by_server,
+    get_stream_play_info_by_server,
     get_subsonic_lyrics,
     get_subsonic_stream_url,
     jellyfin_authenticate,
@@ -154,6 +155,7 @@ pub fn run() {
             get_stream_url,
             get_stream_lyrics,
             get_stream_url_by_server,
+            get_stream_play_info_by_server,
             get_stream_lyrics_by_server,
             jellyfin_authenticate,
             // Subsonic API 命令

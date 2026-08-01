@@ -3,12 +3,16 @@ use crate::audio_engine::AudioEngineState;
 use tauri::State;
 
 #[tauri::command]
-pub fn audio_play(source: String, engine: State<'_, AudioEngineState>) {
+pub fn audio_play(
+    source: String,
+    engine: State<'_, AudioEngineState>,
+    headers: Option<Vec<(String, String)>>,
+) {
     let engine = match engine.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    engine.send(AudioCommand::Play { source });
+    engine.send(AudioCommand::Play { source, headers });
 }
 
 #[tauri::command]
