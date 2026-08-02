@@ -144,6 +144,21 @@ pub async fn webdav_list_dir(
         .map_err(|e| e.to_string())?
 }
 
+/// 获取 WebDAV 服务器的根目录 URL（初始目录）
+#[tauri::command]
+pub async fn webdav_root_url(
+    db: State<'_, DbState>,
+    server_id: String,
+) -> Result<String, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
+    }
+    let base = webdav::clean_base_url(&config);
+    let path = webdav::effective_initial_path_public(&config);
+    Ok(format!("{}{}", base, path))
+}
+
 /// 删除 WebDAV 远程文件/文件夹，并同步清理库内记录与本地缓存
 #[tauri::command]
 pub async fn webdav_delete(
@@ -203,6 +218,116 @@ pub async fn webdav_delete(
     let _ = app.emit("library-updated", ());
 
     Ok(removed + cache_removed)
+}
+
+/// 移动/重命名 WebDAV 远程文件或文件夹，同步更新库记录与本地缓存文件名
+#[tauri::command]
+pub async fn webdav_move(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    cache_root: State<'_, crate::commands::CacheRootState>,
+    server_id: String,
+    source: String,
+    destination: String,
+    is_directory: bool,
+) -> Result<usize, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持移动".to_string());
+    }
+
+    // 1. 先取旧 URL 列表（DB 更新后旧 URL 将无法查询）
+    let old_urls = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_server_song_ids_by_url(&conn, &server_id, &source, is_directory)
+            .map_err(|e| e.to_string())?
+    };
+
+    // 2. 移动远程资源
+    let cfg = config.clone();
+    let src = source.clone();
+    let dst = destination.clone();
+    tauri::async_runtime::spawn_blocking(move || webdav::move_entry(&cfg, &src, &dst))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    // 3. 重命名本地缓存文件（按新旧 URL 对应）
+    let root = cache_root.0.clone();
+    let sid = server_id.clone();
+    let src2 = source.clone();
+    let dst2 = destination.clone();
+    let cache_renamed = tauri::async_runtime::spawn_blocking(move || {
+        let mut count = 0;
+        for old_url in &old_urls {
+            let new_url = if is_directory {
+                old_url.replacen(&src2, &dst2, 1)
+            } else {
+                dst2.clone()
+            };
+            let old_path = webdav::cached_path(&root, &sid, old_url);
+            let new_path = webdav::cached_path(&root, &sid, &new_url);
+            if old_path.is_file() && std::fs::rename(&old_path, &new_path).is_ok() {
+                count += 1;
+            }
+        }
+        count
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4. 更新库内记录
+    let updated = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        if is_directory {
+            db::songs::rename_server_song_id_prefix(&conn, &server_id, &source, &destination)
+                .map_err(|e| e.to_string())?
+        } else {
+            db::songs::rename_server_song_id(&conn, &server_id, &source, &destination)
+                .map_err(|e| e.to_string())?
+        }
+    };
+    let _ = app.emit("library-updated", ());
+
+    Ok(updated + cache_renamed)
+}
+
+/// 上传本地文件到 WebDAV 当前目录，返回远程 URL
+#[tauri::command]
+pub async fn webdav_upload(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    server_id: String,
+    dir_url: String,
+    local_path: String,
+) -> Result<String, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持上传".to_string());
+    }
+
+    // 目标 URL = 目录 URL + 文件名（自动百分号编码）
+    let file_name = std::path::Path::new(&local_path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "无法获取文件名".to_string())?;
+    let target = {
+        let mut u = url::Url::parse(dir_url.trim_end_matches('/'))
+            .map_err(|e| format!("URL 无效: {e}"))?;
+        u.path_segments_mut()
+            .map_err(|_| "URL 无路径".to_string())?
+            .push(file_name);
+        u.to_string()
+    };
+
+    let cfg = config.clone();
+    let remote = target.clone();
+    let local = local_path.clone();
+    tauri::async_runtime::spawn_blocking(move || webdav::upload(&cfg, &local, &remote))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    let _ = app.emit("library-updated", ());
+    Ok(target)
 }
 
 /// 将 WebDAV 指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。

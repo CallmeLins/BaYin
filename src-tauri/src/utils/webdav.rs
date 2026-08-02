@@ -94,6 +94,16 @@ fn effective_initial_path(config: &StreamServerConfig) -> String {
     }
 }
 
+/// 根目录 URL（供前端移动/上传目标计算）
+pub fn effective_initial_path_public(config: &StreamServerConfig) -> String {
+    effective_initial_path(config)
+}
+
+/// 基础 URL（协议+主机+端口）
+pub fn clean_base_url(config: &StreamServerConfig) -> String {
+    parse_target(config).clean_base_url
+}
+
 fn normalize_initial_path(path: &str) -> String {
     let trimmed = path.trim_end_matches('/');
     if trimmed.is_empty() {
@@ -695,6 +705,54 @@ pub fn delete(config: &StreamServerConfig, url: &str) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("删除失败，状态码 {status}"))
+    }
+}
+
+/// 移动/重命名远程文件或文件夹（MOVE 请求）
+pub fn move_entry(
+    config: &StreamServerConfig,
+    source: &str,
+    destination: &str,
+) -> Result<(), String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let resp = client
+        .request(reqwest::Method::from_bytes(b"MOVE").expect("MOVE is a valid HTTP method"), source)
+        .headers(headers)
+        .header("Destination", destination)
+        .send()
+        .map_err(|e| format!("移动请求失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(format!("移动失败，状态码 {status}"))
+    }
+}
+
+/// 上传本地文件到远程目录（PUT 请求）
+pub fn upload(
+    config: &StreamServerConfig,
+    local_path: &str,
+    remote_url: &str,
+) -> Result<(), String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let file = std::fs::File::open(local_path).map_err(|e| format!("打开文件失败: {e}"))?;
+    let length = file.metadata().map_err(|e| e.to_string())?.len();
+
+    let resp = client
+        .put(remote_url)
+        .headers(headers)
+        .header(reqwest::header::CONTENT_LENGTH, length)
+        .body(file)
+        .send()
+        .map_err(|e| format!("上传请求失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) {
+        Ok(())
+    } else {
+        Err(format!("上传失败，状态码 {status}"))
     }
 }
 

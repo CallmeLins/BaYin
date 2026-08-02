@@ -530,6 +530,34 @@ pub fn get_server_song_ids_by_url(
     rows.collect::<Result<Vec<_>>>()
 }
 
+/// 更新单个歌曲的远程 URL（WebDAV 重命名/移动文件时同步）
+pub fn rename_server_song_id(
+    conn: &Connection,
+    server_id: &str,
+    old_url: &str,
+    new_url: &str,
+) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET server_song_id = ?3, updated_at = strftime('%s','now')
+         WHERE server_id = ?1 AND server_song_id = ?2",
+        params![server_id, old_url, new_url],
+    )
+}
+
+/// 更新 URL 前缀（WebDAV 移动整个文件夹时同步）
+pub fn rename_server_song_id_prefix(
+    conn: &Connection,
+    server_id: &str,
+    old_prefix: &str,
+    new_prefix: &str,
+) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET server_song_id = REPLACE(server_song_id, ?2, ?3), updated_at = strftime('%s','now')
+         WHERE server_id = ?1 AND server_song_id LIKE ?2 || '%'",
+        params![server_id, old_prefix, new_prefix],
+    )
+}
+
 /// Get count of songs
 pub fn get_song_count(conn: &Connection) -> Result<i64> {
     conn.query_row("SELECT COUNT(*) FROM songs", [], |row| row.get(0))
