@@ -575,6 +575,86 @@ pub fn stream_url(_config: &StreamServerConfig, song_id: &str) -> String {
     song_id.to_string()
 }
 
+/// 由歌曲 URL 推导同名 .lrc 侧车文件 URL（保留查询参数）
+fn lrc_sidecar_url(song_url: &str) -> String {
+    let (base, query) = match song_url.find('?') {
+        Some(i) => (&song_url[..i], Some(&song_url[i..])),
+        None => (song_url, None),
+    };
+    let last_slash = base.rfind('/').unwrap_or(0);
+    let lrc_base = match base.rfind('.') {
+        Some(i) if i > last_slash => format!("{}.lrc", &base[..i]),
+        _ => format!("{base}.lrc"),
+    };
+    match query {
+        Some(q) => format!("{lrc_base}{q}"),
+        None => lrc_base,
+    }
+}
+
+/// 读取 WebDAV 歌曲的侧车 .lrc 歌词（同目录同名文件）
+pub fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
+    let client = build_client().ok()?;
+    let headers = build_auth_headers(config);
+    let url = lrc_sidecar_url(song_id);
+
+    let resp = client.get(&url).headers(headers).send().ok()?;
+    let status = resp.status().as_u16();
+    if status != 200 && status != 206 {
+        return None;
+    }
+    let text = resp.text().ok()?;
+    let trimmed = text.trim_start();
+    // 过滤空文件或 HTML 错误页
+    if trimmed.is_empty()
+        || trimmed.starts_with("<!DOCTYPE")
+        || trimmed.starts_with("<html")
+    {
+        return None;
+    }
+    Some(text)
+}
+
+/// WebDAV 缓存统计
+#[derive(Debug, Clone, Default, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebDavCacheStats {
+    pub file_count: usize,
+    pub total_size: u64,
+}
+
+/// 统计 WebDAV 歌曲本地缓存占用
+pub fn cache_stats(cache_root: &std::path::Path) -> WebDavCacheStats {
+    let dir = cache_root.join("webdav");
+    let mut stats = WebDavCacheStats::default();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    stats.file_count += 1;
+                    stats.total_size += meta.len();
+                }
+            }
+        }
+    }
+    stats
+}
+
+/// 清理 WebDAV 歌曲本地缓存，返回删除的文件数
+pub fn clear_cache(cache_root: &std::path::Path) -> usize {
+    let dir = cache_root.join("webdav");
+    let mut removed = 0;
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && std::fs::remove_file(&path).is_ok() {
+                removed += 1;
+            }
+        }
+    }
+    removed
+}
+
 /// 目录浏览项（前端展示用）
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -824,5 +904,42 @@ mod tests {
         assert_eq!(headers.len(), 1);
         assert_eq!(headers[0].0, "Authorization");
         assert_eq!(headers[0].1, "Basic dXNlcjpwYXNz");
+    }
+}
+
+#[cfg(test)]
+mod lyrics_tests {
+    use super::*;
+
+    #[test]
+    fn sidecar_url_replaces_extension() {
+        assert_eq!(
+            lrc_sidecar_url("https://host/dav/music/Album/song.mp3"),
+            "https://host/dav/music/Album/song.lrc"
+        );
+    }
+
+    #[test]
+    fn sidecar_url_handles_query_and_encoded_names() {
+        assert_eq!(
+            lrc_sidecar_url("https://host/dav/track%201.flac?token=abc"),
+            "https://host/dav/track%201.lrc?token=abc"
+        );
+    }
+
+    #[test]
+    fn sidecar_url_without_dot_in_filename() {
+        assert_eq!(
+            lrc_sidecar_url("https://host/dav/noext"),
+            "https://host/dav/noext.lrc"
+        );
+    }
+
+    #[test]
+    fn sidecar_url_ignores_dot_in_directory() {
+        assert_eq!(
+            lrc_sidecar_url("https://host/dav/music.v2/song"),
+            "https://host/dav/music.v2/song.lrc"
+        );
     }
 }

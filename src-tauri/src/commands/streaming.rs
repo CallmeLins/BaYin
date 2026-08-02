@@ -144,6 +144,22 @@ pub async fn webdav_list_dir(
         .map_err(|e| e.to_string())?
 }
 
+/// 统计 WebDAV 歌曲本地缓存占用
+#[tauri::command]
+pub fn get_webdav_cache_stats(
+    cache_root: State<'_, crate::commands::CacheRootState>,
+) -> webdav::WebDavCacheStats {
+    webdav::cache_stats(&cache_root.0)
+}
+
+/// 清理 WebDAV 歌曲本地缓存，返回删除的文件数
+#[tauri::command]
+pub fn clear_webdav_cache(
+    cache_root: State<'_, crate::commands::CacheRootState>,
+) -> usize {
+    webdav::clear_cache(&cache_root.0)
+}
+
 /// 获取 WebDAV 歌曲的本地缓存路径（未缓存时返回 None）
 #[tauri::command]
 pub fn get_cached_stream_path(
@@ -186,8 +202,13 @@ pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> O
     if config.is_subsonic() {
         subsonic::get_lyrics(&config, &song_id).await
     } else if config.is_webdav() {
-        // WebDAV 无歌词 API，可在后续版本支持 .lrc 侧车文件
-        None
+        // 尝试读取同目录的 .lrc 侧车文件
+        let cfg = config.clone();
+        let sid = song_id.clone();
+        tauri::async_runtime::spawn_blocking(move || webdav::get_lyrics(&cfg, &sid))
+            .await
+            .ok()
+            .flatten()
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
     }
@@ -204,7 +225,12 @@ pub async fn get_stream_lyrics_by_server(
     Ok(if config.is_subsonic() {
         subsonic::get_lyrics(&config, &song_id).await
     } else if config.is_webdav() {
-        None
+        let cfg = config.clone();
+        let sid = song_id.clone();
+        tauri::async_runtime::spawn_blocking(move || webdav::get_lyrics(&cfg, &sid))
+            .await
+            .ok()
+            .flatten()
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
     })

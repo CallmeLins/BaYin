@@ -73,6 +73,8 @@ use commands::{
     get_cached_stream_path,
     cache_stream_song,
     webdav_list_dir,
+    get_webdav_cache_stats,
+    clear_webdav_cache,
     get_subsonic_lyrics,
     get_subsonic_stream_url,
     jellyfin_authenticate,
@@ -162,6 +164,8 @@ pub fn run() {
             get_cached_stream_path,
             cache_stream_song,
             webdav_list_dir,
+            get_webdav_cache_stats,
+            clear_webdav_cache,
             get_stream_lyrics_by_server,
             jellyfin_authenticate,
             // Subsonic API 命令
