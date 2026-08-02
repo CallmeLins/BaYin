@@ -489,6 +489,47 @@ pub fn clear_all_songs(conn: &Connection) -> Result<usize> {
     Ok(affected)
 }
 
+/// 按 server_id + server_song_id 删除歌曲（WebDAV 远程文件删除时同步清理）
+pub fn delete_songs_by_server_song_id(
+    conn: &Connection,
+    server_id: &str,
+    server_song_id: &str,
+) -> Result<usize> {
+    conn.execute(
+        "DELETE FROM songs WHERE server_id = ?1 AND server_song_id = ?2",
+        params![server_id, server_song_id],
+    )
+}
+
+/// 按 server_id + URL 前缀删除歌曲（WebDAV 删除整个文件夹时同步清理）
+pub fn delete_songs_by_server_url_prefix(
+    conn: &Connection,
+    server_id: &str,
+    prefix: &str,
+) -> Result<usize> {
+    conn.execute(
+        "DELETE FROM songs WHERE server_id = ?1 AND server_song_id LIKE ?2 || '%'",
+        params![server_id, prefix],
+    )
+}
+
+/// 查询匹配 URL（或前缀）的 server_song_id 列表，用于删除前清理缓存
+pub fn get_server_song_ids_by_url(
+    conn: &Connection,
+    server_id: &str,
+    url: &str,
+    prefix_match: bool,
+) -> Result<Vec<String>> {
+    let sql = if prefix_match {
+        "SELECT server_song_id FROM songs WHERE server_id = ?1 AND server_song_id LIKE ?2 || '%'"
+    } else {
+        "SELECT server_song_id FROM songs WHERE server_id = ?1 AND server_song_id = ?2"
+    };
+    let mut stmt = conn.prepare(sql)?;
+    let rows = stmt.query_map(params![server_id, url], |row| row.get::<_, String>(0))?;
+    rows.collect::<Result<Vec<_>>>()
+}
+
 /// Get count of songs
 pub fn get_song_count(conn: &Connection) -> Result<i64> {
     conn.query_row("SELECT COUNT(*) FROM songs", [], |row| row.get(0))

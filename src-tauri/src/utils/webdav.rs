@@ -680,6 +680,24 @@ pub fn clear_cache(cache_root: &std::path::Path) -> usize {
     removed
 }
 
+/// 删除远程文件或文件夹（DELETE 请求，文件夹由服务器递归处理）
+pub fn delete(config: &StreamServerConfig, url: &str) -> Result<(), String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let resp = client
+        .delete(url)
+        .headers(headers)
+        .send()
+        .map_err(|e| format!("删除请求失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if (200..300).contains(&status) || status == 404 {
+        // 404 视为已删除
+        Ok(())
+    } else {
+        Err(format!("删除失败，状态码 {status}"))
+    }
+}
+
 /// 目录浏览项（前端展示用）
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]

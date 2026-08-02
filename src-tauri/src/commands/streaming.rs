@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tauri::State;
+use tauri::{Emitter, State};
 
 use crate::commands::CoverCacheState;
 use crate::db::{self, DbState};
@@ -144,10 +144,72 @@ pub async fn webdav_list_dir(
         .map_err(|e| e.to_string())?
 }
 
+/// 删除 WebDAV 远程文件/文件夹，并同步清理库内记录与本地缓存
+#[tauri::command]
+pub async fn webdav_delete(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    cache_root: State<'_, crate::commands::CacheRootState>,
+    server_id: String,
+    url: String,
+    is_directory: bool,
+) -> Result<usize, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持删除".to_string());
+    }
+
+    // 1. 查询库内匹配的歌曲 URL（删除前先取，用于清理缓存）
+    let song_urls = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_server_song_ids_by_url(&conn, &server_id, &url, is_directory)
+            .map_err(|e| e.to_string())?
+    };
+
+    // 2. 删除远程资源
+    let cfg = config.clone();
+    let target = url.clone();
+    tauri::async_runtime::spawn_blocking(move || webdav::delete(&cfg, &target))
+        .await
+        .map_err(|e| e.to_string())??;
+
+    // 3. 清理本地缓存（按已知 URL 精确删除）
+    let root = cache_root.0.clone();
+    let sid = server_id.clone();
+    let cache_removed = tauri::async_runtime::spawn_blocking(move || {
+        let mut count = 0;
+        for song_url in &song_urls {
+            let path = webdav::cached_path(&root, &sid, song_url);
+            if path.is_file() && std::fs::remove_file(&path).is_ok() {
+                count += 1;
+            }
+        }
+        count
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    // 4. 清理库内记录
+    let removed = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        if is_directory {
+            db::songs::delete_songs_by_server_url_prefix(&conn, &server_id, &url)
+                .map_err(|e| e.to_string())?
+        } else {
+            db::songs::delete_songs_by_server_song_id(&conn, &server_id, &url)
+                .map_err(|e| e.to_string())?
+        }
+    };
+    let _ = app.emit("library-updated", ());
+
+    Ok(removed + cache_removed)
+}
+
 /// 将 WebDAV 指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。
 /// 只增不删，已存在的歌曲（同 URL）会更新并保留播放统计。
 #[tauri::command]
 pub async fn webdav_scan_dir_to_db(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
     cover_cache: State<'_, CoverCacheState>,
     server_id: String,
@@ -259,6 +321,7 @@ pub async fn webdav_scan_dir_to_db(
             db::songs::restore_user_stats(&mut conn, &existing_user_stats)
                 .map_err(|e| e.to_string())?;
         }
+        let _ = app.emit("library-updated", ());
         Ok(saved)
     }
 }
