@@ -329,14 +329,39 @@ pub async fn fetch_all_songs(
     let base = parse_target(config).clean_base_url;
     let root_url = format!("{}{}", base, root);
 
+    scan_from(&client, &headers, config, &root_url, cover_cache, existing_modified)
+}
+
+/// 从指定目录 URL 递归扫描（文件夹浏览“加入音乐库”用）
+pub fn scan_dir(
+    config: &StreamServerConfig,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+    dir_url: &str,
+) -> Result<Vec<ScannedSong>, String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let root = dir_url.trim_end_matches('/');
+    scan_from(&client, &headers, config, root, cover_cache, existing_modified)
+}
+
+/// 核心扫描：BFS 列目录 + 并行读取元数据
+fn scan_from(
+    client: &Client,
+    headers: &HeaderMap,
+    config: &StreamServerConfig,
+    root_url: &str,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+) -> Result<Vec<ScannedSong>, String> {
     // BFS 扫描目录
     let mut queue = VecDeque::new();
-    queue.push_back(root_url.clone());
+    queue.push_back(root_url.to_string());
 
     let mut audio_urls: Vec<(String, Option<i64>)> = Vec::new();
 
     while let Some(dir) = queue.pop_front() {
-        let entries = match list_dir(&client, &headers, &dir) {
+        let entries = match list_dir(client, headers, &dir) {
             Ok(list) => list,
             Err(e) => {
                 log::warn!("[WebDAV] 扫描目录失败 {dir}: {e}");

@@ -144,6 +144,125 @@ pub async fn webdav_list_dir(
         .map_err(|e| e.to_string())?
 }
 
+/// 将 WebDAV 指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。
+/// 只增不删，已存在的歌曲（同 URL）会更新并保留播放统计。
+#[tauri::command]
+pub async fn webdav_scan_dir_to_db(
+    db: State<'_, DbState>,
+    cover_cache: State<'_, CoverCacheState>,
+    server_id: String,
+    dir_url: String,
+) -> Result<usize, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
+    }
+
+    // 增量同步：复用库内已有元数据，跳过未变化文件的探测
+    let existing_metadata = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_stream_metadata_by_source(&conn, "stream", Some(&server_id))
+            .map_err(|e| e.to_string())?
+    };
+    let existing_modified: std::collections::HashMap<String, i64> = existing_metadata
+        .iter()
+        .filter_map(|(id, meta)| meta.file_modified.map(|m| (id.clone(), m)))
+        .collect();
+
+    let cache_arc = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
+    let cfg = config.clone();
+    let url = dir_url.clone();
+    let songs = tauri::async_runtime::spawn_blocking(move || {
+        webdav::scan_dir(&cfg, Some(&cache_arc), Some(&existing_modified), &url)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    // 保存歌曲（保留播放统计 / created_at，不删除现有歌曲）
+    let existing_user_stats = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_user_stats_by_source(&conn, "stream", Some(&server_id))
+            .map_err(|e| e.to_string())?
+    };
+    let existing_cover_hashes = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_cover_hashes_by_source(&conn, "stream", Some(&server_id))
+            .map_err(|e| e.to_string())?
+    };
+    let existing_created_ats = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_created_ats_by_source(&conn, "stream", Some(&server_id))
+            .map_err(|e| e.to_string())?
+    };
+
+    let song_inputs: Vec<db::SongInput> = songs
+        .iter()
+        .map(|s| {
+            let id = format!("{}-{}", server_id, s.id);
+            let existing = existing_metadata.get(&id);
+            let use_existing = existing
+                .map(|meta| meta.file_modified == s.file_modified)
+                .unwrap_or(false);
+            let (title, artist, album, duration) = if use_existing {
+                let meta = existing.expect("checked above");
+                (
+                    meta.title.clone(),
+                    meta.artist.clone(),
+                    meta.album.clone(),
+                    meta.duration,
+                )
+            } else {
+                (s.title.clone(), s.artist.clone(), s.album.clone(), s.duration)
+            };
+            db::SongInput {
+                id: id.clone(),
+                title,
+                artist,
+                album,
+                duration,
+                file_path: String::new(),
+                file_size: s.file_size as i64,
+                is_hr: s.is_hr,
+                is_sq: s.is_sq,
+                cover_hash: existing_cover_hashes
+                    .get(&id)
+                    .cloned()
+                    .or_else(|| s.cover_hash.clone()),
+                server_song_id: Some(s.id.clone()),
+                stream_info: Some(
+                    serde_json::json!({
+                        "type": "stream",
+                        "serverId": server_id,
+                        "serverType": "webdav",
+                        "songId": s.id,
+                        "serverName": config.server_name,
+                        "coverUrl": s.cover_url
+                    })
+                    .to_string(),
+                ),
+                file_modified: s.file_modified,
+                format: s.format.clone(),
+                bit_depth: s.bit_depth,
+                sample_rate: s.sample_rate,
+                bitrate: s.bitrate,
+                channels: s.channels,
+                created_at: s.created_at.or(existing_created_ats.get(&id).copied()),
+            }
+        })
+        .collect();
+
+    {
+        let mut conn = db.0.lock().map_err(|e| e.to_string())?;
+        let saved = db::songs::save_songs(&mut conn, &song_inputs, "stream", Some(&server_id))
+            .map_err(|e| e.to_string())?;
+        if !existing_user_stats.is_empty() {
+            db::songs::restore_user_stats(&mut conn, &existing_user_stats)
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(saved)
+    }
+}
+
 /// 统计 WebDAV 歌曲本地缓存占用
 #[tauri::command]
 pub fn get_webdav_cache_stats(
