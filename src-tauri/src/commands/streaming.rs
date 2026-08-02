@@ -171,6 +171,19 @@ pub fn get_cached_stream_path(
     cached.exists().then(|| cached.to_string_lossy().to_string())
 }
 
+/// 批量查询已缓存的 WebDAV 歌曲 URL（文件夹浏览页徽标用）
+#[tauri::command]
+pub fn get_cached_stream_paths(
+    cache_root: State<'_, crate::commands::CacheRootState>,
+    server_id: String,
+    song_urls: Vec<String>,
+) -> Vec<String> {
+    song_urls
+        .into_iter()
+        .filter(|u| webdav::has_cached_song(&cache_root.0, &server_id, u))
+        .collect()
+}
+
 /// 下载 WebDAV 歌曲到本地缓存（播放过半时触发），返回缓存路径
 #[tauri::command]
 pub async fn cache_stream_song(

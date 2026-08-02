@@ -722,7 +722,6 @@ pub fn cached_path(cache_root: &std::path::Path, server_id: &str, song_id: &str)
 }
 
 /// 是否已有本地缓存（供前端缓存命中判断）
-#[allow(dead_code)]
 pub fn has_cached_song(cache_root: &std::path::Path, server_id: &str, song_id: &str) -> bool {
     cached_path(cache_root, server_id, song_id).exists()
 }
