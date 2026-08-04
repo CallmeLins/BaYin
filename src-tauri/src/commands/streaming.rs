@@ -148,6 +148,24 @@ pub async fn webdav_list_dir(
         .map_err(|e| e.to_string())?
 }
 
+/// 下载 WebDAV 图片字节（文件夹封面等前端展示用，前端无法直接带认证头加载 <img>）
+#[tauri::command]
+pub async fn webdav_image(
+    db: State<'_, DbState>,
+    server_id: String,
+    url: String,
+) -> Result<Vec<u8>, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Err("仅 WebDAV 服务器支持图片加载".to_string());
+    }
+    let cfg = config.clone();
+    let u = url.clone();
+    tauri::async_runtime::spawn_blocking(move || webdav::fetch_bytes(&cfg, &u))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
 /// 获取 WebDAV 服务器的根目录 URL（初始目录）
 #[tauri::command]
 pub async fn webdav_root_url(

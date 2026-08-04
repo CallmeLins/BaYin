@@ -237,6 +237,7 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
         let mut is_dir = false;
         let mut modified: Option<i64> = None;
         let mut size: Option<u64> = None;
+        let mut display_name: Option<String> = None;
 
         for child in node.children() {
             if !child.is_element() {
@@ -258,6 +259,13 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
                             if let Some(t) = prop.text() {
                                 size = t.trim().parse::<u64>().ok();
                             }
+                        } else if name == "displayname" {
+                            if let Some(t) = prop.text() {
+                                let v = t.trim();
+                                if !v.is_empty() {
+                                    display_name = Some(v.to_string());
+                                }
+                            }
                         }
                     }
                 }
@@ -276,7 +284,10 @@ fn parse_propfind_response(text: &str, url: &str) -> Result<Vec<WebDavFile>, Str
         }
 
         let clean = href.trim_end_matches('/');
-        let name = percent_decode(clean.rsplit('/').next().unwrap_or(clean));
+        // displayname 优先（服务器返回的显示名已解码）；缺失时从 href 取并百分号解码
+        let name = display_name
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| percent_decode(clean.rsplit('/').next().unwrap_or(clean)));
 
         files.push(WebDavFile {
             url: full_url,
@@ -488,6 +499,24 @@ fn scan_from(
 
     songs.sort_by(|a, b| a.file_path.cmp(&b.file_path));
     Ok(songs)
+}
+
+/// 下载远程文件（带认证），返回字节。文件夹封面图片加载用。
+pub fn fetch_bytes(config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+    let client = build_client()?;
+    let headers = build_auth_headers(config);
+    let resp = client
+        .get(url)
+        .headers(headers)
+        .send()
+        .map_err(|e| format!("请求失败: {e}"))?;
+    let status = resp.status().as_u16();
+    if status != 200 && status != 206 {
+        return Err(format!("状态码 {status}"));
+    }
+    resp.bytes()
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("读取失败: {e}"))
 }
 
 /// 单首歌探测标签（后台补全用）。仅当探测成功且有时长时返回 Some。
@@ -1143,5 +1172,71 @@ mod title_tests {
         assert_eq!(fallback_title("https://host/dav/music/song.tar.m4a"), "song.tar");
         assert_eq!(fallback_title("https://host/dav/music/noext"), "noext");
         assert_eq!(fallback_title("https://host/dav/music/song.mp3?token=abc"), "song");
+    }
+}
+
+#[cfg(test)]
+mod displayname_tests {
+    use super::*;
+
+    const PROPFIND_WITH_DISPLAYNAME: &str = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/dav/music/%E9%9F%B3%E4%B9%90/</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:displayname>音乐</D:displayname>
+        <D:resourcetype><D:collection/></D:resourcetype>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/dav/music/track%201.mp3</D:href>
+    <D:propstat>
+      <D:prop>
+        <D:displayname>Track 1</D:displayname>
+      </D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>"#;
+
+    #[test]
+    fn displayname_takes_priority_over_href() {
+        let files = parse_propfind_response(PROPFIND_WITH_DISPLAYNAME, "https://host/dav/music/").unwrap();
+        assert_eq!(files.len(), 2);
+        // 目录用 displayname「音乐」，而不是 href 解码后的「%E9%9F%B3%E4%B9%90」
+        assert_eq!(files[0].name, "音乐");
+        assert!(files[0].is_directory);
+        // 文件用 displayname「Track 1」，而不是「track 1」
+        assert_eq!(files[1].name, "Track 1");
+        // URL 仍是编码形式，可直接播放
+        assert_eq!(files[1].url, "https://host/dav/music/track%201.mp3");
+    }
+
+    #[test]
+    fn falls_back_to_href_when_displayname_missing() {
+        // 无 displayname 时回退到 href 解码（URL 编码 → 可读名）
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<D:multistatus xmlns:D="DAV:">
+  <D:response>
+    <D:href>/dav/music/Album%20One/</D:href>
+    <D:propstat>
+      <D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+  <D:response>
+    <D:href>/dav/music/track%201.mp3</D:href>
+    <D:propstat>
+      <D:prop><D:getcontentlength>100</D:getcontentlength></D:prop>
+      <D:status>HTTP/1.1 200 OK</D:status>
+    </D:propstat>
+  </D:response>
+</D:multistatus>"#;
+        let files = parse_propfind_response(xml, "https://host/dav/music/").unwrap();
+        assert_eq!(files[0].name, "Album One");
+        assert_eq!(files[1].name, "track 1.mp3");
     }
 }
