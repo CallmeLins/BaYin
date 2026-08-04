@@ -99,6 +99,8 @@ fn default_batch_size() -> usize {
 pub struct StreamScanOptions {
     /// Server ID to scan (if None, scan all enabled servers)
     pub server_id: Option<String>,
+    /// 是否读取音频标签（true=完整扫描逐首探测；false/None=快速扫描仅文件名入库）
+    pub read_tags: Option<bool>,
 }
 
 /// Extended song info with file modification time

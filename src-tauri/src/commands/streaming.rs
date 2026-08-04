@@ -13,16 +13,18 @@ use crate::utils::{jellyfin, subsonic, webdav};
 ///
 /// `existing_modified`: WebDAV 增量同步用（song_id → 已入库的修改时间）
 /// `progress`: WebDAV 扫描进度通道（已处理数, 总数）
+/// `read_tags`: true=逐首探测标签；false=快速扫描（文件名入库）
 pub async fn fetch_stream_songs_internal(
     config: &StreamServerConfig,
     cover_cache: Option<&crate::utils::cover::CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<std::sync::mpsc::Sender<(usize, usize)>>,
+    read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
     if config.is_subsonic() {
         subsonic::fetch_all_songs(config).await
     } else if config.is_webdav() {
-        webdav::fetch_all_songs(config, cover_cache, existing_modified, progress).await
+        webdav::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags).await
     } else {
         jellyfin::fetch_all_songs(config).await
     }
@@ -60,7 +62,7 @@ pub async fn fetch_stream_songs(
     cover_cache: State<'_, CoverCacheState>,
 ) -> Result<Vec<ScannedSong>, String> {
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
-    fetch_stream_songs_internal(&config, Some(&cache), None, None).await
+    fetch_stream_songs_internal(&config, Some(&cache), None, None, false).await
 }
 
 /// 获取流媒体歌曲的流 URL
@@ -451,6 +453,22 @@ pub async fn webdav_scan_dir_to_db(
         let _ = app.emit("library-updated", ());
         Ok(saved)
     }
+}
+
+/// 回写流媒体歌曲的播放时长（快速扫描的歌播放后补齐，仅 WebDAV/流媒体）
+#[tauri::command]
+pub fn update_stream_song_duration(
+    db: State<'_, DbState>,
+    server_id: String,
+    song_id: String,
+    duration: f64,
+) -> Result<usize, String> {
+    if duration <= 0.0 {
+        return Ok(0);
+    }
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::songs::update_song_duration_by_server(&conn, &server_id, &song_id, duration)
+        .map_err(|e| e.to_string())
 }
 
 /// 统计 WebDAV 歌曲本地缓存占用

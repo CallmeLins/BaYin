@@ -530,6 +530,20 @@ pub fn get_server_song_ids_by_url(
     rows.collect::<Result<Vec<_>>>()
 }
 
+/// 按 server_id + server_song_id 回写播放时长（快速扫描的歌播放后补齐时长）
+pub fn update_song_duration_by_server(
+    conn: &Connection,
+    server_id: &str,
+    server_song_id: &str,
+    duration: f64,
+) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET duration = ?3, updated_at = strftime('%s','now')
+         WHERE server_id = ?1 AND server_song_id = ?2 AND ABS(duration - ?3) > 1",
+        params![server_id, server_song_id, duration],
+    )
+}
+
 /// 更新单个歌曲的远程 URL（WebDAV 重命名/移动文件时同步）
 pub fn rename_server_song_id(
     conn: &Connection,

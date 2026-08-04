@@ -344,17 +344,19 @@ fn parse_http_date(s: &str) -> Option<i64> {
 /// 递归扫描并返回所有音频文件（限制深度避免循环）。
 /// 阻塞逻辑必须在阻塞线程执行，否则 tokio 会 panic。
 /// `progress`: 可选进度回调通道（已处理数, 总数）。
+/// `read_tags`: true=逐首探测标签；false=快速扫描（仅文件名）。
 pub async fn fetch_all_songs(
     config: &StreamServerConfig,
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<ProgressSender<(usize, usize)>>,
+    read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
     let cfg = config.clone();
     let cache = cover_cache.cloned();
     let existing = existing_modified.cloned();
     tauri::async_runtime::spawn_blocking(move || {
-        fetch_all_songs_blocking(&cfg, cache.as_ref(), existing.as_ref(), progress)
+        fetch_all_songs_blocking(&cfg, cache.as_ref(), existing.as_ref(), progress, read_tags)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -365,6 +367,7 @@ fn fetch_all_songs_blocking(
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<ProgressSender<(usize, usize)>>,
+    read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
     let client = build_client()?;
     let headers = build_auth_headers(config);
@@ -380,10 +383,11 @@ fn fetch_all_songs_blocking(
         cover_cache,
         existing_modified,
         progress,
+        read_tags,
     )
 }
 
-/// 从指定目录 URL 递归扫描（文件夹浏览“加入音乐库”用）
+/// 从指定目录 URL 递归扫描（文件夹浏览“加入音乐库”用，默认快速模式）
 pub fn scan_dir(
     config: &StreamServerConfig,
     cover_cache: Option<&CoverCache>,
@@ -402,10 +406,11 @@ pub fn scan_dir(
         cover_cache,
         existing_modified,
         progress,
+        false,
     )
 }
 
-/// 核心扫描：BFS 列目录 + 并行读取元数据
+/// 核心扫描：BFS 列目录 + （可选）并行读取元数据
 fn scan_from(
     client: &Client,
     headers: &HeaderMap,
@@ -414,6 +419,7 @@ fn scan_from(
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<ProgressSender<(usize, usize)>>,
+    read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
     // BFS 扫描目录
     let mut queue = VecDeque::new();
@@ -446,7 +452,16 @@ fn scan_from(
         }
     }
 
-    // 并行读取元数据（复用同一 HTTP 连接池，避免慢网速下重复 TLS 握手）
+    // 快速模式：仅文件名入库，不下载任何音频数据（慢网速下秒级完成）
+    if !read_tags {
+        let songs: Vec<ScannedSong> = audio_urls
+            .iter()
+            .map(|(url, modified)| fallback_song_with_modified(url, *modified))
+            .collect();
+        return Ok(songs);
+    }
+
+    // 完整模式：并行读取元数据（复用同一 HTTP 连接池，避免慢网速下重复 TLS 握手）
     let pool = rayon::ThreadPoolBuilder::new()
         .num_threads(8)
         .build()

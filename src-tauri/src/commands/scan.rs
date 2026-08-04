@@ -463,6 +463,7 @@ pub async fn scan_stream_to_db(
             Some(&cache_arc),
             Some(&existing_modified),
             Some(progress_tx),
+            options.read_tags.unwrap_or(false),
         )
         .await {
             Ok(songs) => songs,
