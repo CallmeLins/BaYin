@@ -544,6 +544,52 @@ pub fn update_song_duration_by_server(
     )
 }
 
+/// 查询需要补全标签的流媒体歌曲（duration = 0），返回 (库内 id, server_song_id)
+pub fn get_stream_songs_needing_tags(
+    conn: &Connection,
+    server_id: &str,
+) -> Result<Vec<(String, String)>> {
+    let mut stmt = conn.prepare(
+        "SELECT id, server_song_id FROM songs
+         WHERE server_id = ?1 AND duration <= 0 AND server_song_id IS NOT NULL",
+    )?;
+    let rows = stmt.query_map(params![server_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })?;
+    rows.collect::<Result<Vec<_>>>()
+}
+
+/// 用探测结果更新歌曲标签（仅当库内时长仍为 0，避免覆盖已补全的数据）
+pub fn update_song_tags(
+    conn: &Connection,
+    id: &str,
+    song: &crate::models::ScannedSong,
+) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET
+            title = ?2, artist = ?3, album = ?4, duration = ?5,
+            format = COALESCE(?6, format), bit_depth = COALESCE(?7, bit_depth),
+            sample_rate = COALESCE(?8, sample_rate), bitrate = COALESCE(?9, bitrate),
+            channels = COALESCE(?10, channels),
+            cover_hash = COALESCE(?11, cover_hash),
+            updated_at = strftime('%s','now')
+         WHERE id = ?1 AND duration <= 0",
+        params![
+            id,
+            song.title,
+            song.artist,
+            song.album,
+            song.duration,
+            song.format,
+            song.bit_depth.map(|d| d as i64),
+            song.sample_rate.map(|s| s as i64),
+            song.bitrate.map(|b| b as i64),
+            song.channels.map(|c| c as i64),
+            song.cover_hash,
+        ],
+    )
+}
+
 /// 更新单个歌曲的远程 URL（WebDAV 重命名/移动文件时同步）
 pub fn rename_server_song_id(
     conn: &Connection,

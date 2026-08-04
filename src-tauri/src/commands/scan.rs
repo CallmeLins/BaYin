@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use rayon::prelude::*;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use walkdir::WalkDir;
 
 use crate::commands::CoverCacheState;
@@ -592,6 +592,27 @@ pub async fn scan_stream_to_db(
                 errors: total_errors,
             },
         );
+
+        // 快速扫描后自动后台补全 WebDAV 元数据（不阻塞扫描返回）
+        if config.is_webdav() {
+            let backfill_app = app.clone();
+            let backfill_server_id = server.id.clone();
+            let _ = tauri::async_runtime::spawn(async move {
+                let db_state = backfill_app.state::<DbState>();
+                let cover_state = backfill_app.state::<CoverCacheState>();
+                match crate::commands::streaming::webdav_backfill_metadata(
+                    backfill_app.clone(),
+                    db_state,
+                    cover_state,
+                    backfill_server_id,
+                )
+                .await
+                {
+                    Ok(n) => log::info!("[WebDAV] 后台补全标签 {n} 首"),
+                    Err(e) => log::warn!("[WebDAV] 后台补全标签失败: {e}"),
+                }
+            });
+        }
     }
 
     // Get final count

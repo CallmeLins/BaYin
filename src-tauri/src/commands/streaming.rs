@@ -334,6 +334,65 @@ pub async fn webdav_upload(
     Ok(target)
 }
 
+/// 后台补全 WebDAV 歌曲标签（快速扫描入库后自动调用），返回更新的歌曲数
+#[tauri::command]
+pub async fn webdav_backfill_metadata(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+    cover_cache: State<'_, CoverCacheState>,
+    server_id: String,
+) -> Result<usize, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Ok(0);
+    }
+
+    // 查需要补全的歌曲（duration = 0）
+    let pending = {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::get_stream_songs_needing_tags(&conn, &server_id).map_err(|e| e.to_string())?
+    };
+    if pending.is_empty() {
+        return Ok(0);
+    }
+
+    // 探测放阻塞线程（复用连接池 + 8 并发），DB 更新回到 async 上下文
+    let cache_arc = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
+    let cfg = config.clone();
+    let results = tauri::async_runtime::spawn_blocking(move || {
+        use rayon::prelude::*;
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(8)
+            .build()
+            .map_err(|e| e.to_string())?;
+        let results: Vec<(String, Option<crate::models::ScannedSong>)> = pool.install(|| {
+            pending
+                .par_iter()
+                .map(|(id, url)| (id.clone(), webdav::probe_song(&cfg, Some(&cache_arc), url)))
+                .collect()
+        });
+        Ok::<_, String>(results)
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+
+    let mut updated = 0;
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        for (id, song) in &results {
+            if let Some(song) = song {
+                if db::songs::update_song_tags(&conn, id, song).map_err(|e| e.to_string())? > 0 {
+                    updated += 1;
+                }
+            }
+        }
+    }
+    if updated > 0 {
+        let _ = app.emit("library-updated", ());
+    }
+    Ok(updated)
+}
+
 /// 将 WebDAV 指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。
 /// 只增不删，已存在的歌曲（同 URL）会更新并保留播放统计。
 #[tauri::command]

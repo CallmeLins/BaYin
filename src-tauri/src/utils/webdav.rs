@@ -490,6 +490,18 @@ fn scan_from(
     Ok(songs)
 }
 
+/// 单首歌探测标签（后台补全用）。仅当探测成功且有时长时返回 Some。
+pub fn probe_song(
+    config: &StreamServerConfig,
+    cover_cache: Option<&CoverCache>,
+    url: &str,
+) -> Option<ScannedSong> {
+    let client = build_client().ok()?;
+    let headers = build_auth_headers(config);
+    let song = read_remote_song(&client, &headers, config, url, None, cover_cache, None);
+    (song.duration > 0.0).then_some(song)
+}
+
 /// 读取远程歌曲元数据：下载文件头部到临时文件后用 lofty 解析。
 /// 用 `Read::take` 限制读取量，即使服务器忽略 Range 也不会全量下载大文件。
 /// 若文件修改时间未变（增量同步），跳过下载直接返回文件名级数据。
