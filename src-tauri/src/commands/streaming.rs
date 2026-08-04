@@ -12,15 +12,17 @@ use crate::utils::{jellyfin, subsonic, webdav};
 /// 从流媒体服务器获取所有歌曲（内部函数）
 ///
 /// `existing_modified`: WebDAV 增量同步用（song_id → 已入库的修改时间）
+/// `progress`: WebDAV 扫描进度通道（已处理数, 总数）
 pub async fn fetch_stream_songs_internal(
     config: &StreamServerConfig,
     cover_cache: Option<&crate::utils::cover::CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
+    progress: Option<std::sync::mpsc::Sender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
     if config.is_subsonic() {
         subsonic::fetch_all_songs(config).await
     } else if config.is_webdav() {
-        webdav::fetch_all_songs(config, cover_cache, existing_modified).await
+        webdav::fetch_all_songs(config, cover_cache, existing_modified, progress).await
     } else {
         jellyfin::fetch_all_songs(config).await
     }
@@ -58,7 +60,7 @@ pub async fn fetch_stream_songs(
     cover_cache: State<'_, CoverCacheState>,
 ) -> Result<Vec<ScannedSong>, String> {
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
-    fetch_stream_songs_internal(&config, Some(&cache), None).await
+    fetch_stream_songs_internal(&config, Some(&cache), None, None).await
 }
 
 /// 获取流媒体歌曲的流 URL
@@ -360,7 +362,7 @@ pub async fn webdav_scan_dir_to_db(
     let cfg = config.clone();
     let url = dir_url.clone();
     let songs = tauri::async_runtime::spawn_blocking(move || {
-        webdav::scan_dir(&cfg, Some(&cache_arc), Some(&existing_modified), &url)
+        webdav::scan_dir(&cfg, Some(&cache_arc), Some(&existing_modified), &url, None)
     })
     .await
     .map_err(|e| e.to_string())??;

@@ -13,6 +13,8 @@ use rayon::prelude::*;
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE};
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc::Sender as ProgressSender;
 use std::time::Duration;
 
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
@@ -341,16 +343,18 @@ fn parse_http_date(s: &str) -> Option<i64> {
 
 /// 递归扫描并返回所有音频文件（限制深度避免循环）。
 /// 阻塞逻辑必须在阻塞线程执行，否则 tokio 会 panic。
+/// `progress`: 可选进度回调通道（已处理数, 总数）。
 pub async fn fetch_all_songs(
     config: &StreamServerConfig,
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
+    progress: Option<ProgressSender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
     let cfg = config.clone();
     let cache = cover_cache.cloned();
     let existing = existing_modified.cloned();
     tauri::async_runtime::spawn_blocking(move || {
-        fetch_all_songs_blocking(&cfg, cache.as_ref(), existing.as_ref())
+        fetch_all_songs_blocking(&cfg, cache.as_ref(), existing.as_ref(), progress)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -360,6 +364,7 @@ fn fetch_all_songs_blocking(
     config: &StreamServerConfig,
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
+    progress: Option<ProgressSender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
     let client = build_client()?;
     let headers = build_auth_headers(config);
@@ -367,7 +372,15 @@ fn fetch_all_songs_blocking(
     let base = parse_target(config).clean_base_url;
     let root_url = format!("{}{}", base, root);
 
-    scan_from(&client, &headers, config, &root_url, cover_cache, existing_modified)
+    scan_from(
+        &client,
+        &headers,
+        config,
+        &root_url,
+        cover_cache,
+        existing_modified,
+        progress,
+    )
 }
 
 /// 从指定目录 URL 递归扫描（文件夹浏览“加入音乐库”用）
@@ -376,11 +389,20 @@ pub fn scan_dir(
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
     dir_url: &str,
+    progress: Option<ProgressSender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
     let client = build_client()?;
     let headers = build_auth_headers(config);
     let root = dir_url.trim_end_matches('/');
-    scan_from(&client, &headers, config, root, cover_cache, existing_modified)
+    scan_from(
+        &client,
+        &headers,
+        config,
+        root,
+        cover_cache,
+        existing_modified,
+        progress,
+    )
 }
 
 /// 核心扫描：BFS 列目录 + 并行读取元数据
@@ -391,6 +413,7 @@ fn scan_from(
     root_url: &str,
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
+    progress: Option<ProgressSender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
     // BFS 扫描目录
     let mut queue = VecDeque::new();
@@ -423,16 +446,28 @@ fn scan_from(
         }
     }
 
-    // 并行读取元数据
+    // 并行读取元数据（复用同一 HTTP 连接池，避免慢网速下重复 TLS 握手）
     let pool = rayon::ThreadPoolBuilder::new()
-        .num_threads(4)
+        .num_threads(8)
         .build()
         .map_err(|e| e.to_string())?;
+
+    let total = audio_urls.len();
+    let done = AtomicUsize::new(0);
 
     let mut songs: Vec<ScannedSong> = pool.install(|| {
         audio_urls
             .par_iter()
-            .map(|(url, modified)| read_remote_song(config, url, *modified, cover_cache, existing_modified))
+            .map(|(url, modified)| {
+                let song = read_remote_song(client, headers, config, url, *modified, cover_cache, existing_modified);
+                if let Some(tx) = &progress {
+                    let n = done.fetch_add(1, Ordering::Relaxed) + 1;
+                    if n % 10 == 0 || n == total {
+                        let _ = tx.send((n, total));
+                    }
+                }
+                song
+            })
             .collect()
     });
 
@@ -444,7 +479,9 @@ fn scan_from(
 /// 用 `Read::take` 限制读取量，即使服务器忽略 Range 也不会全量下载大文件。
 /// 若文件修改时间未变（增量同步），跳过下载直接返回文件名级数据。
 fn read_remote_song(
-    config: &StreamServerConfig,
+    client: &Client,
+    headers: &HeaderMap,
+    _config: &StreamServerConfig,
     url: &str,
     modified: Option<i64>,
     cover_cache: Option<&CoverCache>,
@@ -459,12 +496,6 @@ fn read_remote_song(
 
     use std::io::Read;
 
-    let client = match build_client() {
-        Ok(c) => c,
-        Err(_) => return fallback_song(url),
-    };
-    let headers = build_auth_headers(config);
-
     let tmp_dir = std::env::temp_dir();
     let tmp_path = tmp_dir.join(format!("bayin-probe-{:x}.bin", hash_url(url)));
     let mut tmp_file = match std::fs::File::create(&tmp_path) {
@@ -474,7 +505,7 @@ fn read_remote_song(
 
     let resp = match client
         .get(url)
-        .headers(headers)
+        .headers(headers.clone())
         .header("Range", format!("bytes=0-{}", METADATA_PROBE_BYTES - 1))
         .send()
     {

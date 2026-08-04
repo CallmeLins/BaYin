@@ -437,11 +437,32 @@ pub async fn scan_stream_to_db(
         // 先取出封面缓存 Arc 并释放锁，避免非 Send 的 MutexGuard 跨越 await
         let cache_arc = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
 
+        // WebDAV 扫描进度：把 (已处理, 总数) 转发为前端 scan-progress 事件
+        let (progress_tx, progress_rx) = std::sync::mpsc::channel::<(usize, usize)>();
+        let progress_app = app.clone();
+        let progress_server_name = server.server_name.clone();
+        let progress_task = tauri::async_runtime::spawn_blocking(move || {
+            while let Ok((processed, total)) = progress_rx.recv() {
+                let _ = progress_app.emit(
+                    "scan-progress",
+                    ScanProgress {
+                        phase: ScanPhase::Scanning,
+                        total,
+                        processed,
+                        current_file: Some(progress_server_name.clone()),
+                        skipped: 0,
+                        errors: 0,
+                    },
+                );
+            }
+        });
+
         // Fetch songs from server
         let stream_songs = match crate::commands::streaming::fetch_stream_songs_internal(
             &config,
             Some(&cache_arc),
             Some(&existing_modified),
+            Some(progress_tx),
         )
         .await {
             Ok(songs) => songs,
@@ -453,6 +474,8 @@ pub async fn scan_stream_to_db(
                 continue;
             }
         };
+        // 扫描结束：结束进度转发任务
+        progress_task.abort();
 
         // Preserve existing cached covers for this server.
         // Stream songs are frequently delete-and-reinserted, so without this we would lose
