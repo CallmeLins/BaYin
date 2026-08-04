@@ -648,8 +648,10 @@ fn parse_probe_file(
 fn fallback_title(url: &str) -> String {
     let path = url.split('?').next().unwrap_or(url);
     let name = path.rsplit('/').next().unwrap_or(path);
-    let name = name.rsplit('.').next().unwrap_or(name);
-    name.to_string()
+    // 去掉最后一个扩展名（song.m4a → song；song.tar.m4a → song.tar；无点时保留原名）
+    let name = name.rsplit_once('.').map(|(base, _)| base).unwrap_or(name);
+    // 解码 URL 编码（%20 → 空格等）
+    percent_decode(name)
 }
 
 fn fallback_song(url: &str) -> ScannedSong {
@@ -1127,5 +1129,19 @@ mod lyrics_tests {
             lrc_sidecar_url("https://host/dav/music.v2/song"),
             "https://host/dav/music.v2/song.lrc"
         );
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+
+    #[test]
+    fn fallback_title_strips_extension() {
+        assert_eq!(fallback_title("https://host/dav/music/周杰伦-晴天.m4a"), "周杰伦-晴天");
+        assert_eq!(fallback_title("https://host/dav/music/track%201.flac"), "track 1");
+        assert_eq!(fallback_title("https://host/dav/music/song.tar.m4a"), "song.tar");
+        assert_eq!(fallback_title("https://host/dav/music/noext"), "noext");
+        assert_eq!(fallback_title("https://host/dav/music/song.mp3?token=abc"), "song");
     }
 }
