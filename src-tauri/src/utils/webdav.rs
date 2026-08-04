@@ -131,8 +131,20 @@ fn build_client() -> Result<Client, String> {
         .map_err(|e| format!("Failed to create HTTP client: {e}"))
 }
 
-/// PROPFIND 深度 0，测试连接是否可用
+/// PROPFIND 深度 0，测试连接是否可用。
+/// 注意：blocking 客户端必须在阻塞线程执行，否则 tokio 会 panic。
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || test_connection_blocking(&cfg))
+        .await
+        .unwrap_or_else(|_| ConnectionTestResult {
+            success: false,
+            message: "连接测试任务失败".to_string(),
+            server_version: None,
+        })
+}
+
+fn test_connection_blocking(config: &StreamServerConfig) -> ConnectionTestResult {
     let client = match build_client() {
         Ok(c) => c,
         Err(e) => {
@@ -327,8 +339,24 @@ fn parse_http_date(s: &str) -> Option<i64> {
         .map(|dt| dt.timestamp())
 }
 
-/// 递归扫描并返回所有音频文件（限制深度避免循环）
+/// 递归扫描并返回所有音频文件（限制深度避免循环）。
+/// 阻塞逻辑必须在阻塞线程执行，否则 tokio 会 panic。
 pub async fn fetch_all_songs(
+    config: &StreamServerConfig,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+) -> Result<Vec<ScannedSong>, String> {
+    let cfg = config.clone();
+    let cache = cover_cache.cloned();
+    let existing = existing_modified.cloned();
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_all_songs_blocking(&cfg, cache.as_ref(), existing.as_ref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn fetch_all_songs_blocking(
     config: &StreamServerConfig,
     cover_cache: Option<&CoverCache>,
     existing_modified: Option<&HashMap<String, i64>>,
