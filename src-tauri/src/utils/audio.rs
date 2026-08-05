@@ -76,6 +76,16 @@ pub fn read_lyrics(audio_path: &Path) -> Option<String> {
     }
 
     // 2. 尝试从音频文件读取内嵌歌词
+    if let Some(lyrics) = read_embedded_lyrics(audio_path) {
+        return Some(lyrics);
+    }
+
+    None
+}
+
+/// 从本地音频文件提取内嵌歌词（规范化后返回）。
+/// 供本地扫描与 WebDAV 远程探测共用。
+pub fn read_embedded_lyrics(audio_path: &Path) -> Option<String> {
     if let Ok(tagged_file) = Probe::open(audio_path).and_then(|p| p.read()) {
         // Prefer scanning all tags instead of just the primary tag, because FLAC can carry
         // multiple tag blocks (Vorbis comments, ID3v2, etc.), and lyrics may live in a non-primary tag.

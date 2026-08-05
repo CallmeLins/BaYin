@@ -15,6 +15,7 @@ use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYP
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender as ProgressSender;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
@@ -501,6 +502,67 @@ fn scan_from(
     Ok(songs)
 }
 
+/// 封面图片识别（与前端 isCoverImage 一致）：cover/folder/album/front/disk 前缀 + 图片扩展名
+fn is_cover_image_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let Some(dot) = lower.rfind('.') else { return false };
+    if dot == 0 {
+        return false;
+    }
+    let ext = &lower[dot + 1..];
+    let base = &lower[..dot];
+    const EXTS: &[&str] = &["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+    const PREFIXES: &[&str] = &["cover", "folder", "album", "front", "disk"];
+    EXTS.contains(&ext) && PREFIXES.iter().any(|p| base.starts_with(p))
+}
+
+fn mime_for_name(name: &str) -> &'static str {
+    match name.rsplit('.').next().unwrap_or("").to_lowercase().as_str() {
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => "image/jpeg",
+    }
+}
+
+/// 目录封面缓存（server_id|dir → data URL），避免重复 PROPFIND + 下载
+static FOLDER_COVER_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+
+/// 按歌曲 URL 解析其所在目录的封面图片（cover/folder/front...），返回 data URL。
+/// 带进程内缓存；库歌曲列表无内嵌封面时回退使用。
+pub fn folder_cover(
+    config: &StreamServerConfig,
+    server_id: &str,
+    song_url: &str,
+) -> Option<String> {
+    let dir = song_url
+        .rsplit_once('/')
+        .map(|(d, _)| format!("{d}/"))
+        .unwrap_or_default();
+    let key = format!("{server_id}|{dir}");
+
+    let cache = FOLDER_COVER_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(v) = cache.lock().ok().and_then(|m| m.get(&key).cloned()) {
+        return v;
+    }
+
+    let result = (|| {
+        let entries = list_dir_entries(config, Some(&dir)).ok()?;
+        let cover = entries
+            .iter()
+            .find(|e| !e.is_directory && is_cover_image_name(&e.name))?;
+        let bytes = fetch_bytes(config, &cover.url).ok()?;
+        let mime = mime_for_name(&cover.name);
+        Some(format!("data:{mime};base64,{}", BASE64.encode(&bytes)))
+    })();
+
+    if let Ok(mut m) = cache.lock() {
+        m.insert(key, result.clone());
+    }
+    result
+}
+
 /// 下载远程文件（带认证），返回字节。文件夹封面图片加载用。
 pub fn fetch_bytes(config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
     let client = build_client()?;
@@ -744,7 +806,7 @@ fn lrc_sidecar_url(song_url: &str) -> String {
     }
 }
 
-/// 读取 WebDAV 歌曲的侧车 .lrc 歌词（同目录同名文件）
+/// 读取 WebDAV 歌曲的歌词：优先 .lrc 侧车文件，其次音频内嵌歌词。
 pub fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
     let client = build_client().ok()?;
     let headers = build_auth_headers(config);
@@ -752,19 +814,54 @@ pub fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> 
 
     let resp = client.get(&url).headers(headers).send().ok()?;
     let status = resp.status().as_u16();
-    if status != 200 && status != 206 {
-        return None;
+    if status == 200 || status == 206 {
+        let text = resp.text().ok()?;
+        let trimmed = text.trim_start();
+        // 过滤空文件或 HTML 错误页
+        if !trimmed.is_empty()
+            && !trimmed.starts_with("<!DOCTYPE")
+            && !trimmed.starts_with("<html")
+        {
+            return Some(text);
+        }
     }
-    let text = resp.text().ok()?;
-    let trimmed = text.trim_start();
-    // 过滤空文件或 HTML 错误页
-    if trimmed.is_empty()
-        || trimmed.starts_with("<!DOCTYPE")
-        || trimmed.starts_with("<html")
-    {
-        return None;
-    }
-    Some(text)
+
+    // 无 .lrc 侧车：探测音频头部解析内嵌歌词
+    probe_embedded_lyrics(config, song_id)
+}
+
+/// 下载文件头部并解析内嵌歌词（USLT / Vorbis 注释等）
+fn probe_embedded_lyrics(config: &StreamServerConfig, song_url: &str) -> Option<String> {
+    use std::io::Read;
+
+    let client = build_client().ok()?;
+    let headers = build_auth_headers(config);
+    let tmp_dir = std::env::temp_dir();
+    let tmp_path = tmp_dir.join(format!("bayin-lyrics-{:x}.bin", hash_url(song_url)));
+    let mut tmp_file = std::fs::File::create(&tmp_path).ok()?;
+
+    let resp = client
+        .get(song_url)
+        .headers(headers)
+        .header("Range", format!("bytes=0-{}", METADATA_PROBE_BYTES - 1))
+        .send()
+        .ok()?;
+    let status = resp.status().as_u16();
+    let ok = if status == 200 || status == 206 {
+        let mut limited = resp.take(METADATA_PROBE_BYTES);
+        std::io::copy(&mut limited, &mut tmp_file).is_ok()
+    } else {
+        false
+    };
+    drop(tmp_file);
+
+    let lyrics = if ok {
+        crate::utils::audio::read_embedded_lyrics(&tmp_path)
+    } else {
+        None
+    };
+    let _ = std::fs::remove_file(&tmp_path);
+    lyrics
 }
 
 /// WebDAV 缓存统计

@@ -166,6 +166,27 @@ pub async fn webdav_image(
         .map_err(|e| e.to_string())?
 }
 
+/// 按歌曲 URL 返回其所在目录的封面（folder.jpg 等），无则 None。
+/// 结果带进程内缓存；供歌曲列表无内嵌封面时回退显示。
+#[tauri::command]
+pub async fn webdav_folder_cover(
+    db: State<'_, DbState>,
+    server_id: String,
+    song_url: String,
+) -> Result<Option<String>, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    if !config.is_webdav() {
+        return Ok(None);
+    }
+    let cfg = config.clone();
+    let sid = server_id.clone();
+    let url = song_url.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || webdav::folder_cover(&cfg, &sid, &url))
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(result)
+}
+
 /// 获取 WebDAV 服务器的根目录 URL（初始目录）
 #[tauri::command]
 pub async fn webdav_root_url(
