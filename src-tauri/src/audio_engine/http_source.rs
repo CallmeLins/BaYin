@@ -167,6 +167,11 @@ impl HttpStreamSource {
 
         let status = resp.status().as_u16();
         if status != 200 && status != 206 {
+            log::warn!(
+                "[HttpStream] 打开 {} 失败，状态码 {}",
+                url.chars().take(120).collect::<String>(),
+                status
+            );
             return Err(format!("HTTP request failed with status {}", status));
         }
 

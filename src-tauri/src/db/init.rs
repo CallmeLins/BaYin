@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, Result};
 use serde_json::json;
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 11;
+const CURRENT_SCHEMA_VERSION: i32 = 12;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -66,6 +66,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 11 {
         migrate_v11(conn)?;
+    }
+    if from_version < 12 {
+        migrate_v12(conn)?;
     }
 
     Ok(())
@@ -363,6 +366,22 @@ fn migrate_v11(conn: &Connection) -> Result<()> {
     }
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [11])?;
+    Ok(())
+}
+
+/// Version 12: Add lyrics column for stream song lyrics cache.
+fn migrate_v12(conn: &Connection) -> Result<()> {
+    let mut stmt = conn.prepare("PRAGMA table_info(songs)")?;
+    let has_lyrics = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .filter_map(|row| row.ok())
+        .any(|name| name == "lyrics");
+
+    if !has_lyrics {
+        conn.execute("ALTER TABLE songs ADD COLUMN lyrics TEXT", [])?;
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [12])?;
     Ok(())
 }
 

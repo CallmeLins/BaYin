@@ -529,12 +529,51 @@ fn mime_for_name(name: &str) -> &'static str {
 /// 目录封面缓存（server_id|dir → data URL），避免重复 PROPFIND + 下载
 static FOLDER_COVER_CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
 
+fn folder_cover_hash(dir: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(dir.as_bytes());
+    format!("{:x}", hasher.finalize())[..24].to_string()
+}
+
+/// 从磁盘缓存读取目录封面（重启后仍可用）
+fn read_cached_folder_cover(root: &std::path::Path, dir: &str) -> Option<String> {
+    let hash = folder_cover_hash(dir);
+    let dir_path = root.join("webdav_covers");
+    let entry = std::fs::read_dir(&dir_path).ok()?.find_map(|e| {
+        let p = e.ok()?.path();
+        (p.file_stem().and_then(|s| s.to_str()) == Some(hash.as_str())).then_some(p)
+    })?;
+    let bytes = std::fs::read(&entry).ok()?;
+    let name = entry.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let mime = mime_for_name(name);
+    Some(format!("data:{mime};base64,{}", BASE64.encode(&bytes)))
+}
+
+/// 写入磁盘缓存
+fn write_cached_folder_cover(
+    root: &std::path::Path,
+    dir: &str,
+    bytes: &[u8],
+    cover_name: &str,
+) {
+    let hash = folder_cover_hash(dir);
+    let dir_path = root.join("webdav_covers");
+    let _ = std::fs::create_dir_all(&dir_path);
+    let ext = cover_name
+        .rsplit('.')
+        .next()
+        .unwrap_or("jpg")
+        .to_lowercase();
+    let _ = std::fs::write(dir_path.join(format!("{hash}.{ext}")), bytes);
+}
+
 /// 按歌曲 URL 解析其所在目录的封面图片（cover/folder/front...），返回 data URL。
-/// 带进程内缓存；库歌曲列表无内嵌封面时回退使用。
+/// 带进程内缓存 + 磁盘持久缓存；库歌曲列表无内嵌封面时回退使用。
 pub fn folder_cover(
     config: &StreamServerConfig,
     server_id: &str,
     song_url: &str,
+    cache_root: Option<&std::path::Path>,
 ) -> Option<String> {
     let dir = song_url
         .rsplit_once('/')
@@ -547,6 +586,16 @@ pub fn folder_cover(
         return v;
     }
 
+    // 磁盘持久缓存（重启后直接命中，无需再请求服务器）
+    if let Some(root) = cache_root {
+        if let Some(v) = read_cached_folder_cover(root, &dir) {
+            if let Ok(mut m) = cache.lock() {
+                m.insert(key, Some(v.clone()));
+            }
+            return Some(v);
+        }
+    }
+
     let result = (|| {
         let entries = list_dir_entries(config, Some(&dir)).ok()?;
         let cover = entries
@@ -554,7 +603,11 @@ pub fn folder_cover(
             .find(|e| !e.is_directory && is_cover_image_name(&e.name))?;
         let bytes = fetch_bytes(config, &cover.url).ok()?;
         let mime = mime_for_name(&cover.name);
-        Some(format!("data:{mime};base64,{}", BASE64.encode(&bytes)))
+        let data_url = format!("data:{mime};base64,{}", BASE64.encode(&bytes));
+        if let Some(root) = cache_root {
+            write_cached_folder_cover(root, &dir, &bytes, &cover.name);
+        }
+        Some(data_url)
     })();
 
     if let Ok(mut m) = cache.lock() {

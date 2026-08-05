@@ -50,7 +50,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 
 # 音频引擎
 symphonia = { version = "0.5", features = [
-    "mp3", "flac", "wav", "pcm", "ogg", "vorbis", "aac", "isomp4", "aiff"
+    "mp3", "flac", "wav", "pcm", "ogg", "vorbis", "aac", "isomp4", "aiff", "alac"
 ] }
 cpal = "0.15"
 rustfft = "6.2"

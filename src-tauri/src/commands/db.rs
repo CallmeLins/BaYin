@@ -203,6 +203,7 @@ pub fn db_migrate_from_localstorage(
             sample_rate: None,
             bitrate: None,
             channels: None,
+            lyrics: None,
             created_at: None,
         };
 

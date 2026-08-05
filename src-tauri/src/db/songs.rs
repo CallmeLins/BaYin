@@ -91,6 +91,9 @@ pub struct SongInput {
     pub bitrate: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channels: Option<u8>,
+    /// 歌词缓存（流媒体歌曲获取一次后入库，清库时清除）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lyrics: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<i64>,
 }
@@ -404,9 +407,10 @@ pub fn save_songs(
              (id, title, artist, album, duration, file_path, file_size,
               is_hr, is_sq, cover_hash, source_type, server_id, server_song_id,
               stream_info, file_modified, format, bit_depth, sample_rate, bitrate, channels,
-              created_at, updated_at)
+              lyrics, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20,
-                     COALESCE(?21, strftime('%s','now')),
+                     ?21,
+                     COALESCE(?22, strftime('%s','now')),
                      strftime('%s','now'))
              ON CONFLICT(id) DO UPDATE SET
               title = excluded.title,
@@ -429,6 +433,7 @@ pub fn save_songs(
               bitrate = excluded.bitrate,
               channels = excluded.channels,
               updated_at = excluded.updated_at"
+            // 注意：lyrics 不在 DO UPDATE 列表里，重新扫描时保留已缓存的歌词
         )?;
 
         for song in songs {
@@ -453,6 +458,7 @@ pub fn save_songs(
                 song.sample_rate,
                 song.bitrate,
                 song.channels,
+                song.lyrics,
                 song.created_at,
             ])?;
         }
@@ -587,6 +593,37 @@ pub fn update_song_tags(
             song.channels.map(|c| c as i64),
             song.cover_hash,
         ],
+    )
+}
+
+/// 查询流媒体歌曲缓存的歌词
+pub fn get_lyrics_by_song(
+    conn: &Connection,
+    server_id: &str,
+    server_song_id: &str,
+) -> Result<Option<String>> {
+    conn.query_row(
+        "SELECT lyrics FROM songs WHERE server_id = ?1 AND server_song_id = ?2 AND lyrics IS NOT NULL",
+        params![server_id, server_song_id],
+        |row| row.get::<_, Option<String>>(0),
+    )
+    .or_else(|e| match e {
+        rusqlite::Error::QueryReturnedNoRows => Ok(None),
+        other => Err(other),
+    })
+}
+
+/// 保存流媒体歌曲歌词缓存
+pub fn save_lyrics(
+    conn: &Connection,
+    server_id: &str,
+    server_song_id: &str,
+    lyrics: &str,
+) -> Result<usize> {
+    conn.execute(
+        "UPDATE songs SET lyrics = ?3, updated_at = strftime('%s','now')
+         WHERE server_id = ?1 AND server_song_id = ?2",
+        params![server_id, server_song_id, lyrics],
     )
 }
 

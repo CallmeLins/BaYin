@@ -275,6 +275,7 @@ impl AudioThreadState {
         let dec = match AudioDecoder::open_with_headers(source, headers) {
             Ok(d) => d,
             Err(e) => {
+                log::warn!("[AudioEngine] 打开音源失败: {}", e);
                 let _ = app_handle.emit("audio:error", ErrorPayload { message: e });
                 return false;
             }

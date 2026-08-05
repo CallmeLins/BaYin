@@ -167,10 +167,11 @@ pub async fn webdav_image(
 }
 
 /// 按歌曲 URL 返回其所在目录的封面（folder.jpg 等），无则 None。
-/// 结果带进程内缓存；供歌曲列表无内嵌封面时回退显示。
+/// 结果带进程内缓存 + 磁盘持久缓存；供歌曲列表无内嵌封面时回退显示。
 #[tauri::command]
 pub async fn webdav_folder_cover(
     db: State<'_, DbState>,
+    cache_root: State<'_, crate::commands::CacheRootState>,
     server_id: String,
     song_url: String,
 ) -> Result<Option<String>, String> {
@@ -181,9 +182,12 @@ pub async fn webdav_folder_cover(
     let cfg = config.clone();
     let sid = server_id.clone();
     let url = song_url.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || webdav::folder_cover(&cfg, &sid, &url))
-        .await
-        .map_err(|e| e.to_string())?;
+    let root = cache_root.0.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        webdav::folder_cover(&cfg, &sid, &url, Some(&root))
+    })
+    .await
+    .map_err(|e| e.to_string())?;
     Ok(result)
 }
 
@@ -535,6 +539,7 @@ pub async fn webdav_scan_dir_to_db(
                 sample_rate: s.sample_rate,
                 bitrate: s.bitrate,
                 channels: s.channels,
+                lyrics: None,
                 created_at: s.created_at.or(existing_created_ats.get(&id).copied()),
             }
         })
@@ -653,6 +658,7 @@ pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> O
 }
 
 /// 获取流媒体歌曲歌词（按已保存的服务器配置）
+/// 歌词获取一次后存入数据库缓存，重新扫描/重启不丢失，仅清库时清除。
 #[tauri::command]
 pub async fn get_stream_lyrics_by_server(
     db: State<'_, DbState>,
@@ -660,7 +666,19 @@ pub async fn get_stream_lyrics_by_server(
     song_id: String,
 ) -> Result<Option<String>, String> {
     let config = load_stream_config(&db, &server_id)?;
-    Ok(if config.is_subsonic() {
+
+    // 1. DB 缓存命中直接返回
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        if let Some(cached) = db::songs::get_lyrics_by_song(&conn, &server_id, &song_id)
+            .map_err(|e| e.to_string())?
+        {
+            return Ok(Some(cached));
+        }
+    }
+
+    // 2. 未缓存则从服务器获取
+    let lyrics = if config.is_subsonic() {
         subsonic::get_lyrics(&config, &song_id).await
     } else if config.is_webdav() {
         let cfg = config.clone();
@@ -671,7 +689,14 @@ pub async fn get_stream_lyrics_by_server(
             .flatten()
     } else {
         jellyfin::get_lyrics(&config, &song_id).await
-    })
+    };
+
+    // 3. 获取成功则写入缓存
+    if let Some(l) = &lyrics {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        db::songs::save_lyrics(&conn, &server_id, &song_id, l).map_err(|e| e.to_string())?;
+    }
+    Ok(lyrics)
 }
 
 /// Jellyfin/Emby 认证并返回 token 和 userId

@@ -241,6 +241,7 @@ pub mod desktop {
                             sample_rate: song.sample_rate,
                             bitrate: song.bitrate,
                             channels: song.channels,
+                            lyrics: None,
                             created_at: None,
                         }
                     })

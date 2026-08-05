@@ -209,6 +209,7 @@ pub async fn scan_local_to_db(
                         sample_rate: song.sample_rate,
                         bitrate: song.bitrate,
                         channels: song.channels,
+                        lyrics: None,
                         created_at: None,
                     })
                 }
@@ -562,6 +563,7 @@ pub async fn scan_stream_to_db(
                     sample_rate: s.sample_rate,
                     bitrate: s.bitrate,
                     channels: s.channels,
+                    lyrics: None,
                     created_at: s
                         .created_at
                         .or(existing_created_ats.get(&id).copied()),
