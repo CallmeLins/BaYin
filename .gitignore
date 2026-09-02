@@ -26,6 +26,8 @@ dist-ssr
 .codex/
 .claude/
 .gemini/
+.workbuddy/
+Docs/
 
 # Tauri
 src-tauri/target/

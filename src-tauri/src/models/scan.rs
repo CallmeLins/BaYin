@@ -37,6 +37,8 @@ pub struct ScanProgress {
 pub enum ScanPhase {
     /// Collecting files from directories
     Collecting,
+    /// 断点续扫：从上次保存的扫描状态继续（source/scan 与 scan_resume 表）
+    Resuming,
     /// Checking for changes (incremental mode)
     Checking,
     /// Reading metadata
@@ -87,6 +89,11 @@ pub struct LocalScanOptions {
     /// Batch size for database writes
     #[serde(default = "default_batch_size")]
     pub batch_size: usize,
+    /// 是否允许断点续扫：为 true 时，若存在未完成的 `scan_resume`
+    /// 记录则从上次中断点继续（发出 Resuming 相位并复用上次收集到的
+    /// 待处理文件清单），否则退化为普通扫描并建立新断点。
+    #[serde(default)]
+    pub resume: bool,
 }
 
 fn default_batch_size() -> usize {

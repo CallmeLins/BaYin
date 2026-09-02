@@ -2,6 +2,7 @@ mod audio_engine;
 mod commands;
 mod playback;
 mod playback_control;
+mod source;
 
 #[cfg(target_os = "windows")]
 mod taskbar_thumbnail_toolbar_windows;
@@ -59,6 +60,19 @@ use commands::{
     db_get_discovery_songs,
     fetch_stream_songs,
     fetch_subsonic_songs,
+    scan_resume_status,
+    scan_resume_clear,
+    scan_resume_clear_all,
+    list_trusted_hosts,
+    upsert_trusted_host,
+    remove_trusted_host,
+    get_range_cache_status,
+    set_range_cache_config,
+    clear_range_cache,
+    migrate_stream_credentials,
+    get_credential_migration_status,
+    webdav_write_cover,
+    webdav_write_lyrics,
     get_cover_cache_stats,
     // Cover cache commands
     get_cover_url,
@@ -160,10 +174,28 @@ pub fn run() {
 
     builder
         .invoke_handler(tauri::generate_handler![
-            scan_music_files,
-            get_music_metadata,
-            get_lyrics,
-            list_directories,
+    scan_music_files,
+    get_music_metadata,
+    get_lyrics,
+    list_directories,
+            // 断点恢复扫描
+            scan_resume_status,
+            scan_resume_clear,
+            scan_resume_clear_all,
+            // 受信任主机
+            list_trusted_hosts,
+            upsert_trusted_host,
+            remove_trusted_host,
+            // 按需缓存（Range 稀疏缓存）
+            get_range_cache_status,
+            set_range_cache_config,
+            clear_range_cache,
+            // 凭据迁移
+            migrate_stream_credentials,
+            get_credential_migration_status,
+            // Sidecar 回写（A8）
+            webdav_write_cover,
+            webdav_write_lyrics,
             // 统一流媒体命令
             test_stream_connection,
             fetch_stream_songs,
@@ -316,9 +348,24 @@ pub fn run() {
             cover_cache.ensure_dirs().expect("Failed to create cover cache directories");
 
             app.manage(CoverCacheState(Mutex::new(cover_cache)));
-            app.manage(crate::commands::CacheRootState(cache_dir));
+            app.manage(crate::commands::CacheRootState(cache_dir.clone()));
 
-
+            // 按需缓存（Range 稀疏缓存）运行时状态：根目录取 cache_config 容量。
+            {
+                let range_root = cache_dir.join("range");
+                std::fs::create_dir_all(&range_root).ok();
+                let cfg = {
+                    let db_state: tauri::State<'_, DbState> = app.state();
+                    let conn = db_state.0.lock().map_err(|e| e.to_string())?;
+                    crate::db::cache::get_cache_config(&conn).map_err(|e| e.to_string())?
+                };
+                app.manage(commands::RangeCacheState(Mutex::new(
+                    commands::RangeCacheRuntime {
+                        root: cache_dir,
+                        config: cfg,
+                    },
+                )));
+            }
 
             // 初始化文件监听器状态（仅桌面端）
             #[cfg(desktop)]
@@ -390,6 +437,7 @@ pub fn run() {
                             mode: models::ScanMode::Incremental,
                             min_duration: if config.skip_short { Some(config.min_duration) } else { None },
                             batch_size: 500,
+                            resume: false,
                         };
 
                         // Run incremental local scan. Keep it isolated so early returns don't prevent starting the watcher.

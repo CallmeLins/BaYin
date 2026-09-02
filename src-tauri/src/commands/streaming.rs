@@ -5,6 +5,7 @@ use tauri::{Emitter, State};
 use crate::commands::CoverCacheState;
 use crate::db::{self, DbState};
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
+use crate::source;
 use crate::utils::{jellyfin, subsonic, webdav};
 
 // ============ 内部函数（供其他模块调用） ============
@@ -14,20 +15,30 @@ use crate::utils::{jellyfin, subsonic, webdav};
 /// `existing_modified`: WebDAV 增量同步用（song_id → 已入库的修改时间）
 /// `progress`: WebDAV 扫描进度通道（已处理数, 总数）
 /// `read_tags`: true=逐首探测标签；false=快速扫描（文件名入库）
+///
+/// 已改用统一的 SourceConnector 分发层（`crate::source`），不再在命令层 if-else。
 pub async fn fetch_stream_songs_internal(
     config: &StreamServerConfig,
-    cover_cache: Option<&crate::utils::cover::CoverCache>,
+    cover_cache: Option<std::sync::Arc<crate::utils::cover::CoverCache>>,
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<std::sync::mpsc::Sender<(usize, usize)>>,
     read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
-    if config.is_subsonic() {
-        subsonic::fetch_all_songs(config).await
-    } else if config.is_webdav() {
-        webdav::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags).await
-    } else {
-        jellyfin::fetch_all_songs(config).await
-    }
+    // 连接器 trait 是同步的（内部 pollster 桥接既有 async utils），
+    // 这里放入阻塞线程避免阻塞 async 运行时。
+    let cfg = config.clone();
+    let existing_owned = existing_modified.cloned();
+    tauri::async_runtime::spawn_blocking(move || {
+        source::fetch_songs(
+            &cfg,
+            cover_cache.as_deref(),
+            existing_owned.as_ref(),
+            progress,
+            read_tags,
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn load_stream_config(
@@ -46,13 +57,11 @@ fn load_stream_config(
 /// 测试流媒体服务器连接
 #[tauri::command]
 pub async fn test_stream_connection(config: StreamServerConfig) -> Result<ConnectionTestResult, String> {
-    if config.is_subsonic() {
-        Ok(subsonic::test_connection(&config).await)
-    } else if config.is_webdav() {
-        Ok(webdav::test_connection(&config).await)
-    } else {
-        Ok(jellyfin::test_connection(&config).await)
-    }
+    // 连接器 test_connection 是同步的（内部 pollster 桥接），放阻塞线程。
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || source::test_connection(&cfg))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// 从流媒体服务器获取所有歌曲
@@ -62,19 +71,13 @@ pub async fn fetch_stream_songs(
     cover_cache: State<'_, CoverCacheState>,
 ) -> Result<Vec<ScannedSong>, String> {
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
-    fetch_stream_songs_internal(&config, Some(&cache), None, None, false).await
+    fetch_stream_songs_internal(&config, Some(cache), None, None, false).await
 }
 
 /// 获取流媒体歌曲的流 URL
 #[tauri::command]
 pub fn get_stream_url(config: StreamServerConfig, song_id: String) -> String {
-    if config.is_subsonic() {
-        subsonic::get_stream_url(&config, &song_id)
-    } else if config.is_webdav() {
-        webdav::stream_url(&config, &song_id)
-    } else {
-        jellyfin::get_stream_url(&config, &song_id)
-    }
+    source::get_stream_url(&config, &song_id)
 }
 
 /// 获取流媒体歌曲的流 URL（按已保存的服务器配置）
@@ -85,13 +88,7 @@ pub fn get_stream_url_by_server(
     song_id: String,
 ) -> Result<String, String> {
     let config = load_stream_config(&db, &server_id)?;
-    Ok(if config.is_subsonic() {
-        subsonic::get_stream_url(&config, &song_id)
-    } else if config.is_webdav() {
-        webdav::stream_url(&config, &song_id)
-    } else {
-        jellyfin::get_stream_url(&config, &song_id)
-    })
+    Ok(source::get_stream_url(&config, &song_id))
 }
 
 /// 流媒体播放信息：URL + 附加请求头（如 WebDAV Basic Auth）
@@ -111,20 +108,10 @@ pub fn get_stream_play_info_by_server(
     song_id: String,
 ) -> Result<StreamPlayInfo, String> {
     let config = load_stream_config(&db, &server_id)?;
-    let url = if config.is_subsonic() {
-        subsonic::get_stream_url(&config, &song_id)
-    } else if config.is_webdav() {
-        webdav::stream_url(&config, &song_id)
-    } else {
-        jellyfin::get_stream_url(&config, &song_id)
-    };
+    let info = source::get_stream_play_info(&config, &song_id);
     Ok(StreamPlayInfo {
-        url,
-        headers: if config.is_webdav() {
-            Some(webdav::stream_headers(&config))
-        } else {
-            None
-        },
+        url: info.url,
+        headers: info.headers,
     })
 }
 
@@ -642,19 +629,12 @@ pub async fn cache_stream_song(
 /// 获取流媒体歌曲歌词
 #[tauri::command]
 pub async fn get_stream_lyrics(config: StreamServerConfig, song_id: String) -> Option<String> {
-    if config.is_subsonic() {
-        subsonic::get_lyrics(&config, &song_id).await
-    } else if config.is_webdav() {
-        // 尝试读取同目录的 .lrc 侧车文件
-        let cfg = config.clone();
-        let sid = song_id.clone();
-        tauri::async_runtime::spawn_blocking(move || webdav::get_lyrics(&cfg, &sid))
-            .await
-            .ok()
-            .flatten()
-    } else {
-        jellyfin::get_lyrics(&config, &song_id).await
-    }
+    // 连接器 get_lyrics 是同步的（内部 pollster 桥接），放阻塞线程避免阻塞 async 运行时。
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || source::get_lyrics(&cfg, &song_id))
+        .await
+        .ok()
+        .flatten()
 }
 
 /// 获取流媒体歌曲歌词（按已保存的服务器配置）
@@ -677,19 +657,13 @@ pub async fn get_stream_lyrics_by_server(
         }
     }
 
-    // 2. 未缓存则从服务器获取
-    let lyrics = if config.is_subsonic() {
-        subsonic::get_lyrics(&config, &song_id).await
-    } else if config.is_webdav() {
-        let cfg = config.clone();
-        let sid = song_id.clone();
-        tauri::async_runtime::spawn_blocking(move || webdav::get_lyrics(&cfg, &sid))
-            .await
-            .ok()
-            .flatten()
-    } else {
-        jellyfin::get_lyrics(&config, &song_id).await
-    };
+    // 2. 未缓存则从服务器获取（连接器 get_lyrics 同步，放阻塞线程）
+    let cfg = config.clone();
+    let sid = song_id.clone();
+    let lyrics = tauri::async_runtime::spawn_blocking(move || source::get_lyrics(&cfg, &sid))
+        .await
+        .ok()
+        .flatten();
 
     // 3. 获取成功则写入缓存
     if let Some(l) = &lyrics {

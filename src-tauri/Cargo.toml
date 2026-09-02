@@ -20,6 +20,12 @@ members = [
 name = "bayin_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# OS keyring 凭据后端（Windows Credential Manager / macOS Keychain / Linux Secret Service）。
+# 默认关闭：跨平台构建需系统 keyring 后端；开启后 CredentialStore 可用 keyring 实现。
+# 注意：仅桌面端（非 android/ios）启用该依赖。
+keyring = ["dep:keyring"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -58,6 +64,8 @@ rubato = "0.15"
 crossbeam-channel = "0.5"
 ringbuf = "0.4"
 log = "0.4"
+# 音乐源连接器抽象层：同步 trait 桥接既有 async utils
+pollster = "0.3"
 bayin-playback = { path = "crates/bayin-playback" }
 tauri-plugin-edge-to-edge = "0.3.3"
 bayin-system-media = { path = "plugins/system-media" }
@@ -68,6 +76,8 @@ tauri-plugin-clipboard-manager = "2.3.2"
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-window-state = "2"
 notify = { version = "6", features = ["macos_fsevent"] }
+# OS keyring 后端（仅当启用 `keyring` feature 时引入；非 android/ios 桌面目标）
+keyring = { version = "4", features = ["v1"], optional = true }
 
 # Android 专用依赖
 [target.'cfg(target_os = "android")'.dependencies]

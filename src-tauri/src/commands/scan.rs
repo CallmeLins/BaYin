@@ -38,38 +38,120 @@ pub async fn scan_local_to_db(
     // Get cover cache for use in parallel processing
     let cache = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
 
-    // Phase 1: Collect all audio file paths
-    emit_progress(
-        &app,
-        &ScanProgress {
-            phase: ScanPhase::Collecting,
-            total: 0,
-            processed: 0,
-            current_file: None,
-            skipped: 0,
-            errors: 0,
-        },
-    );
+    // 断点续扫：source_key 稳定地由目录集合生成（排序后拼接），
+    // 这样同一组扫描目录在多次调用间能命中同一条 scan_resume。
+    let mut dirs_sorted = options.directories.clone();
+    dirs_sorted.sort();
+    dirs_sorted.dedup();
+    let source_key = format!("local:{}", dirs_sorted.join("|"));
+    // 上次收集到的待处理文件清单（resume 状态内容，换行分隔的绝对路径）。
+    let mut resumed_paths: Option<Vec<PathBuf>> = None;
 
-    let mut audio_paths: Vec<PathBuf> = Vec::new();
+    if options.resume {
+        // 尝试读取断点：若存在，说明上次扫描在落库前被中断，
+        // 直接复用上次收集的文件清单，跳过整棵目录树的重新遍历。
+        let prev: Option<crate::db::ScanResumeState> = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::load_resume(&conn, &source_key).map_err(|e| e.to_string())?
+        };
 
-    for dir in &options.directories {
-        let dir_path = Path::new(dir);
-        if !dir_path.exists() {
-            continue;
-        }
-
-        for entry in WalkDir::new(dir_path)
-            .follow_links(true)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-            if path.is_file() && is_audio_file(path) {
-                audio_paths.push(path.to_path_buf());
+        if let Some(state) = prev {
+            // 断点状态是 JSON：{"paths":[...]}（或旧格式首行为计数，容错忽略）。
+            let paths = serde_json::from_str::<std::collections::BTreeSet<String>>(&state.state)
+                .ok()
+                .map(|set| set.into_iter().map(PathBuf::from).collect::<Vec<_>>());
+            if let Some(paths) = paths {
+                if !paths.is_empty() {
+                    resumed_paths = Some(paths);
+                    emit_progress(
+                        &app,
+                        &ScanProgress {
+                            phase: ScanPhase::Resuming,
+                            total: state.total_known as usize,
+                            processed: state.processed as usize,
+                            current_file: None,
+                            skipped: 0,
+                            errors: 0,
+                        },
+                    );
+                }
             }
         }
     }
+
+    // Phase 1: Collect all audio file paths（若命中断点则跳过遍历，直接复用）
+    let audio_paths: Vec<PathBuf> = match resumed_paths {
+        Some(paths) => {
+            // 复用断点清单前先确认每个文件仍存在、仍是音频，剔除失效项。
+            let live: Vec<PathBuf> = paths
+                .into_iter()
+                .filter(|p| p.is_file() && is_audio_file(p))
+                .collect();
+            emit_progress(
+                &app,
+                &ScanProgress {
+                    phase: ScanPhase::Collecting,
+                    total: live.len(),
+                    processed: 0,
+                    current_file: None,
+                    skipped: 0,
+                    errors: 0,
+                },
+            );
+            live
+        }
+        None => {
+            emit_progress(
+                &app,
+                &ScanProgress {
+                    phase: ScanPhase::Collecting,
+                    total: 0,
+                    processed: 0,
+                    current_file: None,
+                    skipped: 0,
+                    errors: 0,
+                },
+            );
+
+            let mut collected: Vec<PathBuf> = Vec::new();
+            for dir in &options.directories {
+                let dir_path = Path::new(dir);
+                if !dir_path.exists() {
+                    continue;
+                }
+                for entry in WalkDir::new(dir_path)
+                    .follow_links(true)
+                    .into_iter()
+                    .filter_map(|e| e.ok())
+                {
+                    let path = entry.path();
+                    if path.is_file() && is_audio_file(path) {
+                        collected.push(path.to_path_buf());
+                    }
+                }
+            }
+
+            // 收集完成后立即落库一份断点：若后续阶段被中断，下次可从此复用。
+            // 用 BTreeSet 序列化保证内容稳定、可去重。
+            let path_set: std::collections::BTreeSet<String> = collected
+                .iter()
+                .map(|p| p.to_string_lossy().to_string())
+                .collect();
+            if options.resume {
+                if let Ok(serialized) = serde_json::to_string(&path_set) {
+                    let conn = db.0.lock().map_err(|e| e.to_string())?;
+                    let _ = db::save_resume(
+                        &conn,
+                        &source_key,
+                        &serialized,
+                        0,
+                        path_set.len() as u64,
+                    );
+                }
+            }
+            collected
+        }
+    };
 
     let total_files = audio_paths.len();
 
@@ -338,6 +420,12 @@ pub async fn scan_local_to_db(
         },
     );
 
+    // 扫描成功完成：库已完整落库，清除断点（避免下次误认为上次未完成）。
+    {
+        let conn = db.0.lock().map_err(|e| e.to_string())?;
+        let _ = db::clear_resume(&conn, &source_key);
+    }
+
     // Emit library-updated event
     let _ = app.emit("library-updated", ());
 
@@ -461,7 +549,7 @@ pub async fn scan_stream_to_db(
         // Fetch songs from server
         let stream_songs = match crate::commands::streaming::fetch_stream_songs_internal(
             &config,
-            Some(&cache_arc),
+            Some(cache_arc.clone()),
             Some(&existing_modified),
             Some(progress_tx),
             options.read_tags.unwrap_or(false),

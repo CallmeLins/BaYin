@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, Result};
 use serde_json::json;
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 12;
+const CURRENT_SCHEMA_VERSION: i32 = 13;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -69,6 +69,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 12 {
         migrate_v12(conn)?;
+    }
+    if from_version < 13 {
+        migrate_v13(conn)?;
     }
 
     Ok(())
@@ -382,6 +385,95 @@ fn migrate_v12(conn: &Connection) -> Result<()> {
     }
 
     conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [12])?;
+    Ok(())
+}
+
+/// Version 13: 统一能力层基础设施。
+///
+/// - `scan_resume`：断点恢复扫描状态（A4）
+/// - `cache_config`：按需缓存容量配置（A5）
+/// - `trusted_hosts`：可信 TLS/HTTP 主机白名单（A7）
+/// - `stream_servers.credential_ref` / `oauth_ref`：OS Keychain 凭据引用（A6）
+///
+/// 说明：A6 的明文凭据迁移是运行时逻辑（需访问 OS keyring），不在本 migration 中搬移，
+/// 只预留引用列。`password` / `access_token` 明文列保留，由凭据层按需写入 keyring 后清空。
+fn migrate_v13(conn: &Connection) -> Result<()> {
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS scan_resume (
+            source_key   TEXT PRIMARY KEY,
+            state        TEXT NOT NULL,
+            processed    INTEGER NOT NULL DEFAULT 0,
+            total_known  INTEGER NOT NULL DEFAULT 0,
+            started_at   INTEGER NOT NULL DEFAULT (strftime('%s','now')),
+            updated_at   INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        )",
+        [],
+    )?;
+
+    // 幂等补列：早期 v13 草稿可能建出缺少 processed/total_known 的表。
+    let add_col_if_missing = |conn: &Connection, table: &str, col: &str, ddl: &str| {
+        let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})"))?;
+        let has = stmt
+            .query_map([], |row| row.get::<_, String>(1))?
+            .filter_map(|row| row.ok())
+            .any(|name| name == col);
+        if !has {
+            conn.execute(ddl, [])?;
+        }
+        Ok::<(), rusqlite::Error>(())
+    };
+    add_col_if_missing(
+        conn,
+        "scan_resume",
+        "processed",
+        "ALTER TABLE scan_resume ADD COLUMN processed INTEGER NOT NULL DEFAULT 0",
+    )?;
+    add_col_if_missing(
+        conn,
+        "scan_resume",
+        "total_known",
+        "ALTER TABLE scan_resume ADD COLUMN total_known INTEGER NOT NULL DEFAULT 0",
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS cache_config (
+            id             INTEGER PRIMARY KEY CHECK (id = 1),
+            max_bytes      INTEGER NOT NULL DEFAULT 2147483648,
+            enabled        INTEGER NOT NULL DEFAULT 1
+        )",
+        [],
+    )?;
+    // 默认写入一行（id=1），保证只读查询有值可读。
+    conn.execute(
+        "INSERT OR IGNORE INTO cache_config (id, max_bytes, enabled) VALUES (1, 2147483648, 1)",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS trusted_hosts (
+            host          TEXT PRIMARY KEY,
+            allow_http    INTEGER NOT NULL DEFAULT 0,
+            pinned_cert   TEXT,
+            created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+        )",
+        [],
+    )?;
+
+    // 凭据引用列（复用上方 add_col_if_missing，幂等：用 PRAGMA 判断，避免重复 ALTER）。
+    add_col_if_missing(
+        conn,
+        "stream_servers",
+        "credential_ref",
+        "ALTER TABLE stream_servers ADD COLUMN credential_ref TEXT",
+    )?;
+    add_col_if_missing(
+        conn,
+        "stream_servers",
+        "oauth_ref",
+        "ALTER TABLE stream_servers ADD COLUMN oauth_ref TEXT",
+    )?;
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [13])?;
     Ok(())
 }
 

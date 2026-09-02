@@ -842,21 +842,27 @@ pub fn stream_url(_config: &StreamServerConfig, song_id: &str) -> String {
     song_id.to_string()
 }
 
-/// 由歌曲 URL 推导同名 .lrc 侧车文件 URL（保留查询参数）
-fn lrc_sidecar_url(song_url: &str) -> String {
-    let (base, query) = match song_url.find('?') {
-        Some(i) => (&song_url[..i], Some(&song_url[i..])),
-        None => (song_url, None),
+/// 由任意源 URL 推导同名侧车文件 URL（替换扩展名，保留查询参数）。
+/// 如 `song.mp3` + ".lrc" → `song.lrc`；`a/b.m4a?token=x` + ".jpg" → `a/b.jpg?token=x`。
+pub fn sidecar_url(source_url: &str, ext: &str) -> String {
+    let (base, query) = match source_url.find('?') {
+        Some(i) => (&source_url[..i], Some(&source_url[i..])),
+        None => (source_url, None),
     };
     let last_slash = base.rfind('/').unwrap_or(0);
-    let lrc_base = match base.rfind('.') {
-        Some(i) if i > last_slash => format!("{}.lrc", &base[..i]),
-        _ => format!("{base}.lrc"),
+    let new_base = match base.rfind('.') {
+        Some(i) if i > last_slash => format!("{}{}", &base[..i], ext),
+        _ => format!("{base}{ext}"),
     };
     match query {
-        Some(q) => format!("{lrc_base}{q}"),
-        None => lrc_base,
+        Some(q) => format!("{new_base}{q}"),
+        None => new_base,
     }
+}
+
+/// 由歌曲 URL 推导同名 .lrc 侧车文件 URL（保留查询参数）
+fn lrc_sidecar_url(song_url: &str) -> String {
+    sidecar_url(song_url, ".lrc")
 }
 
 /// 读取 WebDAV 歌曲的歌词：优先 .lrc 侧车文件，其次音频内嵌歌词。
@@ -1307,6 +1313,22 @@ mod lyrics_tests {
         assert_eq!(
             lrc_sidecar_url("https://host/dav/music.v2/song"),
             "https://host/dav/music.v2/song.lrc"
+        );
+    }
+
+    #[test]
+    fn sidecar_url_supports_cover_extension() {
+        assert_eq!(
+            sidecar_url("https://host/dav/music/Album/song.m4a", ".jpg"),
+            "https://host/dav/music/Album/song.jpg"
+        );
+    }
+
+    #[test]
+    fn sidecar_url_preserves_query_with_jpg() {
+        assert_eq!(
+            sidecar_url("https://host/dav/song.ogg?u=1&t=2", ".jpg"),
+            "https://host/dav/song.jpg?u=1&t=2"
         );
     }
 }
