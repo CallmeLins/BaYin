@@ -16,10 +16,10 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::Sender as ProgressSender;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration;
 
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
 use crate::utils::cover::CoverCache;
+use crate::utils::http::build_blocking_client_for;
 use sha2::{Digest, Sha256};
 
 /// 支持的音频扩展名（与扫描器保持一致）
@@ -28,8 +28,6 @@ const AUDIO_EXTS: &[&str] = &[
     "wv", "mp4", "mka", "tak", "tta", "mp2",
 ];
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// 元数据探测下载的头部大小（覆盖 FLAC 头 / MP3 ID3v2 / MP4 moov 常见大小）
 const METADATA_PROBE_BYTES: u64 = 1024 * 1024;
 
@@ -126,14 +124,6 @@ fn build_auth_headers(config: &StreamServerConfig) -> HeaderMap {
     headers
 }
 
-fn build_client() -> Result<Client, String> {
-    Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {e}"))
-}
-
 /// PROPFIND 深度 0，测试连接是否可用。
 /// 注意：blocking 客户端必须在阻塞线程执行，否则 tokio 会 panic。
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
@@ -148,7 +138,7 @@ pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResul
 }
 
 fn test_connection_blocking(config: &StreamServerConfig) -> ConnectionTestResult {
-    let client = match build_client() {
+    let client = match build_blocking_client_for(&clean_base_url(config)) {
         Ok(c) => c,
         Err(e) => {
             return ConnectionTestResult {
@@ -381,7 +371,7 @@ fn fetch_all_songs_blocking(
     progress: Option<ProgressSender<(usize, usize)>>,
     read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let root = effective_initial_path(config);
     let base = parse_target(config).clean_base_url;
@@ -407,7 +397,7 @@ pub fn scan_dir(
     dir_url: &str,
     progress: Option<ProgressSender<(usize, usize)>>,
 ) -> Result<Vec<ScannedSong>, String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let root = dir_url.trim_end_matches('/');
     scan_from(
@@ -618,7 +608,7 @@ pub fn folder_cover(
 
 /// 下载远程文件（带认证），返回字节。文件夹封面图片加载用。
 pub fn fetch_bytes(config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let resp = client
         .get(url)
@@ -640,7 +630,7 @@ pub fn probe_song(
     cover_cache: Option<&CoverCache>,
     url: &str,
 ) -> Option<ScannedSong> {
-    let client = build_client().ok()?;
+    let client = build_blocking_client_for(&clean_base_url(config)).ok()?;
     let headers = build_auth_headers(config);
     let song = read_remote_song(&client, &headers, config, url, None, cover_cache, None);
     (song.duration > 0.0).then_some(song)
@@ -867,7 +857,7 @@ fn lrc_sidecar_url(song_url: &str) -> String {
 
 /// 读取 WebDAV 歌曲的歌词：优先 .lrc 侧车文件，其次音频内嵌歌词。
 pub fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
-    let client = build_client().ok()?;
+    let client = build_blocking_client_for(&clean_base_url(config)).ok()?;
     let headers = build_auth_headers(config);
     let url = lrc_sidecar_url(song_id);
 
@@ -893,7 +883,7 @@ pub fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> 
 fn probe_embedded_lyrics(config: &StreamServerConfig, song_url: &str) -> Option<String> {
     use std::io::Read;
 
-    let client = build_client().ok()?;
+    let client = build_blocking_client_for(&clean_base_url(config)).ok()?;
     let headers = build_auth_headers(config);
     let tmp_dir = std::env::temp_dir();
     let tmp_path = tmp_dir.join(format!("bayin-lyrics-{:x}.bin", hash_url(song_url)));
@@ -965,7 +955,7 @@ pub fn clear_cache(cache_root: &std::path::Path) -> usize {
 
 /// 删除远程文件或文件夹（DELETE 请求，文件夹由服务器递归处理）
 pub fn delete(config: &StreamServerConfig, url: &str) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let resp = client
         .delete(url)
@@ -987,7 +977,7 @@ pub fn move_entry(
     source: &str,
     destination: &str,
 ) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let resp = client
         .request(reqwest::Method::from_bytes(b"MOVE").expect("MOVE is a valid HTTP method"), source)
@@ -1009,7 +999,7 @@ pub fn upload(
     local_path: &str,
     remote_url: &str,
 ) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let file = std::fs::File::open(local_path).map_err(|e| format!("打开文件失败: {e}"))?;
     let length = file.metadata().map_err(|e| e.to_string())?.len();
@@ -1046,7 +1036,7 @@ pub fn list_dir_entries(
     config: &StreamServerConfig,
     dir_url: Option<&str>,
 ) -> Result<Vec<WebDavEntry>, String> {
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let base = parse_target(config).clean_base_url;
     let url = match dir_url {
@@ -1115,7 +1105,7 @@ pub fn cache_song(
         return Ok(path.to_string_lossy().to_string());
     }
 
-    let client = build_client()?;
+    let client = build_blocking_client_for(&clean_base_url(config))?;
     let headers = build_auth_headers(config);
     let resp = client
         .get(song_id)

@@ -106,6 +106,8 @@ pub struct HttpStreamSource {
     content_length: u64,
     /// Handle to the background download thread.
     _download_thread: Option<thread::JoinHandle<()>>,
+    /// 可选 Range 稀疏缓存身份 (server_id, song_id)。有值时下载字节写透到进程级缓存。
+    cache_key: Option<(String, String)>,
 }
 
 /// Create a temp cache file and return (write_handle, read_handle, path).
@@ -133,13 +135,17 @@ impl HttpStreamSource {
     /// 打开 HTTP 流（无认证头，保持原行为）
     #[allow(dead_code)]
     pub fn open(url: &str) -> Result<Self, String> {
-        Self::open_with_headers(url, None)
+        Self::open_with_headers(url, None, None)
     }
 
-    /// 打开 HTTP 流，可附带额外请求头（如 WebDAV Basic Auth）
+    /// 打开 HTTP 流，可附带额外请求头（如 WebDAV Basic Auth）。
+    ///
+    /// `cache`：可选的 `(server_id, song_id)`，用于把播放下载的字节写透到
+    /// 进程级 Range 稀疏缓存（A5）；None 时维持原临时缓存行为，不落持久缓存。
     pub fn open_with_headers(
         url: &str,
         headers: Option<&[(String, String)]>,
+        cache: Option<&(String, String)>,
     ) -> Result<Self, String> {
         let mut builder = reqwest::blocking::Client::builder()
             .connect_timeout(std::time::Duration::from_secs(10))
@@ -200,7 +206,8 @@ impl HttpStreamSource {
         ));
 
         // Spawn background download thread
-        let handle = Self::spawn_download(shared.clone(), resp, Some(write_handle));
+        let handle =
+            Self::spawn_download(shared.clone(), resp, Some(write_handle), cache.cloned(), 0);
 
         // Wait until we have enough data for probing, or download finishes
         {
@@ -221,19 +228,28 @@ impl HttpStreamSource {
             position: 0,
             content_length,
             _download_thread: Some(handle),
+            cache_key: cache.cloned(),
         })
     }
 
     /// Spawn a thread that reads from `resp`, writes to cache file, and appends to the shared buffer.
+    ///
+    /// `start_offset`: 该 response 数据流对应的**绝对文件偏移**（初始播放=0；
+    /// 断点续传/seek 重开时为该段起始偏移），用于把收到的字节写透到持久缓存。
+    /// `cache_key`: 可选 `(server_id, song_id)`，None 时不写透。
     fn spawn_download(
         shared: Arc<(Mutex<StreamBuffer>, Condvar)>,
         mut resp: reqwest::blocking::Response,
         mut cache: Option<std::fs::File>,
+        cache_key: Option<(String, String)>,
+        start_offset: u64,
     ) -> thread::JoinHandle<()> {
         thread::Builder::new()
             .name("http-stream-dl".into())
             .spawn(move || {
                 let mut tmp = vec![0u8; READ_CHUNK];
+                // 当前下载写入的绝对偏移（写透持久缓存用）。
+                let mut abs_offset = start_offset;
                 loop {
                     // Check abort
                     {
@@ -261,6 +277,17 @@ impl HttpStreamSource {
                                     return;
                                 }
                             }
+
+                            // 写透到进程级 Range 稀疏缓存（A5，尽力而为、失败静默）。
+                            if let Some((ref sid, ref uid)) = cache_key {
+                                crate::source::cache::range_cache_write(
+                                    sid,
+                                    uid,
+                                    abs_offset,
+                                    &tmp[..n],
+                                );
+                            }
+                            abs_offset += n as u64;
 
                             let mut buf = safe_lock(&shared.0, "shared_buffer");
                             if buf.abort {
@@ -375,7 +402,13 @@ impl HttpStreamSource {
                         .open(&path)
                         .map_err(|e| io::Error::new(io::ErrorKind::Other, format!("Failed to open cache for append: {}", e)))
                         .ok();
-                    Some(Self::spawn_download(shared.clone(), resp, append_file))
+                    Some(Self::spawn_download(
+                        shared.clone(),
+                        resp,
+                        append_file,
+                        self.cache_key.clone(),
+                        old_downloaded_end,
+                    ))
                 }
             } else {
                 None
@@ -424,7 +457,13 @@ impl HttpStreamSource {
             Condvar::new(),
         ));
 
-        let handle = Self::spawn_download(shared.clone(), resp, Some(write_handle));
+        let handle = Self::spawn_download(
+            shared.clone(),
+            resp,
+            Some(write_handle),
+            self.cache_key.clone(),
+            actual_start,
+        );
 
         // Wait for pre-buffer
         {

@@ -7,7 +7,7 @@ use crate::models::{
 };
 use crate::utils::audio::extract_filename_from_path_str;
 use crate::utils::datetime::parse_datetime_to_epoch_seconds;
-use crate::utils::http::build_client;
+use crate::utils::http::build_client_for;
 
 /// 无损音频格式
 const LOSSLESS_CONTAINERS: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -44,7 +44,7 @@ fn build_cover_url(config: &StreamServerConfig, item_id: &str) -> Option<String>
 
 /// 认证并获取 access_token 和 user_id
 pub async fn authenticate(config: &StreamServerConfig) -> Result<(String, String), String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Users/AuthenticateByName", base_url(config));
 
     let auth_headers = build_auth_header(config);
@@ -86,7 +86,7 @@ pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResul
     };
 
     // 获取系统信息
-    let client = match build_client() {
+    let client = match build_client_for(&base_url(config)) {
         Ok(c) => c,
         Err(e) => return ConnectionTestResult { success: false, message: e, server_version: None },
     };
@@ -221,7 +221,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
         .as_deref()
         .ok_or("缺少 accessToken，请先测试连接")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Users/{}/Items", base_url(config), user_id);
 
     let mut all_songs = Vec::new();
@@ -286,7 +286,7 @@ pub async fn fetch_playlists(
         .as_deref()
         .ok_or("缺少 accessToken，请先测试连接")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Users/{}/Items", base_url(config), user_id);
 
     let mut all_playlists = Vec::new();
@@ -357,7 +357,7 @@ pub async fn fetch_playlist_tracks(
         .as_deref()
         .ok_or("缺少 accessToken，请先测试连接")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
 
     let mut all_tracks = Vec::new();
@@ -433,7 +433,7 @@ pub async fn add_songs_to_playlist(
         .as_deref()
         .ok_or("Missing accessToken. Please test the connection again.")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
     let auth_headers = build_auth_header(config);
 
@@ -471,7 +471,7 @@ pub async fn create_playlist(
         .as_deref()
         .ok_or("Missing accessToken. Please test the connection again.")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Playlists", base_url(config));
     let auth_headers = build_auth_header(config);
 
@@ -511,7 +511,7 @@ pub async fn rename_playlist(
         .as_deref()
         .ok_or("Missing accessToken. Please test the connection again.")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Items/{}", base_url(config), playlist_id);
     let auth_headers = build_auth_header(config);
     let body = serde_json::json!({ "Name": name });
@@ -542,7 +542,7 @@ pub async fn delete_playlist(
         .as_deref()
         .ok_or("Missing accessToken. Please test the connection again.")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Items/{}", base_url(config), playlist_id);
     let auth_headers = build_auth_header(config);
 
@@ -581,7 +581,7 @@ pub async fn remove_songs_from_playlist(
         .as_deref()
         .ok_or("Missing accessToken. Please test the connection again.")?;
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = format!("{}/Playlists/{}/Items", base_url(config), playlist_id);
     let auth_headers = build_auth_header(config);
 
@@ -659,7 +659,7 @@ pub fn get_stream_url(config: &StreamServerConfig, song_id: &str) -> String {
 /// 获取歌词
 pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
     let _token = config.access_token.as_deref()?;
-    let client = build_client().ok()?;
+    let client = build_client_for(&base_url(config)).ok()?;
     let url = format!("{}/Audio/{}/Lyrics", base_url(config), song_id);
 
     let auth_headers = build_auth_header(config);

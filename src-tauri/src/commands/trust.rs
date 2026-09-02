@@ -23,18 +23,20 @@ use crate::source::creds::trust::{self, HostPolicy, TrustSnapshot, TrustedHost};
 pub struct TrustState(pub Mutex<TrustSnapshot>);
 
 impl TrustState {
-    /// 启动时从已连接的 DB 全量构建快照。
+    /// 启动时从已连接的 DB 全量构建快照，并同步进程级快照（供协议层读取）。
     pub fn from_conn(conn: &Connection) -> Result<Self, String> {
         let snap = TrustSnapshot::from_conn(conn).map_err(|e| e.to_string())?;
+        trust::sync_current_snapshot(snap.clone());
         Ok(TrustState(Mutex::new(snap)))
     }
 
-    /// 从已连接的 DB 全量重建快照。调用方需在持有 DbState conn 锁期间调用，
-    /// 与写库同一把锁内完成，避免锁序死锁与「读到旧快照」的窗口。
+    /// 从已连接的 DB 全量重建快照，并同步进程级快照。调用方需在持有 DbState
+    /// conn 锁期间调用，与写库同一把锁内完成，避免锁序死锁与「读到旧快照」的窗口。
     pub fn rebuild(&self, conn: &Connection) -> Result<(), String> {
         let snap = TrustSnapshot::from_conn(conn).map_err(|e| e.to_string())?;
         let mut guard = self.0.lock().map_err(|e| e.to_string())?;
-        *guard = snap;
+        *guard = snap.clone();
+        trust::sync_current_snapshot(snap);
         Ok(())
     }
 }

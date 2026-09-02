@@ -205,6 +205,11 @@ impl RangeCacheStore {
     pub fn max_bytes(&self) -> u64 {
         self.config.max_bytes
     }
+
+    /// 缓存是否启用。
+    pub fn enabled(&self) -> bool {
+        self.config.enabled
+    }
 }
 
 #[cfg(test)]

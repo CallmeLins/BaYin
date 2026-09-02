@@ -57,6 +57,8 @@ pub fn set_range_cache_config(
     max_bytes: u64,
     enabled: bool,
 ) -> Result<RangeCacheStatus, String> {
+    // 记录当前根目录（进程级 Range 缓存单例用它做写透）。
+    let root = cache_state.0.lock().map_err(|e| e.to_string())?.root.clone();
     // 先写库。
     {
         let conn = db.0.lock().map_err(|e| e.to_string())?;
@@ -69,6 +71,8 @@ pub fn set_range_cache_config(
             let conn = db.0.lock().map_err(|e| e.to_string())?;
             crate::db::cache::get_cache_config(&conn).map_err(|e| e.to_string())?
         };
+        // 同步进程级 Range 缓存单例（A5），使播放层写透立即反映新容量/开关。
+        crate::source::cache::init_range_global(&root, cfg.enabled, cfg.max_bytes);
         let mut rt = cache_state.0.lock().map_err(|e| e.to_string())?;
         rt.config = cfg;
     }

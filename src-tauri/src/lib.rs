@@ -374,6 +374,8 @@ pub fn run() {
                     let conn = db_state.0.lock().map_err(|e| e.to_string())?;
                     crate::db::cache::get_cache_config(&conn).map_err(|e| e.to_string())?
                 };
+                // 同步进程级 Range 缓存单例（A5）：blocking 播放线程据此做写透。
+                crate::source::cache::init_range_global(&cache_dir, cfg.enabled, cfg.max_bytes);
                 app.manage(commands::RangeCacheState(Mutex::new(
                     commands::RangeCacheRuntime {
                         root: cache_dir,

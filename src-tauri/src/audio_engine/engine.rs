@@ -31,6 +31,7 @@ enum FadeAction {
     PlayNext {
         source: String,
         headers: Option<Vec<(String, String)>>,
+        cache: Option<(String, String)>,
     },
 }
 
@@ -45,6 +46,9 @@ pub enum AudioCommand {
         source: String,
         /// 附加请求头（如 WebDAV Basic Auth），跨平台透传到 HTTP 音源
         headers: Option<Vec<(String, String)>>,
+        /// 可选 Range 稀疏缓存身份 (server_id, song_id)。仅流媒体曲目有值，
+        /// 用于把播放下载的字节写透到进程级 Range 缓存（A5）；None 时不写透。
+        cache: Option<(String, String)>,
     },
     Pause,
     Resume,
@@ -261,6 +265,7 @@ impl AudioThreadState {
         &mut self,
         source: &str,
         headers: Option<&[(String, String)]>,
+        cache: Option<&(String, String)>,
         with_fade_in: bool,
         state: &Arc<Mutex<PlaybackState>>,
         app_handle: &AppHandle,
@@ -272,7 +277,7 @@ impl AudioThreadState {
         self.is_playing = false;
         self.position_secs = 0.0;
 
-        let dec = match AudioDecoder::open_with_headers(source, headers) {
+        let dec = match AudioDecoder::open_with_headers(source, headers, cache) {
             Ok(d) => d,
             Err(e) => {
                 log::warn!("[AudioEngine] 打开音源失败: {}", e);
@@ -491,8 +496,8 @@ impl AudioThreadState {
     ) {
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
-                AudioCommand::Play { source, headers } => {
-                    self.handle_play(&source, headers.as_deref(), state, app_handle)
+                AudioCommand::Play { source, headers, cache } => {
+                    self.handle_play(&source, headers.as_deref(), cache.as_ref(), state, app_handle)
                 }
                 AudioCommand::Pause => self.handle_pause(state, app_handle),
                 AudioCommand::Resume => self.handle_resume(state, app_handle),
@@ -521,6 +526,7 @@ impl AudioThreadState {
         &mut self,
         source: &str,
         headers: Option<&[(String, String)]>,
+        cache: Option<&(String, String)>,
         state: &Arc<Mutex<PlaybackState>>,
         app_handle: &AppHandle,
     ) {
@@ -535,7 +541,7 @@ impl AudioThreadState {
                 }
                 self.pending_samples.clear();
                 self.bump_session();
-                if self.execute_play(source, headers, true, state, app_handle) {
+                if self.execute_play(source, headers, cache, true, state, app_handle) {
                     self.last_emitted_pos = 0.0;
                 }
                 self.pending_samples.clear();
@@ -551,11 +557,12 @@ impl AudioThreadState {
                 action: FadeAction::PlayNext {
                     source: source.to_string(),
                     headers: headers.map(|h| h.to_vec()),
+                    cache: cache.cloned(),
                 },
             };
         } else {
             self.bump_session();
-            if self.execute_play(source, headers, true, state, app_handle) {
+            if self.execute_play(source, headers, cache, true, state, app_handle) {
                 self.last_emitted_pos = 0.0;
             }
             self.pending_samples.clear();
@@ -928,10 +935,10 @@ impl AudioThreadState {
                 update_state(state, false, 0.0, 0.0, self.volume);
                 self.emit_state_changed(app_handle, false);
             }
-            FadeAction::PlayNext { source, headers } => {
+            FadeAction::PlayNext { source, headers, cache } => {
                 self.pause_target_secs = None;
                 self.bump_session();
-                if self.execute_play(&source, headers.as_deref(), true, state, app_handle) {
+                if self.execute_play(&source, headers.as_deref(), cache.as_ref(), true, state, app_handle) {
                     self.last_emitted_pos = 0.0;
                 }
                 self.pending_samples.clear();

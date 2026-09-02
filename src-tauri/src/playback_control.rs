@@ -31,10 +31,12 @@ struct StreamFilePath {
     server_id: String,
 }
 
-/// 解析后的播放源：URL + 可选的认证请求头
+/// 解析后的播放源：URL + 可选的认证请求头 + 可选 Range 缓存身份 (server_id, song_id)
 struct ResolvedSource {
     url: String,
     headers: Option<Vec<(String, String)>>,
+    /// (server_id, song_id)：流媒体曲目可据此做 Range 稀疏缓存写透（A5）。
+    cache_key: Option<(String, String)>,
 }
 
 fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
@@ -44,6 +46,7 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
         return ResolvedSource {
             url: file_path.to_string(),
             headers: None,
+            cache_key: None,
         };
     }
 
@@ -54,9 +57,12 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
             return ResolvedSource {
                 url: file_path.to_string(),
                 headers: None,
+                cache_key: None,
             }
         }
     };
+
+    let cache_key = Some((parsed.server_id.clone(), parsed.song_id.clone()));
 
     let db = match app_handle.try_state::<DbState>() {
         Some(state) => state,
@@ -64,6 +70,7 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
             return ResolvedSource {
                 url: file_path.to_string(),
                 headers: None,
+                cache_key,
             }
         }
     };
@@ -79,6 +86,7 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
                 return ResolvedSource {
                     url: file_path.to_string(),
                     headers: None,
+                    cache_key,
                 }
             }
         }
@@ -88,21 +96,25 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
         ResolvedSource {
             url: crate::utils::subsonic::get_stream_url(&config, &parsed.song_id),
             headers: None,
+            cache_key,
         }
     } else if config.is_jellyfin_like() {
         ResolvedSource {
             url: crate::utils::jellyfin::get_stream_url(&config, &parsed.song_id),
             headers: None,
+            cache_key,
         }
     } else if config.is_webdav() {
         ResolvedSource {
             url: webdav::stream_url(&config, &parsed.song_id),
             headers: Some(webdav::stream_headers(&config)),
+            cache_key,
         }
     } else {
         ResolvedSource {
             url: file_path.to_string(),
             headers: None,
+            cache_key,
         }
     }
 }
@@ -184,6 +196,7 @@ pub(crate) fn play_index(
     engine.send(AudioCommand::Play {
         source: resolved.url,
         headers: resolved.headers,
+        cache: resolved.cache_key,
     });
     record_play(app_handle, &track_id);
     true

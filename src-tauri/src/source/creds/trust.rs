@@ -8,6 +8,7 @@
 //! 按目标 URL 决定是否放行、走 http 还是 https、是否注入固定自签证书。
 
 use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
@@ -173,6 +174,44 @@ impl TrustSnapshot {
     }
 }
 
+// ---------------------------------------------------------------------------
+// 进程级快照：供 blocking / async 协议层在发起请求前读取（它们拿不到 tauri
+// State / DB 连接）。应用启动与增删受信主机后，由上层同步到这里的全局。
+// ---------------------------------------------------------------------------
+
+/// 进程级受信主机快照（默认空，懒初始化）。用 `sync_current_snapshot` 覆盖更新。
+static CURRENT_SNAPSHOT: OnceLock<RwLock<TrustSnapshot>> = OnceLock::new();
+
+fn global_snapshot() -> &'static RwLock<TrustSnapshot> {
+    CURRENT_SNAPSHOT.get_or_init(|| RwLock::new(TrustSnapshot::default()))
+}
+
+/// 覆盖进程级受信主机快照（应用启动、`upsert/remove` 写库后调用）。
+pub fn sync_current_snapshot(snap: TrustSnapshot) {
+    match global_snapshot().write() {
+        Ok(mut g) => *g = snap,
+        Err(poisoned) => {
+            // 若被污染，丢弃旧数据直接重建。
+            *poisoned.into_inner() = snap;
+        }
+    }
+}
+
+/// 读取当前进程级快照（短生命期只读借用手柄，调用方不应持有跨 await）。
+fn current_snapshot() -> RwLockReadGuard<'static, TrustSnapshot> {
+    global_snapshot()
+        .read()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// 协议层入口：判断某 base_url 是否应对其放宽 TLS / 放行连接。
+///
+/// 只有 `trusted == true` 的主机才会由 `build_client_for` 做特殊处理；
+/// 其余一律走默认系统 TLS（保持安全默认）。
+pub fn current_host_policy(base_url: &str) -> HostPolicy {
+    current_snapshot().policy_for(base_url)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,6 +294,26 @@ mod tests {
             snap.policy_for("https://nas.local:9000/a"),
             HostPolicy { trusted: true, allow_http: true }
         );
+    }
+
+    #[test]
+    fn current_snapshot_drives_host_policy() {
+        // 先记录当前全局态，测试后恢复，避免污染其它用例。
+        let prior = current_snapshot().clone();
+        sync_current_snapshot(TrustSnapshot::from_conn(&conn_with_hosts(&[("nas.local", true)])).unwrap());
+
+        // 受信主机 → trusted；未受信 → 默认不信任。
+        assert_eq!(
+            current_host_policy("https://nas.local/music"),
+            HostPolicy { trusted: true, allow_http: true }
+        );
+        assert_eq!(
+            current_host_policy("https://other.example.com/"),
+            HostPolicy { trusted: false, allow_http: false }
+        );
+
+        // 恢复。
+        sync_current_snapshot(prior);
     }
 }
 

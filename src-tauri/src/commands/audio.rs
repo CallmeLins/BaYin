@@ -12,7 +12,11 @@ pub fn audio_play(
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
-    engine.send(AudioCommand::Play { source, headers });
+    engine.send(AudioCommand::Play {
+        source,
+        headers,
+        cache: None, // audio_play 命令层无 server/song 身份；断点续播经 playback_control 走 cache
+    });
 }
 
 #[tauri::command]

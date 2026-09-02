@@ -14,7 +14,7 @@ use crate::models::{
 };
 use crate::utils::audio::extract_filename_from_path_str;
 use crate::utils::datetime::parse_datetime_to_epoch_seconds;
-use crate::utils::http::build_client;
+use crate::utils::http::build_client_for;
 
 /// Lossless audio suffixes.
 const LOSSLESS_SUFFIXES: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff", "alac"];
@@ -66,6 +66,11 @@ fn generate_auth_params(config: &StreamServerConfig, include_format: bool) -> Ve
 }
 
 /// 鏋勫缓 API URL
+/// Subsonic 服务器根地址（去尾斜杠）。供按主机构建连接 client（A7）。
+fn base_url(config: &StreamServerConfig) -> String {
+    config.server_url.trim_end_matches('/').to_string()
+}
+
 fn build_url(config: &StreamServerConfig, endpoint: &str) -> String {
     let base = config.server_url.trim_end_matches('/');
     format!("{}/rest/{}", base, endpoint)
@@ -175,7 +180,7 @@ fn summarize_subsonic_payload(endpoint: &str, sub: &serde_json::Map<String, Valu
 
 /// 测试连接
 pub async fn test_connection(config: &StreamServerConfig) -> ConnectionTestResult {
-    let client = match build_client() {
+    let client = match build_client_for(&base_url(config)) {
         Ok(c) => c,
         Err(e) => return ConnectionTestResult { success: false, message: e, server_version: None },
     };
@@ -714,7 +719,7 @@ fn is_auth_mechanism_error(err: &str) -> bool {
 }
 
 async fn fetch_all_songs_once(config: &StreamServerConfig) -> Result<Vec<ScannedSong>, String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let mut search_error: Option<String> = None;
     log::debug!(
         "[subsonic-debug] scan_start server={} auth={} musicFolderId={}",
@@ -810,7 +815,7 @@ pub async fn fetch_all_songs(config: &StreamServerConfig) -> Result<Vec<ScannedS
 
 /// Fetch playlist summaries from a Subsonic-compatible server (Navidrome/OpenSubsonic/Subsonic).
 pub async fn fetch_playlists(config: &StreamServerConfig) -> Result<Vec<(String, String, u32, Option<String>)>, String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "getPlaylists");
     let params = generate_auth_params(config, true);
 
@@ -868,7 +873,7 @@ pub async fn fetch_playlist_tracks(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<Vec<(String, Option<String>, Option<String>, Option<String>, Option<String>)>, String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "getPlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
@@ -927,7 +932,7 @@ pub async fn add_songs_to_playlist(
         return Ok(());
     }
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -968,7 +973,7 @@ pub async fn create_playlist(
     name: &str,
     song_ids: &[String],
 ) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "createPlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("name", name.to_string()));
@@ -1009,7 +1014,7 @@ pub async fn rename_playlist(
     playlist_id: &str,
     name: &str,
 ) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -1047,7 +1052,7 @@ pub async fn delete_playlist(
     config: &StreamServerConfig,
     playlist_id: &str,
 ) -> Result<(), String> {
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "deletePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("id", playlist_id.to_string()));
@@ -1089,7 +1094,7 @@ pub async fn remove_playlist_indexes(
         return Ok(());
     }
 
-    let client = build_client()?;
+    let client = build_client_for(&base_url(config))?;
     let url = build_url(config, "updatePlaylist");
     let mut params = generate_auth_params(config, true);
     params.push(("playlistId", playlist_id.to_string()));
@@ -1167,7 +1172,7 @@ pub struct LyricLine {
 
 /// Get song lyrics.
 pub async fn get_lyrics(config: &StreamServerConfig, song_id: &str) -> Option<String> {
-    let client = build_client().ok()?;
+    let client = build_client_for(&base_url(config)).ok()?;
 
     // First try `getLyricsBySongId` (OpenSubsonic extension, supports synced lyrics).
     let url = build_url(config, "getLyricsBySongId");
