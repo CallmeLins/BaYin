@@ -9,11 +9,11 @@ use crate::db::DbState;
 use crate::models::StreamServerConfig;
 use crate::source::writeback::{SidecarWriteResult, SidecarWriter};
 
-/// 从 DB 读一个流媒体服务器配置。
+/// 从 DB 读一个流媒体服务器配置（A6：经凭据后端解析，含明文回退）。
 fn load_config(db: &State<'_, DbState>, server_id: &str) -> Result<StreamServerConfig, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    match crate::db::servers::get_stream_server_by_id(&conn, server_id) {
-        Ok(Some(server)) => Ok(StreamServerConfig::from(&server)),
+    match crate::db::servers::load_resolved_stream_config(&conn, db.credential_store(), server_id) {
+        Ok(Some(config)) => Ok(config),
         Ok(None) => Err(format!("服务器不存在: {server_id}")),
         Err(e) => Err(e.to_string()),
     }

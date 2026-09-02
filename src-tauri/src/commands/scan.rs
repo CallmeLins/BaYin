@@ -508,8 +508,13 @@ pub async fn scan_stream_to_db(
             },
         );
 
-        // Build config for fetching
-        let config = crate::models::StreamServerConfig::from(server);
+        // Build config for fetching（A6：经凭据后端解析，含明文回退）
+        let config = {
+            let conn = db.0.lock().map_err(|e| e.to_string())?;
+            db::servers::load_resolved_stream_config(&conn, db.credential_store(), &server.id)
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("流媒体服务器不存在: {}", server.id))?
+        };
 
         // Incremental sync: existing metadata (title/artist/album/duration + modified) for WebDAV,
         // so unchanged files skip metadata probing and keep their stored tags.

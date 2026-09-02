@@ -72,20 +72,14 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
             Ok(conn) => conn,
             Err(poisoned) => poisoned.into_inner(),
         };
-        match crate::db::servers::get_stream_server_by_id(&conn, &parsed.server_id) {
-            Ok(Some(server)) => crate::models::StreamServerConfig::from(&server),
-            Ok(None) => {
+        // A6：经凭据后端解析（含明文回退），防止迁移后断点续播拿空密码。
+        match crate::db::servers::load_resolved_stream_config(&conn, db.credential_store(), &parsed.server_id) {
+            Ok(Some(config)) => config,
+            _ => {
                 return ResolvedSource {
                     url: file_path.to_string(),
                     headers: None,
                 }
-            }
-            Err(err) => {
-                log::warn!("Failed to load stream server {}: {}", parsed.server_id, err);
-                return ResolvedSource {
-                    url: file_path.to_string(),
-                    headers: None,
-                };
             }
         }
     };

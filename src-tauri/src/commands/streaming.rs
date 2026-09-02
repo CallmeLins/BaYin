@@ -46,10 +46,11 @@ fn load_stream_config(
     server_id: &str,
 ) -> Result<StreamServerConfig, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
-    let server = db::servers::get_stream_server_by_id(&conn, server_id)
+    // A6：从凭据后端解析 password/access_token（含明文回退），防止迁移后断连。
+    let config = db::servers::load_resolved_stream_config(&conn, db.credential_store(), server_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("流媒体服务器不存在: {server_id}"))?;
-    Ok(StreamServerConfig::from(&server))
+    Ok(config)
 }
 
 // ============ 统一命令（新） ============

@@ -66,6 +66,7 @@ use commands::{
     list_trusted_hosts,
     upsert_trusted_host,
     remove_trusted_host,
+    get_host_policy,
     get_range_cache_status,
     set_range_cache_config,
     clear_range_cache,
@@ -120,6 +121,7 @@ use commands::{
     test_stream_connection,
     test_subsonic_connection,
     CoverCacheState,
+    TrustState,
 };
 use db::DbState;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -186,6 +188,7 @@ pub fn run() {
             list_trusted_hosts,
             upsert_trusted_host,
             remove_trusted_host,
+            get_host_policy,
             // 按需缓存（Range 稀疏缓存）
             get_range_cache_status,
             set_range_cache_config,
@@ -336,7 +339,19 @@ pub fn run() {
             let db_path = app_data_dir.join("bayin.db");
             let conn = db::open_db(&db_path).expect("Failed to open database");
 
-            app.manage(DbState(Mutex::new(conn)));
+            // 活动凭据后端（A6）：keyring 或文件降级。DbState 持有，供凭据消费点解析。
+            let cred_store = crate::source::creds::default_store(&app_data_dir);
+
+            // 受信任主机内存快照（A7）：启动时全量载入，供请求前策略判定。
+            // 必须在 conn 移入 DbState 之前构建；之后增删命令经 rebuild 刷新。
+            let trust_state = TrustState::from_conn(&conn).unwrap_or_else(|e| {
+                log::error!("failed to build trust snapshot: {e}; starting with empty snapshot");
+                TrustState(std::sync::Mutex::new(
+                    crate::source::creds::trust::TrustSnapshot::default(),
+                ))
+            });
+            app.manage(DbState(Mutex::new(conn), cred_store));
+            app.manage(trust_state);
 
             // 初始化封面缓存
             let cache_dir = app

@@ -18,10 +18,6 @@ fn now_ts() -> i64 {
         .as_secs() as i64
 }
 
-fn build_config(server: &db::servers::DbStreamServer) -> StreamServerConfig {
-    StreamServerConfig::from(server)
-}
-
 fn resolve_internal_ids(server_id: &str, song_ids: &[String]) -> Vec<String> {
     song_ids
         .iter()
@@ -71,7 +67,7 @@ async fn refresh_stream_playlists_cache(
     db: &State<'_, DbState>,
     server: &db::servers::DbStreamServer,
 ) -> Result<Vec<StreamPlaylistSummary>, String> {
-    let config = build_config(server);
+    let config = load_config(db, &server.id)?;
     let synced_at = now_ts();
 
     if config.is_webdav() {
@@ -128,7 +124,7 @@ async fn refresh_stream_playlist_cache(
 ) -> Result<(), String> {
     refresh_stream_playlists_cache(db, server).await?;
 
-    let config = build_config(server);
+    let config = load_config(db, &server.id)?;
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
     }
@@ -160,6 +156,14 @@ async fn refresh_stream_playlist_cache(
 fn load_server(db: &State<'_, DbState>, server_id: &str) -> Result<db::servers::DbStreamServer, String> {
     let conn = db.0.lock().map_err(|e| e.to_string())?;
     db::servers::get_stream_server_by_id(&conn, server_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Server not found".to_string())
+}
+
+/// 读取并解析服务器的连接配置（A6：经凭据后端解析，含明文回退）。
+fn load_config(db: &State<'_, DbState>, server_id: &str) -> Result<StreamServerConfig, String> {
+    let conn = db.0.lock().map_err(|e| e.to_string())?;
+    db::servers::load_resolved_stream_config(&conn, db.credential_store(), server_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Server not found".to_string())
 }
@@ -198,8 +202,7 @@ pub async fn stream_get_playlist_tracks(
     playlist_id: String,
     _force_refresh: Option<bool>,
 ) -> Result<Vec<StreamPlaylistTrack>, String> {
-    let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
     }
@@ -250,7 +253,7 @@ pub async fn stream_add_songs_to_playlist(
     }
 
     let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
     }
@@ -273,7 +276,7 @@ pub async fn stream_create_playlist(
     song_ids: Vec<String>,
 ) -> Result<(), String> {
     let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
     }
@@ -296,7 +299,7 @@ pub async fn stream_rename_playlist(
     name: String,
 ) -> Result<(), String> {
     let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
 
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
@@ -318,7 +321,7 @@ pub async fn stream_delete_playlist(
     playlist_id: String,
 ) -> Result<(), String> {
     let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
 
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
@@ -345,7 +348,7 @@ pub async fn stream_remove_songs_from_playlist(
     }
 
     let server = load_server(&db, &server_id)?;
-    let config = build_config(&server);
+    let config = load_config(&db, &server_id)?;
     if config.is_webdav() {
         return Err("WebDAV 服务器不支持远程歌单".to_string());
     }

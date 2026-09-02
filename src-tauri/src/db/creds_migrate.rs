@@ -124,6 +124,57 @@ pub fn resolve_secret(
     }
 }
 
+/// 将一条服务器的明文与凭据后端引用键合并解析为「可用于连接的明文凭据」（双通道回退）。
+///
+/// 这是 A6 消费点改造的**库层纯函数**：迁移引擎会清空 DB 明文并写入引用键，
+/// 但消费点构造 `StreamServerConfig` 时必须先经这里取回，否则迁移后连接会拿空密码。
+///
+/// 解析规则：
+/// 1. **已迁移**：`credential_ref` / `oauth_ref` 非空 → 优先从 store 取回对应明文；
+/// 2. **取回失败**（后端不可用 / 引用键在 store 中缺失）→ **回退到 DB 明文列**，
+///    保证老用户或 keyring 异常时连接不回退；
+/// 3. **未迁移**：引用键为空 → 直接用 DB 明文列。
+///
+/// 返回值即最终应填入 `StreamServerConfig` 的 `(password, access_token)`。
+/// 纯逻辑、无 DB 连接、无 IO 失败可传播，故完全可离线单测。
+pub fn resolve_credential_pair(
+    store: &dyn CredentialStore,
+    server_id: &str,
+    plain_password: &str,
+    credential_ref: Option<&str>,
+    plain_access_token: Option<String>,
+    oauth_ref: Option<&str>,
+) -> (String, Option<String>) {
+    // password：有引用键优先取回，取回失败/无引用键回退明文。
+    let password = match credential_ref {
+        Some(k) => match store.get("bayin", k) {
+            Ok(Some(v)) => v,
+            _ => plain_password.to_string(),
+        },
+        None => {
+            // 未迁移：尝试默认 password 引用 key（某些旧版本迁移可能只写了 credential_ref
+            // 而未写全列），取不到再用明文。
+            let default_key = credential_ref_key(server_id, "password");
+            store
+                .get("bayin", &default_key)
+                .ok()
+                .flatten()
+                .unwrap_or_else(|| plain_password.to_string())
+        }
+    };
+
+    // access_token：有引用键优先取回；否则保留明文（可能为 None）。
+    let access_token = match oauth_ref {
+        Some(k) => match store.get("bayin", k) {
+            Ok(Some(v)) => Some(v),
+            _ => plain_access_token,
+        },
+        None => plain_access_token,
+    };
+
+    (password, access_token)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +261,64 @@ mod tests {
         let conn = db_with_server("", None);
         let summary = migrate_stream_server_credentials(&conn, &store).unwrap();
         assert_eq!(summary.secrets_migrated, 0);
+    }
+
+    // ---- resolve_credential_pair（双通道回退）----
+
+    #[test]
+    fn resolve_uses_keyring_when_migrated() {
+        // 已迁移：引用键非空 + store 有值 → 取回 store 值，忽略被清空的明文。
+        let store = tmp_store();
+        let pw_key = credential_ref_key("srv-1", "password");
+        let oa_key = credential_ref_key("srv-1", "access_token");
+        store.set("bayin", &pw_key, "k3yringpw").unwrap();
+        store.set("bayin", &oa_key, "k3yringtok").unwrap();
+
+        let (pw, tok) = resolve_credential_pair(
+            &store, "srv-1",
+            "",                  // 迁移后明文被清空
+            Some(&pw_key),
+            None,
+            Some(&oa_key),
+        );
+        assert_eq!(pw, "k3yringpw");
+        assert_eq!(tok.as_deref(), Some("k3yringtok"));
+    }
+
+    #[test]
+    fn resolve_falls_back_to_plaintext_when_not_migrated() {
+        // 未迁移：无引用键 → 直接用明文。
+        let store = tmp_store();
+        let (pw, tok) = resolve_credential_pair(
+            &store, "srv-1",
+            "plainpw",
+            None,
+            Some("plaintok".to_string()),
+            None,
+        );
+        assert_eq!(pw, "plainpw");
+        assert_eq!(tok.as_deref(), Some("plaintok"));
+    }
+
+    #[test]
+    fn resolve_falls_back_when_keyring_missing_value() {
+        // 已迁移但 store 中没有该引用键的值（后端被清/换机）→ 回退明文，保证不断连。
+        let store = tmp_store();
+        let pw_key = credential_ref_key("srv-1", "password");
+        let (pw, _tok) = resolve_credential_pair(
+            &store, "srv-1",
+            "backuppw",
+            Some(&pw_key),       // 引用键存在但 store 无此值
+            None,
+            None,
+        );
+        assert_eq!(pw, "backuppw");
+    }
+
+    #[test]
+    fn resolve_keeps_none_access_token_when_not_migrated() {
+        let store = tmp_store();
+        let (_pw, tok) = resolve_credential_pair(&store, "srv-1", "pw", None, None, None);
+        assert_eq!(tok, None);
     }
 }
