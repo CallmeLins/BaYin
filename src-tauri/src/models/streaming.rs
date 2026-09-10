@@ -58,6 +58,12 @@ pub enum ServerType {
     Webdav,
     /// S3 / S3 兼容对象存储（MinIO、群晖、飞牛等）。
     S3,
+    /// FTP / FTPS 服务器。
+    Ftp,
+    /// SMB/CIFS 共享（经系统 UNC 路径或已挂载目录访问）。
+    Smb,
+    /// UPnP / DLNA 媒体服务器（ContentDirectory）。
+    Upnp,
 }
 
 impl ServerType {
@@ -71,6 +77,9 @@ impl ServerType {
             ServerType::Emby => "emby",
             ServerType::Webdav => "webdav",
             ServerType::S3 => "s3",
+            ServerType::Ftp => "ftp",
+            ServerType::Smb => "smb",
+            ServerType::Upnp => "upnp",
         }
     }
 }
@@ -119,6 +128,21 @@ impl StreamServerConfig {
     /// 是否使用 S3 / S3 兼容对象存储协议。
     pub fn is_s3(&self) -> bool {
         self.server_type == ServerType::S3
+    }
+
+    /// 是否使用 FTP / FTPS 协议（非 HTTP，播放需经本地 Range 桥接）。
+    pub fn is_ftp(&self) -> bool {
+        self.server_type == ServerType::Ftp
+    }
+
+    /// 是否为 SMB/CIFS 共享（经系统 UNC 路径或已挂载目录访问）。
+    pub fn is_smb(&self) -> bool {
+        self.server_type == ServerType::Smb
+    }
+
+    /// 是否使用 UPnP/DLNA（ContentDirectory + 直连 HTTP 资源 URL）。
+    pub fn is_upnp(&self) -> bool {
+        self.server_type == ServerType::Upnp
     }
 }
 

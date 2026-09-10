@@ -115,7 +115,7 @@ fn normalize_initial_path(path: &str) -> String {
 }
 
 /// 构建带 Basic Auth 的请求头
-fn build_auth_headers(config: &StreamServerConfig) -> HeaderMap {
+pub(crate) fn build_auth_headers(config: &StreamServerConfig) -> HeaderMap {
     let mut headers = HeaderMap::new();
     let token = BASE64.encode(format!("{}:{}", config.username, config.password));
     if let Ok(v) = HeaderValue::from_str(&format!("Basic {token}")) {

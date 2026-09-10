@@ -8,11 +8,13 @@
 //! 不需要再改命令层、扫描层、播放层。
 
 mod capabilities;
+pub mod bridge;
 pub mod cache;
 pub mod creds;
 mod dispatch;
 pub mod registry;
 pub mod scan;
+pub mod throttle;
 pub mod writeback;
 
 pub use capabilities::SourceCapabilities;
@@ -236,6 +238,21 @@ pub trait SourceConnector: Send + Sync + 'static {
     ) -> Result<Option<String>, String> {
         Ok(None)
     }
+
+    // ---------- 非 HTTP 来源的本地桥接（B2/B4） ----------
+
+    /// 打开一个可随机读取的读取器，供 [`super::bridge`] 在 `127.0.0.1` 上暴露成
+    /// 支持 Range 的 HTTP 流（播放引擎只会说 HTTP）。
+    ///
+    /// 只有**非 HTTP 来源**需要实现它；HTTP 原生来源（WebDAV/S3/UPnP）直接给
+    /// 直链即可，无需桥接。默认 NotSupported。
+    fn open_reader(
+        &self,
+        _config: &StreamServerConfig,
+        _song_id: &str,
+    ) -> Result<Box<dyn bridge::RangeReader>, String> {
+        Err("该来源不需要本地桥接".to_string())
+    }
 }
 
 // ---------- 为现有 utils 模块提供薄适配器 ----------
@@ -248,8 +265,14 @@ pub struct WebdavConnector;
 pub struct JellyfinConnector;
 /// S3 / S3 兼容对象存储连接器（阶段 B5）。
 pub struct S3Connector;
+/// UPnP / DLNA 媒体服务器连接器（阶段 B6）。
+pub struct UpnpConnector;
+/// FTP 连接器（阶段 B4；经本地 HTTP+Range 桥接播放）。
+pub struct FtpConnector;
+/// 本地 / 已挂载路径连接器（阶段 B2/B3：SMB-UNC、CIFS/NFS 挂载点、本地目录）。
+pub struct LocalConnector;
 
-use crate::utils::{jellyfin, s3, subsonic, webdav};
+use crate::utils::{ftp, jellyfin, localfs, s3, subsonic, upnp, webdav};
 
 impl SourceConnector for SubsonicConnector {
     fn id(&self) -> &'static str {
@@ -555,6 +578,289 @@ impl SourceConnector for S3Connector {
     }
 }
 
+impl SourceConnector for UpnpConnector {
+    fn id(&self) -> &'static str {
+        "upnp"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_upnp()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // DLNA 的资源 `<res>` 本身就是 HTTP 直链：支持 Range、可缓存、可浏览；
+        // 但服务器不提供写入，也没有远程歌单 / 歌词。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::BROWSE,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::CACHEABLE,
+            SourceCapabilities::READONLY,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        upnp::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        _cover_cache: Option<&crate::utils::cover::CoverCache>,
+        _existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        _read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        upnp::fetch_all_songs(config, progress)
+    }
+    fn get_stream_url(&self, _config: &StreamServerConfig, song_id: &str) -> String {
+        // 库内 song_id 就是 DLNA 的资源直链，播放时原样交给 HTTP 引擎。
+        song_id.to_string()
+    }
+    fn list_dir(
+        &self,
+        config: &StreamServerConfig,
+        dir_url: Option<&str>,
+    ) -> Result<Vec<DirEntry>, String> {
+        upnp::list_dir(config, dir_url)
+    }
+    fn fetch_bytes(&self, config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+        upnp::fetch_bytes(config, url)
+    }
+    fn root_dir_url(&self, config: &StreamServerConfig) -> Result<String, String> {
+        // DLNA 的「目录」是 ContentDirectory 的 ObjectID，根为 "0"。
+        Ok(upnp::root_object_id(config))
+    }
+    fn scan_dir(
+        &self,
+        config: &StreamServerConfig,
+        _cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        dir_url: &str,
+        _progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        upnp::scan_dir(config, existing_modified, dir_url)
+    }
+    fn probe_metadata(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        song_url: &str,
+    ) -> Option<ScannedSong> {
+        upnp::probe_song(config, cover_cache, song_url)
+    }
+    fn cache_song(
+        &self,
+        config: &StreamServerConfig,
+        cache_root: &std::path::Path,
+        server_id: &str,
+        song_id: &str,
+    ) -> Result<Option<String>, String> {
+        upnp::cache_song(config, cache_root, server_id, song_id).map(Some)
+    }
+}
+
+impl SourceConnector for FtpConnector {
+    fn id(&self) -> &'static str {
+        "ftp"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_ftp()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::BROWSE,
+            SourceCapabilities::INCREMENTAL,
+            // FTP 无 HTTP Range，但经本地桥接后对播放器表现为可 Range、可 seek。
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::CACHEABLE,
+            SourceCapabilities::WRITABLE,
+            SourceCapabilities::SERVER_LYRICS,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        ftp::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        ftp::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        match bridge::register(config, song_id) {
+            Ok(url) => url,
+            Err(e) => {
+                log::error!("FTP 建立本地桥接失败: {e}");
+                String::new()
+            }
+        }
+    }
+    fn get_lyrics(&self, config: &StreamServerConfig, song_id: &str) -> Option<String> {
+        ftp::get_lyrics(config, song_id)
+    }
+    fn list_dir(
+        &self,
+        config: &StreamServerConfig,
+        dir_url: Option<&str>,
+    ) -> Result<Vec<DirEntry>, String> {
+        ftp::list_dir(config, dir_url)
+    }
+    fn fetch_bytes(&self, config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+        ftp::fetch_bytes(config, url)
+    }
+    fn upload(&self, config: &StreamServerConfig, local: &str, remote: &str) -> Result<(), String> {
+        ftp::upload(config, local, remote)
+    }
+    fn delete(&self, config: &StreamServerConfig, url: &str) -> Result<(), String> {
+        ftp::delete(config, url)
+    }
+    fn move_entry(
+        &self,
+        config: &StreamServerConfig,
+        source: &str,
+        destination: &str,
+    ) -> Result<(), String> {
+        ftp::move_entry(config, source, destination)
+    }
+    fn root_dir_url(&self, config: &StreamServerConfig) -> Result<String, String> {
+        Ok(ftp::root_dir_url(config))
+    }
+    fn scan_dir(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        dir_url: &str,
+        progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        // 目录浏览为快速模式；标签交给后台补全命令（带节流）。
+        ftp::scan_dir(
+            config,
+            cover_cache,
+            existing_modified,
+            dir_url,
+            progress,
+            false,
+        )
+    }
+    fn probe_metadata(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        song_url: &str,
+    ) -> Option<ScannedSong> {
+        ftp::probe_song(config, cover_cache, song_url)
+    }
+    fn cache_song(
+        &self,
+        config: &StreamServerConfig,
+        cache_root: &std::path::Path,
+        server_id: &str,
+        song_id: &str,
+    ) -> Result<Option<String>, String> {
+        ftp::cache_song(config, cache_root, server_id, song_id).map(Some)
+    }
+    fn open_reader(
+        &self,
+        config: &StreamServerConfig,
+        song_id: &str,
+    ) -> Result<Box<dyn bridge::RangeReader>, String> {
+        ftp::open_reader(config, song_id)
+    }
+}
+
+impl SourceConnector for LocalConnector {
+    fn id(&self) -> &'static str {
+        "smb"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_smb()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 本地/挂载路径由系统文件系统提供随机读，天然支持 seek；
+        // 缓存无意义（源本身就在本机），因此不声明 CACHEABLE。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::BROWSE,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::WRITABLE,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        localfs::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        localfs::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        // 本地文件无需桥接：`AudioDecoder` 直接 `File::open`，且 `File` 天然可 seek。
+        match localfs::resolve_path(config, song_id) {
+            Ok(path) => path,
+            Err(e) => {
+                log::error!("解析本地路径失败: {e}");
+                String::new()
+            }
+        }
+    }
+    fn list_dir(
+        &self,
+        config: &StreamServerConfig,
+        dir_url: Option<&str>,
+    ) -> Result<Vec<DirEntry>, String> {
+        localfs::list_dir(config, dir_url)
+    }
+    fn fetch_bytes(&self, config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+        localfs::fetch_bytes(config, url)
+    }
+    fn upload(&self, config: &StreamServerConfig, local: &str, remote: &str) -> Result<(), String> {
+        localfs::upload(config, local, remote)
+    }
+    fn delete(&self, config: &StreamServerConfig, url: &str) -> Result<(), String> {
+        localfs::delete(config, url)
+    }
+    fn move_entry(
+        &self,
+        config: &StreamServerConfig,
+        source: &str,
+        destination: &str,
+    ) -> Result<(), String> {
+        localfs::move_entry(config, source, destination)
+    }
+    fn root_dir_url(&self, config: &StreamServerConfig) -> Result<String, String> {
+        Ok(localfs::root_path(config)?
+            .to_string_lossy()
+            .to_string())
+    }
+    fn scan_dir(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        dir_url: &str,
+        progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        // 本地 IO 廉价：直接解析标签，无需"快速扫描 + 后台补全"两阶段。
+        localfs::scan_dir(config, cover_cache, existing_modified, dir_url, progress, true)
+    }
+    fn probe_metadata(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        song_url: &str,
+    ) -> Option<ScannedSong> {
+        let path = localfs::resolve_path(config, song_url).ok()?;
+        localfs::probe_song(&path, cover_cache)
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
 ///
 /// 后续新增音乐源时，在此追加注册即可。
@@ -564,6 +870,9 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(WebdavConnector));
     reg.register(Box::new(JellyfinConnector));
     reg.register(Box::new(S3Connector));
+    reg.register(Box::new(UpnpConnector));
+    reg.register(Box::new(FtpConnector));
+    reg.register(Box::new(LocalConnector));
     reg
 }
 
@@ -621,6 +930,9 @@ mod tests {
             ServerType::Emby,
             ServerType::Webdav,
             ServerType::S3,
+            ServerType::Upnp,
+            ServerType::Ftp,
+            ServerType::Smb,
         ] {
             let cfg = config_of(t);
             assert_eq!(
@@ -670,6 +982,67 @@ mod tests {
         assert_eq!(conn.root_dir_url(&config_of(ServerType::S3)).unwrap(), "");
     }
 
+    /// FTP 不支持 HTTP，必须经本地桥接暴露成 Range 流；同时不可误声明 SERVER_PLAYLISTS。
+    #[test]
+    fn ftp_goes_through_loopback_bridge() {
+        let cfg = config_of(ServerType::Ftp);
+        let caps = capabilities_for(&cfg);
+        assert!(caps.has(SourceCapabilities::BROWSE));
+        assert!(caps.has(SourceCapabilities::RANGE_STREAMING));
+        assert!(caps.has(SourceCapabilities::WRITABLE));
+        assert!(caps.has(SourceCapabilities::CACHEABLE));
+        assert!(!caps.has(SourceCapabilities::SERVER_PLAYLISTS));
+
+        let url = FtpConnector.get_stream_url(&cfg, "album/song.flac");
+        assert!(
+            url.starts_with("http://127.0.0.1:"),
+            "FTP 播放 URL 必须指向本地桥接，实际 {url}"
+        );
+        // URL 末段保留扩展名，供解码器给出 symphonia 探测提示。
+        assert!(url.ends_with("song.flac"), "{url}");
+        // seek 时会对同一 URL 再次发 Range 请求，因此必须可重复注册且结果稳定。
+        assert_eq!(url, FtpConnector.get_stream_url(&cfg, "album/song.flac"));
+    }
+
+    /// 本地/挂载路径不需要桥接：直接返回本地路径，由解码器 `File::open`。
+    #[test]
+    fn local_mount_plays_directly_without_bridge() {
+        let mut cfg = config_of(ServerType::Smb);
+        cfg.server_url = "/mnt/nas".to_string();
+
+        let caps = capabilities_for(&cfg);
+        assert!(caps.has(SourceCapabilities::BROWSE));
+        assert!(caps.has(SourceCapabilities::RANGE_STREAMING));
+        assert!(!caps.has(SourceCapabilities::CACHEABLE), "本机文件无需再缓存");
+
+        // 绝对路径原样返回。
+        assert_eq!(
+            LocalConnector.get_stream_url(&cfg, "/mnt/nas/a/b.flac"),
+            "/mnt/nas/a/b.flac"
+        );
+        // 相对路径拼到配置根目录下（分隔符随平台，Windows 为 `\`）。
+        let joined = LocalConnector.get_stream_url(&cfg, "a/b.flac");
+        assert_eq!(
+            std::path::Path::new(&joined),
+            std::path::Path::new("/mnt/nas/a/b.flac"),
+            "相对路径应拼到配置根目录下，实际 {joined}"
+        );
+        assert_eq!(
+            std::path::Path::new(&LocalConnector.root_dir_url(&cfg).unwrap()),
+            std::path::Path::new("/mnt/nas")
+        );
+    }
+
+    /// SMB / FTP 的节流策略必须比局域网 WebDAV 更保守或相当，避免打爆对端。
+    #[test]
+    fn throttle_policy_covers_new_sources() {
+        assert!(throttle::policy_for(&config_of(ServerType::S3)).max_items > 0);
+        assert!(throttle::policy_for(&config_of(ServerType::Ftp)).max_items > 0);
+        assert!(throttle::policy_for(&config_of(ServerType::Upnp)).max_items > 0);
+        // 本地挂载是纯本机 IO，不应被限速。
+        assert_eq!(throttle::policy_for(&config_of(ServerType::Smb)).interval_ms, 0);
+    }
+
     #[test]
     fn registry_resolves_every_builtin_type() {
         let reg = registry();
@@ -681,6 +1054,9 @@ mod tests {
             ServerType::Emby,
             ServerType::Webdav,
             ServerType::S3,
+            ServerType::Upnp,
+            ServerType::Ftp,
+            ServerType::Smb,
         ] {
             let cfg = config_of(t);
             assert!(

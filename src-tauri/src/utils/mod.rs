@@ -1,8 +1,11 @@
 pub mod audio;
 pub mod cover;
 pub mod datetime;
+pub mod ftp;
 pub mod http;
 pub mod jellyfin;
+pub mod localfs;
 pub mod s3;
 pub mod subsonic;
+pub mod upnp;
 pub mod webdav;

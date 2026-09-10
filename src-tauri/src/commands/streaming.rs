@@ -404,19 +404,38 @@ pub async fn webdav_backfill_metadata(
         return Ok(0);
     }
 
-    // 探测放阻塞线程（复用连接池 + 8 并发），DB 更新回到 async 上下文
+    // 按来源类型节流：S3 / FTP 每次探测都是一次完整远端往返（S3 还是签名 GET、
+    // FTP 还要新建数据连接），大库必须限制并发与总速率，否则会把对端打爆。
+    let policy = source::throttle::policy_for(&config);
+    let mut pending = pending;
+    let pending_total = pending.len();
+    policy.cap(&mut pending);
+    if pending.len() < pending_total {
+        log::info!(
+            "[backfill] 待补全 {pending_total} 首，本轮按节流上限处理 {} 首",
+            pending.len()
+        );
+    }
+
+    // 探测放阻塞线程（并发 / 间隔由 ThrottlePolicy 决定），DB 更新回到 async 上下文
     let cache_arc = cover_cache.0.lock().map_err(|e| e.to_string())?.clone_arc();
     let cfg = config.clone();
+    let pacer = std::sync::Arc::new(source::throttle::Pacer::new(policy.interval_ms));
+    let threads = policy.threads();
     let results = tauri::async_runtime::spawn_blocking(move || {
         use rayon::prelude::*;
         let pool = rayon::ThreadPoolBuilder::new()
-            .num_threads(8)
+            .num_threads(threads)
             .build()
             .map_err(|e| e.to_string())?;
         let results: Vec<(String, Option<crate::models::ScannedSong>)> = pool.install(|| {
             pending
                 .par_iter()
-                .map(|(id, url)| (id.clone(), source::probe_metadata(&cfg, Some(&cache_arc), url)))
+                .map(|(id, url)| {
+                    // 全局最小间隔：无论多大并发，总请求速率不超过 1 / interval。
+                    pacer.acquire();
+                    (id.clone(), source::probe_metadata(&cfg, Some(&cache_arc), url))
+                })
                 .collect()
         });
         Ok::<_, String>(results)

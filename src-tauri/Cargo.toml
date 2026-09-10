@@ -66,6 +66,8 @@ ringbuf = "0.4"
 log = "0.4"
 # 音乐源连接器抽象层：同步 trait 桥接既有 async utils
 pollster = "0.3"
+# FTP 客户端（纯 Rust；仅明文 FTP，FTPS 需另开 TLS feature，暂不引入以减小构建面）
+suppaftp = "12"
 bayin-playback = { path = "crates/bayin-playback" }
 tauri-plugin-edge-to-edge = "0.3.3"
 bayin-system-media = { path = "plugins/system-media" }
