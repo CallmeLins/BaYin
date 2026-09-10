@@ -613,17 +613,16 @@ fn summarize_xml_error(body: &str) -> String {
     body.chars().take(200).collect()
 }
 
-/// 递归列举某前缀下的全部对象（自动翻页）。
-pub fn list_all_objects(cfg: &S3Config, client: &reqwest::blocking::Client) -> Result<Vec<S3Object>, String> {
-    let prefix = if cfg.prefix.is_empty() {
-        String::new()
-    } else {
-        format!("{}/", cfg.prefix)
-    };
+/// 递归列举任意前缀下的全部对象（自动翻页）。`prefix` 为**完整对象键前缀**。
+pub fn list_all_objects_under(
+    cfg: &S3Config,
+    client: &reqwest::blocking::Client,
+    prefix: &str,
+) -> Result<Vec<S3Object>, String> {
     let mut out = Vec::new();
     let mut token: Option<String> = None;
     loop {
-        let page = list_page(client, cfg, &prefix, None, token.as_deref())?;
+        let page = list_page(client, cfg, prefix, None, token.as_deref())?;
         out.extend(page.objects);
         match page.next_token {
             Some(t) => token = Some(t),
@@ -822,10 +821,25 @@ pub fn fetch_all_songs(
     progress: Option<crate::source::ScanProgress>,
     read_tags: bool,
 ) -> Result<Vec<ScannedSong>, String> {
+    scan_prefix(config, "", cover_cache, existing_modified, progress, read_tags)
+}
+
+/// 扫描指定目录前缀（相对 `cfg.prefix`，空串=库根）下的音频对象。
+///
+/// 与 `list_dir` 使用同一套相对键约定，故「浏览某目录 → 加入音乐库」可无缝衔接。
+pub fn scan_prefix(
+    config: &StreamServerConfig,
+    dir_prefix: &str,
+    cover_cache: Option<&CoverCache>,
+    existing_modified: Option<&HashMap<String, i64>>,
+    progress: Option<crate::source::ScanProgress>,
+    read_tags: bool,
+) -> Result<Vec<ScannedSong>, String> {
     let cfg = S3Config::from_stream_config(config)?;
     let client = build_blocking_client_for(&cfg.endpoint)?;
 
-    let objects = list_all_objects(&cfg, &client)?;
+    let prefix = normalize_dir_prefix(&cfg, dir_prefix);
+    let objects = list_all_objects_under(&cfg, &client, &prefix)?;
     let audio: Vec<S3Object> = objects.into_iter().filter(|o| is_audio_key(&o.key)).collect();
 
     let total = audio.len();
@@ -881,11 +895,56 @@ pub fn fetch_all_songs(
     Ok(songs)
 }
 
+/// 探测单首歌标签（快速扫描后的后台元数据补全）。`key` 为相对键。
+/// 仅当探测成功且拿到时长时返回 `Some`。
+pub fn probe_song(
+    config: &StreamServerConfig,
+    cover_cache: Option<&CoverCache>,
+    key: &str,
+) -> Option<ScannedSong> {
+    let cfg = S3Config::from_stream_config(config).ok()?;
+    let client = build_blocking_client_for(&cfg.endpoint).ok()?;
+    let full = cfg.full_key(key);
+    let bytes = fetch_head_bytes(&client, &cfg, &full, METADATA_PROBE_BYTES).ok()?;
+    let rel = cfg.relative_key(&full);
+    let song = crate::utils::webdav::parse_probe_bytes(&bytes, &rel, None, cover_cache);
+    (song.duration > 0.0).then_some(song)
+}
+
+/// 下载整首歌到本地缓存，返回缓存路径。
+///
+/// 复用与 WebDAV 相同的 stream 缓存目录与命名（`webdav::cached_path`），
+/// 保证 `get_cached_stream_path(s)` 等前端查询对两种来源一致生效。
+pub fn cache_song(
+    config: &StreamServerConfig,
+    cache_root: &std::path::Path,
+    server_id: &str,
+    song_id: &str,
+) -> Result<String, String> {
+    let dir = cache_root.join("webdav");
+    std::fs::create_dir_all(&dir).map_err(|e| format!("无法创建缓存目录: {e}"))?;
+    let path = crate::utils::webdav::cached_path(cache_root, server_id, song_id);
+    if path.exists() && path.metadata().map(|m| m.len() > 0).unwrap_or(false) {
+        return Ok(path.to_string_lossy().to_string());
+    }
+
+    let cfg = S3Config::from_stream_config(config)?;
+    let bytes = fetch_bytes(&cfg, song_id)?;
+
+    // 先写临时文件再重命名，避免半成品缓存。
+    let tmp_path = path.with_extension("part");
+    if let Err(e) = std::fs::write(&tmp_path, &bytes) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("写入缓存失败: {e}"));
+    }
+    std::fs::rename(&tmp_path, &path).map_err(|e| format!("落盘缓存失败: {e}"))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::ServerType;
-
     fn cfg() -> S3Config {
         S3Config {
             endpoint: "https://s3.example.com".to_string(),

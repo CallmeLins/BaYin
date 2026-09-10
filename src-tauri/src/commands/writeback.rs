@@ -19,12 +19,12 @@ fn load_config(db: &State<'_, DbState>, server_id: &str) -> Result<StreamServerC
     }
 }
 
-/// 仅允许对 WebDAV 源回写。
-fn ensure_webdav(config: &StreamServerConfig) -> Result<(), String> {
-    if config.is_webdav() {
+/// 仅允许对声明了 `SIDECAR_WRITABLE` 能力的来源回写。
+fn ensure_sidecar_writable(config: &StreamServerConfig) -> Result<(), String> {
+    if crate::source::supports(config, crate::source::SourceCapabilities::SIDECAR_WRITABLE) {
         Ok(())
     } else {
-        Err("该服务器类型不支持 Sidecar 回写（仅 WebDAV）".to_string())
+        Err("该来源不支持 Sidecar 回写".to_string())
     }
 }
 
@@ -46,7 +46,7 @@ pub async fn webdav_write_cover(
     data_b64: String,
 ) -> Result<String, String> {
     let config = load_config(&db, &server_id)?;
-    ensure_webdav(&config)?;
+    ensure_sidecar_writable(&config)?;
     let data = base64::Engine::decode(
         &base64::engine::general_purpose::STANDARD,
         &data_b64,
@@ -68,7 +68,7 @@ pub async fn webdav_write_lyrics(
     lrc: String,
 ) -> Result<String, String> {
     let config = load_config(&db, &server_id)?;
-    ensure_webdav(&config)?;
+    ensure_sidecar_writable(&config)?;
 
     let writer = crate::source::writeback::webdav::webdav_writer(config);
     tauri::async_runtime::spawn_blocking(move || result_str(writer.write_lyrics(&source_url, &lrc)))

@@ -120,32 +120,38 @@ impl SourceCapabilities {
         let unknown = self.0 & !known;
         (unknown != 0).then_some(unknown)
     }
+
+    /// 能力位与稳定名称的对应表（顺序即输出顺序）。
+    const NAMED: &'static [(u64, &'static str)] = &[
+        (Self::SCAN_LIBRARY, "scan_library"),
+        (Self::BROWSE, "browse"),
+        (Self::INCREMENTAL, "incremental"),
+        (Self::RESUME, "resume"),
+        (Self::RANGE_STREAMING, "range_streaming"),
+        (Self::CACHEABLE, "cacheable"),
+        (Self::WRITABLE, "writable"),
+        (Self::SIDECAR_WRITABLE, "sidecar_writable"),
+        (Self::READONLY, "readonly"),
+        (Self::OAUTH, "oauth"),
+        (Self::TRUSTED_HOST, "trusted_host"),
+        (Self::SERVER_PLAYLISTS, "server_playlists"),
+        (Self::SERVER_LYRICS, "server_lyrics"),
+        (Self::SCROBBLE, "scrobble"),
+    ];
+
+    /// 已置位能力的稳定名称列表（供前端按能力隐藏入口）。
+    pub fn names(self) -> Vec<&'static str> {
+        Self::NAMED
+            .iter()
+            .filter(|(bit, _)| self.has(*bit))
+            .map(|(_, name)| *name)
+            .collect()
+    }
 }
 
 impl std::fmt::Display for SourceCapabilities {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut names: Vec<&str> = Vec::new();
-        let pairs: &[(u64, &str)] = &[
-            (Self::SCAN_LIBRARY, "scan_library"),
-            (Self::BROWSE, "browse"),
-            (Self::INCREMENTAL, "incremental"),
-            (Self::RESUME, "resume"),
-            (Self::RANGE_STREAMING, "range_streaming"),
-            (Self::CACHEABLE, "cacheable"),
-            (Self::WRITABLE, "writable"),
-            (Self::SIDECAR_WRITABLE, "sidecar_writable"),
-            (Self::READONLY, "readonly"),
-            (Self::OAUTH, "oauth"),
-            (Self::TRUSTED_HOST, "trusted_host"),
-            (Self::SERVER_PLAYLISTS, "server_playlists"),
-            (Self::SERVER_LYRICS, "server_lyrics"),
-            (Self::SCROBBLE, "scrobble"),
-        ];
-        for (bit, name) in pairs {
-            if self.has(*bit) {
-                names.push(name);
-            }
-        }
+        let names = self.names();
         if names.is_empty() {
             write!(f, "NONE")
         } else {

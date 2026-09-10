@@ -7,6 +7,7 @@ use tauri::State;
 
 use crate::db::{self, DbState};
 use crate::models::StreamServerConfig;
+use crate::source;
 use crate::utils::{jellyfin, subsonic};
 
 const PLAYLISTS_TTL_SECS: i64 = 10 * 60;
@@ -70,8 +71,8 @@ async fn refresh_stream_playlists_cache(
     let config = load_config(db, &server.id)?;
     let synced_at = now_ts();
 
-    if config.is_webdav() {
-        // WebDAV 不提供远程歌单 API
+    if !source::supports(&config, source::SourceCapabilities::SERVER_PLAYLISTS) {
+        // 该来源不提供远程歌单 API
         return Ok(Vec::new());
     }
 
@@ -125,9 +126,7 @@ async fn refresh_stream_playlist_cache(
     refresh_stream_playlists_cache(db, server).await?;
 
     let config = load_config(db, &server.id)?;
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
     let remote_ids = if config.is_subsonic() {
         subsonic::fetch_playlist_song_ids(&config, playlist_id).await?
     } else {
@@ -203,9 +202,7 @@ pub async fn stream_get_playlist_tracks(
     _force_refresh: Option<bool>,
 ) -> Result<Vec<StreamPlaylistTrack>, String> {
     let config = load_config(&db, &server_id)?;
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
     let remote_tracks = if config.is_subsonic() {
         subsonic::fetch_playlist_tracks(&config, &playlist_id).await?
     } else {
@@ -254,9 +251,7 @@ pub async fn stream_add_songs_to_playlist(
 
     let server = load_server(&db, &server_id)?;
     let config = load_config(&db, &server_id)?;
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
     let remote_song_ids = resolve_internal_ids(&server_id, &song_ids);
 
     if config.is_subsonic() {
@@ -277,9 +272,7 @@ pub async fn stream_create_playlist(
 ) -> Result<(), String> {
     let server = load_server(&db, &server_id)?;
     let config = load_config(&db, &server_id)?;
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
     let remote_song_ids = resolve_internal_ids(&server_id, &song_ids);
 
     if config.is_subsonic() {
@@ -301,9 +294,7 @@ pub async fn stream_rename_playlist(
     let server = load_server(&db, &server_id)?;
     let config = load_config(&db, &server_id)?;
 
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
 
     if config.is_subsonic() {
         subsonic::rename_playlist(&config, &playlist_id, &name).await?;
@@ -323,9 +314,7 @@ pub async fn stream_delete_playlist(
     let server = load_server(&db, &server_id)?;
     let config = load_config(&db, &server_id)?;
 
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
 
     if config.is_subsonic() {
         subsonic::delete_playlist(&config, &playlist_id).await?;
@@ -349,9 +338,7 @@ pub async fn stream_remove_songs_from_playlist(
 
     let server = load_server(&db, &server_id)?;
     let config = load_config(&db, &server_id)?;
-    if config.is_webdav() {
-        return Err("WebDAV 服务器不支持远程歌单".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::SERVER_PLAYLISTS, "远程歌单")?;
     let remote_song_ids = resolve_internal_ids(&server_id, &song_ids);
 
     if config.is_subsonic() {

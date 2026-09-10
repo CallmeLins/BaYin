@@ -94,3 +94,113 @@ pub fn capabilities_for(config: &StreamServerConfig) -> SourceCapabilities {
         Err(_) => SourceCapabilities::NONE,
     }
 }
+
+/// 某配置对应连接器是否具备指定能力位。
+pub fn supports(config: &StreamServerConfig, capability: u64) -> bool {
+    capabilities_for(config).has(capability)
+}
+
+/// 能力门禁：不具备时返回带动作名的错误，供命令层统一使用。
+pub fn require(
+    config: &StreamServerConfig,
+    capability: u64,
+    action: &str,
+) -> Result<(), String> {
+    if supports(config, capability) {
+        Ok(())
+    } else {
+        Err(format!("该来源不支持{action}"))
+    }
+}
+
+// ---------- 文件源操作分发（BROWSE / WRITABLE / CACHEABLE） ----------
+
+/// 列出目录内容。无 `BROWSE` 能力的来源返回 NotSupported。
+pub fn list_dir(
+    config: &StreamServerConfig,
+    dir_url: Option<&str>,
+) -> Result<Vec<super::DirEntry>, String> {
+    let reg = registry();
+    reg.resolve(config)?.list_dir(config, dir_url)
+}
+
+/// 读取远端文件字节。
+pub fn fetch_bytes(config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+    let reg = registry();
+    reg.resolve(config)?.fetch_bytes(config, url)
+}
+
+/// 上传本地文件到远端。
+pub fn upload(config: &StreamServerConfig, local: &str, remote: &str) -> Result<(), String> {
+    let reg = registry();
+    reg.resolve(config)?.upload(config, local, remote)
+}
+
+/// 删除远端文件 / 目录。
+pub fn delete(config: &StreamServerConfig, url: &str) -> Result<(), String> {
+    let reg = registry();
+    reg.resolve(config)?.delete(config, url)
+}
+
+/// 移动 / 重命名远端文件 / 目录。
+pub fn move_entry(config: &StreamServerConfig, source: &str, destination: &str) -> Result<(), String> {
+    let reg = registry();
+    reg.resolve(config)?
+        .move_entry(config, source, destination)
+}
+
+/// 浏览初始目录。
+pub fn root_dir_url(config: &StreamServerConfig) -> Result<String, String> {
+    let reg = registry();
+    reg.resolve(config)?.root_dir_url(config)
+}
+
+/// 扫描指定目录 / 前缀。
+pub fn scan_dir(
+    config: &StreamServerConfig,
+    cover_cache: Option<&crate::utils::cover::CoverCache>,
+    existing_modified: Option<&std::collections::HashMap<String, i64>>,
+    dir_url: &str,
+    progress: Option<super::ScanProgress>,
+) -> Result<Vec<ScannedSong>, String> {
+    let reg = registry();
+    reg.resolve(config)?
+        .scan_dir(config, cover_cache, existing_modified, dir_url, progress)
+}
+
+/// 探测单首歌元数据（后台补全）。
+pub fn probe_metadata(
+    config: &StreamServerConfig,
+    cover_cache: Option<&crate::utils::cover::CoverCache>,
+    song_url: &str,
+) -> Option<ScannedSong> {
+    match registry().resolve(config) {
+        Ok(c) => c.probe_metadata(config, cover_cache, song_url),
+        Err(_) => None,
+    }
+}
+
+/// 目录封面 → data URL。
+pub fn folder_cover(
+    config: &StreamServerConfig,
+    server_id: &str,
+    song_url: &str,
+    cache_root: Option<&std::path::Path>,
+) -> Option<String> {
+    match registry().resolve(config) {
+        Ok(c) => c.folder_cover(config, server_id, song_url, cache_root),
+        Err(_) => None,
+    }
+}
+
+/// 下载整首歌到本地缓存。
+pub fn cache_song(
+    config: &StreamServerConfig,
+    cache_root: &std::path::Path,
+    server_id: &str,
+    song_id: &str,
+) -> Result<Option<String>, String> {
+    let reg = registry();
+    reg.resolve(config)?
+        .cache_song(config, cache_root, server_id, song_id)
+}

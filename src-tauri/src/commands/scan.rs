@@ -688,8 +688,8 @@ pub async fn scan_stream_to_db(
             },
         );
 
-        // 快速扫描后自动后台补全 WebDAV 元数据（不阻塞扫描返回）
-        if config.is_webdav() {
+        // 快速扫描后自动后台补全文件型来源（WebDAV / S3 等）的元数据（不阻塞扫描返回）
+        if crate::source::supports(&config, crate::source::SourceCapabilities::BROWSE) {
             let backfill_app = app.clone();
             let backfill_server_id = server.id.clone();
             let _ = tauri::async_runtime::spawn(async move {

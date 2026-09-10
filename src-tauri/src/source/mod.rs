@@ -17,8 +17,9 @@ pub mod writeback;
 
 pub use capabilities::SourceCapabilities;
 pub use dispatch::{
-    capabilities_for, fetch_songs, get_lyrics, get_stream_play_info, get_stream_url,
-    test_connection, connector_for,
+    cache_song, capabilities_for, delete, fetch_bytes, fetch_songs, folder_cover, get_lyrics,
+    get_stream_play_info, get_stream_url, list_dir, move_entry, probe_metadata, require,
+    root_dir_url, scan_dir, supports, test_connection, upload,
 };
 pub use registry::SourceRegistry;
 
@@ -165,6 +166,76 @@ pub trait SourceConnector: Send + Sync + 'static {
     ) -> Result<(), String> {
         Err("该来源不支持移动".to_string())
     }
+
+    // ---------- 文件源扩展操作（BROWSE / WRITABLE / CACHEABLE） ----------
+    //
+    // 这些方法让"文件型来源"（WebDAV / S3 / 未来的 SMB / FTP 等）在命令层
+    // 可以完全按能力位分发，而命令层无需再认识任何具体协议。
+
+    /// 浏览初始目录（BROWSE）。返回值语义由来源自定义：
+    /// WebDAV 为完整 URL，S3 为空串（表示桶根 / 配置前缀）。
+    fn root_dir_url(&self, _config: &StreamServerConfig) -> Result<String, String> {
+        Err("该来源不支持目录浏览".to_string())
+    }
+
+    /// 扫描指定目录 / 前缀（BROWSE）。默认 NotSupported。
+    fn scan_dir(
+        &self,
+        _config: &StreamServerConfig,
+        _cover_cache: Option<&crate::utils::cover::CoverCache>,
+        _existing_modified: Option<&HashMap<String, i64>>,
+        _dir_url: &str,
+        _progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        Err("该来源不支持目录扫描".to_string())
+    }
+
+    /// 探测单首歌标签（快速扫描后的后台元数据补全）。默认 None。
+    fn probe_metadata(
+        &self,
+        _config: &StreamServerConfig,
+        _cover_cache: Option<&crate::utils::cover::CoverCache>,
+        _song_url: &str,
+    ) -> Option<ScannedSong> {
+        None
+    }
+
+    /// 目录封面（cover.jpg / folder.jpg 等）→ data URL。默认 None。
+    ///
+    /// 提供基于 `list_dir` + `fetch_bytes` 的**通用实现**，任何具备 `BROWSE`
+    /// 能力的来源即可获得封面回退；WebDAV 等有持久缓存的来源可覆盖以提升性能。
+    fn folder_cover(
+        &self,
+        config: &StreamServerConfig,
+        _server_id: &str,
+        song_url: &str,
+        _cache_root: Option<&std::path::Path>,
+    ) -> Option<String> {
+        if !self.capabilities().has(SourceCapabilities::BROWSE) {
+            return None;
+        }
+        let dir = song_url
+            .rsplit_once('/')
+            .map(|(d, _)| format!("{d}/"))
+            .unwrap_or_default();
+        let entries = self.list_dir(config, Some(&dir)).ok()?;
+        let cover = entries
+            .iter()
+            .find(|e| !e.is_dir && crate::utils::webdav::is_cover_image_name(&e.name))?;
+        let bytes = self.fetch_bytes(config, &cover.url).ok()?;
+        Some(crate::utils::webdav::image_data_url(&cover.name, &bytes))
+    }
+
+    /// 下载整首歌到本地缓存，返回缓存路径（CACHEABLE）。默认 None（不缓存）。
+    fn cache_song(
+        &self,
+        _config: &StreamServerConfig,
+        _cache_root: &std::path::Path,
+        _server_id: &str,
+        _song_id: &str,
+    ) -> Result<Option<String>, String> {
+        Ok(None)
+    }
 }
 
 // ---------- 为现有 utils 模块提供薄适配器 ----------
@@ -305,6 +376,48 @@ impl SourceConnector for WebdavConnector {
     ) -> Result<(), String> {
         webdav::move_entry(config, source, destination)
     }
+    fn root_dir_url(&self, config: &StreamServerConfig) -> Result<String, String> {
+        let base = webdav::clean_base_url(config);
+        let path = webdav::effective_initial_path_public(config);
+        Ok(format!("{base}{path}"))
+    }
+    fn scan_dir(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        dir_url: &str,
+        progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        webdav::scan_dir(config, cover_cache, existing_modified, dir_url, progress)
+    }
+    fn probe_metadata(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        song_url: &str,
+    ) -> Option<ScannedSong> {
+        webdav::probe_song(config, cover_cache, song_url)
+    }
+    fn folder_cover(
+        &self,
+        config: &StreamServerConfig,
+        server_id: &str,
+        song_url: &str,
+        cache_root: Option<&std::path::Path>,
+    ) -> Option<String> {
+        // WebDAV 覆盖默认实现：带进程内 + 磁盘持久缓存。
+        webdav::folder_cover(config, server_id, song_url, cache_root)
+    }
+    fn cache_song(
+        &self,
+        config: &StreamServerConfig,
+        cache_root: &std::path::Path,
+        server_id: &str,
+        song_id: &str,
+    ) -> Result<Option<String>, String> {
+        webdav::cache_song(config, cache_root, server_id, song_id).map(Some)
+    }
 }
 
 impl SourceConnector for JellyfinConnector {
@@ -401,6 +514,45 @@ impl SourceConnector for S3Connector {
         let cfg = s3::S3Config::from_stream_config(config)?;
         s3::fetch_bytes(&cfg, url)
     }
+    fn root_dir_url(&self, _config: &StreamServerConfig) -> Result<String, String> {
+        // S3 的「目录」是相对键前缀，空串表示桶根（即配置的 bucket/prefix）。
+        Ok(String::new())
+    }
+    fn scan_dir(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        dir_url: &str,
+        progress: Option<ScanProgress>,
+    ) -> Result<Vec<ScannedSong>, String> {
+        // 目录浏览为快速模式（文件名入库），标签由后台补全命令补齐。
+        s3::scan_prefix(
+            config,
+            dir_url,
+            cover_cache,
+            existing_modified,
+            progress,
+            false,
+        )
+    }
+    fn probe_metadata(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        song_url: &str,
+    ) -> Option<ScannedSong> {
+        s3::probe_song(config, cover_cache, song_url)
+    }
+    fn cache_song(
+        &self,
+        config: &StreamServerConfig,
+        cache_root: &std::path::Path,
+        server_id: &str,
+        song_id: &str,
+    ) -> Result<Option<String>, String> {
+        s3::cache_song(config, cache_root, server_id, song_id).map(Some)
+    }
 }
 
 /// 构建默认注册表（内置连接器）。
@@ -413,4 +565,129 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(JellyfinConnector));
     reg.register(Box::new(S3Connector));
     reg
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ServerType;
+
+    fn config_of(t: ServerType) -> StreamServerConfig {
+        StreamServerConfig {
+            server_type: t,
+            server_name: "t".to_string(),
+            server_url: "https://example.com".to_string(),
+            username: "u".to_string(),
+            password: "p".to_string(),
+            legacy_auth: false,
+            music_folder_id: None,
+            base_path: None,
+            access_token: None,
+            user_id: None,
+        }
+    }
+
+    /// 各内置连接器的能力位必须与"命令层门禁"的预期一致。
+    #[test]
+    fn capability_bits_match_connector_contract() {
+        let webdav = config_of(ServerType::Webdav);
+        assert!(supports(&webdav, SourceCapabilities::BROWSE));
+        assert!(supports(&webdav, SourceCapabilities::WRITABLE));
+        assert!(supports(&webdav, SourceCapabilities::CACHEABLE));
+        assert!(supports(&webdav, SourceCapabilities::SIDECAR_WRITABLE));
+        assert!(!supports(&webdav, SourceCapabilities::SERVER_PLAYLISTS));
+
+        let s3 = config_of(ServerType::S3);
+        assert!(supports(&s3, SourceCapabilities::BROWSE));
+        assert!(supports(&s3, SourceCapabilities::CACHEABLE));
+        assert!(supports(&s3, SourceCapabilities::RANGE_STREAMING));
+        // S3 为只读对象存储：不可写、无侧车回写、无远程歌单。
+        assert!(!supports(&s3, SourceCapabilities::WRITABLE));
+        assert!(!supports(&s3, SourceCapabilities::SIDECAR_WRITABLE));
+        assert!(!supports(&s3, SourceCapabilities::SERVER_PLAYLISTS));
+
+        let subsonic = config_of(ServerType::Navidrome);
+        assert!(supports(&subsonic, SourceCapabilities::SERVER_PLAYLISTS));
+        assert!(!supports(&subsonic, SourceCapabilities::BROWSE));
+    }
+
+    #[test]
+    fn capability_validate_has_no_unregistered_bits() {
+        for t in [
+            ServerType::Navidrome,
+            ServerType::Subsonic,
+            ServerType::OpenSubsonic,
+            ServerType::Jellyfin,
+            ServerType::Emby,
+            ServerType::Webdav,
+            ServerType::S3,
+        ] {
+            let cfg = config_of(t);
+            assert_eq!(
+                capabilities_for(&cfg).validate(),
+                None,
+                "连接器能力位含未登记位: {:?}",
+                cfg.server_type
+            );
+        }
+    }
+
+    #[test]
+    fn require_reports_missing_capability() {
+        let subsonic = config_of(ServerType::Navidrome);
+        assert!(require(&subsonic, SourceCapabilities::BROWSE, "目录浏览").is_err());
+        assert!(require(&subsonic, SourceCapabilities::SERVER_PLAYLISTS, "远程歌单").is_ok());
+        let webdav = config_of(ServerType::Webdav);
+        assert!(require(&webdav, SourceCapabilities::WRITABLE, "删除").is_ok());
+        assert!(require(&webdav, SourceCapabilities::SERVER_PLAYLISTS, "远程歌单").is_err());
+    }
+
+    /// 非文件型来源的默认实现必须"安全拒绝"，而不是 panic 或误报成功。
+    #[test]
+    fn non_browse_source_rejects_file_ops() {
+        let cfg = config_of(ServerType::Navidrome);
+        let conn = SubsonicConnector;
+        assert!(conn.list_dir(&cfg, None).is_err());
+        assert!(conn.fetch_bytes(&cfg, "x").is_err());
+        assert!(conn.upload(&cfg, "a", "b").is_err());
+        assert!(conn.delete(&cfg, "x").is_err());
+        assert!(conn.move_entry(&cfg, "a", "b").is_err());
+        assert!(conn.root_dir_url(&cfg).is_err());
+        assert!(conn.scan_dir(&cfg, None, None, "", None).is_err());
+        assert!(conn.probe_metadata(&cfg, None, "x").is_none());
+        // 通用目录封面默认实现：无 BROWSE 能力直接返回 None（不发起任何请求）。
+        assert!(conn.folder_cover(&cfg, "s", "x.mp3", None).is_none());
+        assert_eq!(
+            conn.cache_song(&cfg, std::path::Path::new("."), "s", "x")
+                .unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn s3_root_dir_url_is_bucket_root() {
+        let conn = S3Connector;
+        assert_eq!(conn.root_dir_url(&config_of(ServerType::S3)).unwrap(), "");
+    }
+
+    #[test]
+    fn registry_resolves_every_builtin_type() {
+        let reg = registry();
+        for t in [
+            ServerType::Navidrome,
+            ServerType::Subsonic,
+            ServerType::OpenSubsonic,
+            ServerType::Jellyfin,
+            ServerType::Emby,
+            ServerType::Webdav,
+            ServerType::S3,
+        ] {
+            let cfg = config_of(t);
+            assert!(
+                reg.resolve(&cfg).is_ok(),
+                "连接器未覆盖: {:?}",
+                cfg.server_type
+            );
+        }
+    }
 }

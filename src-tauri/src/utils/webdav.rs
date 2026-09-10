@@ -492,8 +492,9 @@ fn scan_from(
     Ok(songs)
 }
 
-/// 封面图片识别（与前端 isCoverImage 一致）：cover/folder/album/front/disk 前缀 + 图片扩展名
-fn is_cover_image_name(name: &str) -> bool {
+/// 封面图片识别（与前端 isCoverImage 一致）：cover/folder/album/front/disk 前缀 + 图片扩展名。
+/// `pub(crate)`：供 `source` 层的通用目录封面默认实现复用。
+pub(crate) fn is_cover_image_name(name: &str) -> bool {
     let lower = name.to_lowercase();
     let Some(dot) = lower.rfind('.') else { return false };
     if dot == 0 {
@@ -506,7 +507,7 @@ fn is_cover_image_name(name: &str) -> bool {
     EXTS.contains(&ext) && PREFIXES.iter().any(|p| base.starts_with(p))
 }
 
-fn mime_for_name(name: &str) -> &'static str {
+pub(crate) fn mime_for_name(name: &str) -> &'static str {
     match name.rsplit('.').next().unwrap_or("").to_lowercase().as_str() {
         "png" => "image/png",
         "webp" => "image/webp",
@@ -514,6 +515,16 @@ fn mime_for_name(name: &str) -> &'static str {
         "bmp" => "image/bmp",
         _ => "image/jpeg",
     }
+}
+
+/// 把图片字节编码为 data URL（`data:<mime>;base64,<...>`）。
+/// 供 `source` 层的通用目录封面实现复用。
+pub(crate) fn image_data_url(name: &str, bytes: &[u8]) -> String {
+    format!(
+        "data:{};base64,{}",
+        mime_for_name(name),
+        BASE64.encode(bytes)
+    )
 }
 
 /// 目录封面缓存（server_id|dir → data URL），避免重复 PROPFIND + 下载

@@ -118,7 +118,7 @@ pub fn get_stream_play_info_by_server(
 
 // ============ WebDAV 本地缓存 ============
 
-/// 列出 WebDAV 服务器指定目录的内容（文件夹浏览用）
+/// 列出文件型来源（WebDAV / S3 等）指定目录的内容（文件夹浏览用）
 #[tauri::command]
 pub async fn webdav_list_dir(
     db: State<'_, DbState>,
@@ -126,17 +126,27 @@ pub async fn webdav_list_dir(
     dir_url: Option<String>,
 ) -> Result<Vec<webdav::WebDavEntry>, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::BROWSE, "目录浏览")?;
     let url = dir_url.clone();
     let cfg = config.clone();
-    tauri::async_runtime::spawn_blocking(move || webdav::list_dir_entries(&cfg, url.as_deref()))
-        .await
-        .map_err(|e| e.to_string())?
+    let entries =
+        tauri::async_runtime::spawn_blocking(move || source::list_dir(&cfg, url.as_deref()))
+            .await
+            .map_err(|e| e.to_string())??;
+    // 保持前端既有结构（isDirectory）不变，仅做字段映射。
+    Ok(entries
+        .into_iter()
+        .map(|e| webdav::WebDavEntry {
+            name: e.name,
+            url: e.url,
+            is_directory: e.is_dir,
+            size: e.size,
+            modified: e.modified,
+        })
+        .collect())
 }
 
-/// 下载 WebDAV 图片字节（文件夹封面等前端展示用，前端无法直接带认证头加载 <img>）
+/// 下载文件型来源的图片字节（文件夹封面等前端展示用，前端无法直接带认证头加载 <img>）
 #[tauri::command]
 pub async fn webdav_image(
     db: State<'_, DbState>,
@@ -144,12 +154,10 @@ pub async fn webdav_image(
     url: String,
 ) -> Result<Vec<u8>, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持图片加载".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::BROWSE, "图片加载")?;
     let cfg = config.clone();
     let u = url.clone();
-    tauri::async_runtime::spawn_blocking(move || webdav::fetch_bytes(&cfg, &u))
+    tauri::async_runtime::spawn_blocking(move || source::fetch_bytes(&cfg, &u))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -164,7 +172,7 @@ pub async fn webdav_folder_cover(
     song_url: String,
 ) -> Result<Option<String>, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
+    if !source::supports(&config, source::SourceCapabilities::BROWSE) {
         return Ok(None);
     }
     let cfg = config.clone();
@@ -172,26 +180,41 @@ pub async fn webdav_folder_cover(
     let url = song_url.clone();
     let root = cache_root.0.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
-        webdav::folder_cover(&cfg, &sid, &url, Some(&root))
+        source::folder_cover(&cfg, &sid, &url, Some(&root))
     })
     .await
     .map_err(|e| e.to_string())?;
     Ok(result)
 }
 
-/// 获取 WebDAV 服务器的根目录 URL（初始目录）
+/// 获取文件型来源的根目录 URL（初始目录）
 #[tauri::command]
 pub async fn webdav_root_url(
     db: State<'_, DbState>,
     server_id: String,
 ) -> Result<String, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
-    }
-    let base = webdav::clean_base_url(&config);
-    let path = webdav::effective_initial_path_public(&config);
-    Ok(format!("{}{}", base, path))
+    source::require(&config, source::SourceCapabilities::BROWSE, "目录浏览")?;
+    let cfg = config.clone();
+    tauri::async_runtime::spawn_blocking(move || source::root_dir_url(&cfg))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// 查询流媒体服务器的能力位（前端据此隐藏不支持的操作入口）。
+///
+/// 返回稳定名称列表，如 `["browse", "cacheable", "range_streaming", "readonly"]`。
+#[tauri::command]
+pub fn get_source_capabilities(
+    db: State<'_, DbState>,
+    server_id: String,
+) -> Result<Vec<String>, String> {
+    let config = load_stream_config(&db, &server_id)?;
+    Ok(source::capabilities_for(&config)
+        .names()
+        .into_iter()
+        .map(str::to_string)
+        .collect())
 }
 
 /// 删除 WebDAV 远程文件/文件夹，并同步清理库内记录与本地缓存
@@ -205,9 +228,7 @@ pub async fn webdav_delete(
     is_directory: bool,
 ) -> Result<usize, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持删除".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::WRITABLE, "删除")?;
 
     // 1. 查询库内匹配的歌曲 URL（删除前先取，用于清理缓存）
     let song_urls = {
@@ -219,7 +240,7 @@ pub async fn webdav_delete(
     // 2. 删除远程资源
     let cfg = config.clone();
     let target = url.clone();
-    tauri::async_runtime::spawn_blocking(move || webdav::delete(&cfg, &target))
+    tauri::async_runtime::spawn_blocking(move || source::delete(&cfg, &target))
         .await
         .map_err(|e| e.to_string())??;
 
@@ -267,9 +288,7 @@ pub async fn webdav_move(
     is_directory: bool,
 ) -> Result<usize, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持移动".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::WRITABLE, "移动")?;
 
     // 1. 先取旧 URL 列表（DB 更新后旧 URL 将无法查询）
     let old_urls = {
@@ -282,7 +301,7 @@ pub async fn webdav_move(
     let cfg = config.clone();
     let src = source.clone();
     let dst = destination.clone();
-    tauri::async_runtime::spawn_blocking(move || webdav::move_entry(&cfg, &src, &dst))
+    tauri::async_runtime::spawn_blocking(move || source::move_entry(&cfg, &src, &dst))
         .await
         .map_err(|e| e.to_string())??;
 
@@ -326,7 +345,7 @@ pub async fn webdav_move(
     Ok(updated + cache_renamed)
 }
 
-/// 上传本地文件到 WebDAV 当前目录，返回远程 URL
+/// 上传本地文件到文件型来源的当前目录，返回远程 URL
 #[tauri::command]
 pub async fn webdav_upload(
     app: tauri::AppHandle,
@@ -336,9 +355,7 @@ pub async fn webdav_upload(
     local_path: String,
 ) -> Result<String, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持上传".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::WRITABLE, "上传")?;
 
     // 目标 URL = 目录 URL + 文件名（自动百分号编码）
     let file_name = std::path::Path::new(&local_path)
@@ -357,7 +374,7 @@ pub async fn webdav_upload(
     let cfg = config.clone();
     let remote = target.clone();
     let local = local_path.clone();
-    tauri::async_runtime::spawn_blocking(move || webdav::upload(&cfg, &local, &remote))
+    tauri::async_runtime::spawn_blocking(move || source::upload(&cfg, &local, &remote))
         .await
         .map_err(|e| e.to_string())??;
 
@@ -365,7 +382,7 @@ pub async fn webdav_upload(
     Ok(target)
 }
 
-/// 后台补全 WebDAV 歌曲标签（快速扫描入库后自动调用），返回更新的歌曲数
+/// 后台补全文件型来源歌曲标签（快速扫描入库后自动调用），返回更新的歌曲数
 #[tauri::command]
 pub async fn webdav_backfill_metadata(
     app: tauri::AppHandle,
@@ -374,7 +391,7 @@ pub async fn webdav_backfill_metadata(
     server_id: String,
 ) -> Result<usize, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
+    if !source::supports(&config, source::SourceCapabilities::BROWSE) {
         return Ok(0);
     }
 
@@ -399,7 +416,7 @@ pub async fn webdav_backfill_metadata(
         let results: Vec<(String, Option<crate::models::ScannedSong>)> = pool.install(|| {
             pending
                 .par_iter()
-                .map(|(id, url)| (id.clone(), webdav::probe_song(&cfg, Some(&cache_arc), url)))
+                .map(|(id, url)| (id.clone(), source::probe_metadata(&cfg, Some(&cache_arc), url)))
                 .collect()
         });
         Ok::<_, String>(results)
@@ -424,7 +441,7 @@ pub async fn webdav_backfill_metadata(
     Ok(updated)
 }
 
-/// 将 WebDAV 指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。
+/// 将文件型来源指定目录扫描入库（文件夹浏览页“加入音乐库”），返回入库歌曲数。
 /// 只增不删，已存在的歌曲（同 URL）会更新并保留播放统计。
 #[tauri::command]
 pub async fn webdav_scan_dir_to_db(
@@ -435,9 +452,7 @@ pub async fn webdav_scan_dir_to_db(
     dir_url: String,
 ) -> Result<usize, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
-        return Err("仅 WebDAV 服务器支持目录浏览".to_string());
-    }
+    source::require(&config, source::SourceCapabilities::BROWSE, "目录浏览")?;
 
     // 增量同步：复用库内已有元数据，跳过未变化文件的探测
     let existing_metadata = {
@@ -454,7 +469,7 @@ pub async fn webdav_scan_dir_to_db(
     let cfg = config.clone();
     let url = dir_url.clone();
     let songs = tauri::async_runtime::spawn_blocking(move || {
-        webdav::scan_dir(&cfg, Some(&cache_arc), Some(&existing_modified), &url, None)
+        source::scan_dir(&cfg, Some(&cache_arc), Some(&existing_modified), &url, None)
     })
     .await
     .map_err(|e| e.to_string())??;
@@ -514,7 +529,7 @@ pub async fn webdav_scan_dir_to_db(
                     serde_json::json!({
                         "type": "stream",
                         "serverId": server_id,
-                        "serverType": "webdav",
+                        "serverType": config.server_type.as_str(),
                         "songId": s.id,
                         "serverName": config.server_name,
                         "coverUrl": s.cover_url
@@ -602,7 +617,7 @@ pub fn get_cached_stream_paths(
         .collect()
 }
 
-/// 下载 WebDAV 歌曲到本地缓存（播放过半时触发），返回缓存路径
+/// 下载流媒体歌曲到本地缓存（播放过半时触发），返回缓存路径
 #[tauri::command]
 pub async fn cache_stream_song(
     db: State<'_, DbState>,
@@ -611,7 +626,7 @@ pub async fn cache_stream_song(
     song_id: String,
 ) -> Result<Option<String>, String> {
     let config = load_stream_config(&db, &server_id)?;
-    if !config.is_webdav() {
+    if !source::supports(&config, source::SourceCapabilities::CACHEABLE) {
         return Ok(None);
     }
     // 下载放阻塞线程，避免阻塞 async 运行时
@@ -619,12 +634,9 @@ pub async fn cache_stream_song(
     let cfg = config.clone();
     let sid = server_id.clone();
     let song = song_id.clone();
-    let result = tauri::async_runtime::spawn_blocking(move || {
-        webdav::cache_song(&cfg, &root, &sid, &song)
-    })
-    .await
-    .map_err(|e| e.to_string())?;
-    result.map(Some).map_err(|e| e.to_string())
+    tauri::async_runtime::spawn_blocking(move || source::cache_song(&cfg, &root, &sid, &song))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// 获取流媒体歌曲歌词

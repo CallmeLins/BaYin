@@ -60,6 +60,21 @@ pub enum ServerType {
     S3,
 }
 
+impl ServerType {
+    /// 与数据库 / 前端一致的稳定字符串标识。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            ServerType::Navidrome => "navidrome",
+            ServerType::Subsonic => "subsonic",
+            ServerType::OpenSubsonic => "opensubsonic",
+            ServerType::Jellyfin => "jellyfin",
+            ServerType::Emby => "emby",
+            ServerType::Webdav => "webdav",
+            ServerType::S3 => "s3",
+        }
+    }
+}
+
 /// 统一流媒体服务器配置
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
