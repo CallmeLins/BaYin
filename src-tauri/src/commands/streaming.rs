@@ -715,6 +715,35 @@ pub async fn jellyfin_authenticate(config: StreamServerConfig) -> Result<(String
     }
 }
 
+/// Plex 认证并返回 token 和 user id
+///
+/// 已填 `accessToken` 时直接沿用（很多用户习惯从 Plex 网页端直接复制 token）；
+/// 否则用 `username`/`password` 到 plex.tv 换取。
+///
+/// 连接测试无需单独命令：`test_stream_connection` 已按能力位路由到
+/// `plex::test_connection`。
+#[tauri::command]
+pub async fn plex_authenticate(config: StreamServerConfig) -> Result<(String, String), String> {
+    crate::utils::plex::authenticate(&config).await
+}
+
+// ============ UPnP / DLNA 设备发现 ============
+
+/// 局域网 SSDP 自动发现 UPnP/DLNA 媒体服务器
+///
+/// `timeoutMs`: 等待设备响应的毫秒数，缺省 2500ms。仅返回真正提供
+/// `ContentDirectory` 的设备（路由器、打印机等会被自动跳过）。
+#[tauri::command]
+pub async fn upnp_discover_devices(
+    timeout_ms: Option<u64>,
+) -> Result<Vec<crate::utils::upnp::DiscoveredDevice>, String> {
+    let timeout = std::time::Duration::from_millis(timeout_ms.unwrap_or(2500));
+    // 阻塞式 UDP 收包 + 逐台拉描述，放进阻塞线程避免占用 async 运行时。
+    tauri::async_runtime::spawn_blocking(move || crate::utils::upnp::discover_devices(timeout))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 // ============ 向后兼容的旧命令（Subsonic API） ============
 
 /// 测试 Subsonic 服务器连接

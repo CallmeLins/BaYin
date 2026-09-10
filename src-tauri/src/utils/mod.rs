@@ -1,10 +1,13 @@
 pub mod audio;
 pub mod cover;
+pub mod daoliyu;
 pub mod datetime;
+pub mod fnmusic;
 pub mod ftp;
 pub mod http;
 pub mod jellyfin;
 pub mod localfs;
+pub mod plex;
 pub mod s3;
 pub mod subsonic;
 pub mod upnp;

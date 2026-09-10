@@ -104,6 +104,8 @@ use commands::{
     get_subsonic_lyrics,
     get_subsonic_stream_url,
     jellyfin_authenticate,
+    plex_authenticate,
+    upnp_discover_devices,
     list_directories,
     scan_local_to_db,
     scan_music_files,
@@ -225,6 +227,8 @@ pub fn run() {
             clear_webdav_cache,
             get_stream_lyrics_by_server,
             jellyfin_authenticate,
+            plex_authenticate,
+            upnp_discover_devices,
             // Subsonic API 命令
             test_subsonic_connection,
             fetch_subsonic_songs,

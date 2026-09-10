@@ -32,9 +32,22 @@ pub fn build_client_for(base_url: &str) -> Result<Client, String> {
 
 /// blocking reqwest Client（webdav 使用），按目标主机放宽受信 TLS。
 pub fn build_blocking_client_for(base_url: &str) -> Result<reqwest::blocking::Client, String> {
+    build_blocking_client_with_timeout(base_url, CONNECT_TIMEOUT, REQUEST_TIMEOUT)
+}
+
+/// 带自定义超时的 blocking client。
+///
+/// 用于「批量探测」场景：例如 SSDP 发现后逐个拉设备描述，局域网里混着大量
+/// 路由器/打印机等非媒体设备，若用默认 30s 超时，一台哑设备就能让发现流程
+/// 卡住半分钟。这类场景需要远短于默认值的超时。
+pub fn build_blocking_client_with_timeout(
+    base_url: &str,
+    connect_timeout: Duration,
+    timeout: Duration,
+) -> Result<reqwest::blocking::Client, String> {
     let mut b = reqwest::blocking::Client::builder()
-        .connect_timeout(CONNECT_TIMEOUT)
-        .timeout(REQUEST_TIMEOUT);
+        .connect_timeout(connect_timeout)
+        .timeout(timeout);
     if should_relax_tls(base_url) {
         b = b.danger_accept_invalid_certs(true);
     }

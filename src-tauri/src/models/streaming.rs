@@ -64,6 +64,12 @@ pub enum ServerType {
     Smb,
     /// UPnP / DLNA 媒体服务器（ContentDirectory）。
     Upnp,
+    /// Plex 媒体服务器（`X-Plex-Token` 认证，HTTP 原生直链）。
+    Plex,
+    /// 飞牛音乐（fnOS Music 应用自带的曲库服务，`authx` 动态签名 + cookie）。
+    FnMusic,
+    /// 道理鱼音乐服务（Bearer 认证的只读曲库）。
+    DaoLiYu,
 }
 
 impl ServerType {
@@ -80,6 +86,9 @@ impl ServerType {
             ServerType::Ftp => "ftp",
             ServerType::Smb => "smb",
             ServerType::Upnp => "upnp",
+            ServerType::Plex => "plex",
+            ServerType::FnMusic => "fnmusic",
+            ServerType::DaoLiYu => "daoliyu",
         }
     }
 }
@@ -143,6 +152,21 @@ impl StreamServerConfig {
     /// 是否使用 UPnP/DLNA（ContentDirectory + 直连 HTTP 资源 URL）。
     pub fn is_upnp(&self) -> bool {
         self.server_type == ServerType::Upnp
+    }
+
+    /// 是否使用 Plex（`X-Plex-Token` 认证 + HTTP 原生 `Part` 直链）。
+    pub fn is_plex(&self) -> bool {
+        self.server_type == ServerType::Plex
+    }
+
+    /// 是否为飞牛音乐（`authx` 动态签名，播放需经本地桥接）。
+    pub fn is_fnmusic(&self) -> bool {
+        self.server_type == ServerType::FnMusic
+    }
+
+    /// 是否为道理鱼（Bearer 认证，播放需经本地桥接）。
+    pub fn is_daoliyu(&self) -> bool {
+        self.server_type == ServerType::DaoLiYu
     }
 }
 

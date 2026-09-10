@@ -19,6 +19,42 @@ const AUDIO_EXTENSIONS: &[&str] = &[
 /// 无损音频格式扩展名
 const LOSSLESS_EXTENSIONS: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff"];
 
+/// 把服务端返回的容器名 / MIME / 编解码别名归一成可用扩展名。
+///
+/// 音乐服务器返回的格式字段往往混着文件名后缀、容器名、MIME 与编解码器别名
+/// （`audio/flac`、`pcm_s16le`、`monkeys-audio`…）。这里统一成解码器能识别的
+/// 扩展名；无法识别时返回 `None`，调用方据此判定"该曲目没有可播格式"，
+/// 避免把播不了的曲目登记进库。
+pub fn normalize_audio_extension(raw: &str) -> Option<String> {
+    let value = raw
+        .trim()
+        .trim_matches('.')
+        .rsplit('/')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let normalized = match value.as_str() {
+        "" | "audio" | "cue" | "cue-track" => return None,
+        "mpeg" => "mp3",
+        "mp4a" => "m4a",
+        "wave" | "lpcm" | "pcm" => "wav",
+        other if other.starts_with("pcm_") => "wav",
+        "vorbis" => "ogg",
+        other => other,
+    };
+    AUDIO_EXTENSIONS
+        .contains(&normalized)
+        .then(|| normalized.to_string())
+}
+
+/// 该扩展名是否无损格式（供 `is_sq` 判定）。
+pub fn is_lossless_extension(ext: &str) -> bool {
+    let normalized = ext.trim().trim_start_matches('.').to_ascii_lowercase();
+    LOSSLESS_EXTENSIONS.contains(&normalized.as_str())
+}
+
+
 /// 判断文件是否为音频文件
 pub fn is_audio_file(path: &Path) -> bool {
     path.extension()

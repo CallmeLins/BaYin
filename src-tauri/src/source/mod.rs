@@ -271,8 +271,14 @@ pub struct UpnpConnector;
 pub struct FtpConnector;
 /// 本地 / 已挂载路径连接器（阶段 B2/B3：SMB-UNC、CIFS/NFS 挂载点、本地目录）。
 pub struct LocalConnector;
+/// Plex 媒体服务器连接器（阶段 C1）。
+pub struct PlexConnector;
+/// 飞牛音乐连接器（阶段 C2；`authx` 动态签名，经本地桥接播放）。
+pub struct FnMusicConnector;
+/// 道理鱼连接器（阶段 C3；Bearer 认证，经本地桥接播放）。
+pub struct DaoLiYuConnector;
 
-use crate::utils::{ftp, jellyfin, localfs, s3, subsonic, upnp, webdav};
+use crate::utils::{daoliyu, fnmusic, ftp, jellyfin, localfs, plex, s3, subsonic, upnp, webdav};
 
 impl SourceConnector for SubsonicConnector {
     fn id(&self) -> &'static str {
@@ -861,6 +867,142 @@ impl SourceConnector for LocalConnector {
     }
 }
 
+impl SourceConnector for PlexConnector {
+    fn id(&self) -> &'static str {
+        "plex"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_plex()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 与 Jellyfin/Emby 同族的"媒体服务器"形态：库扫描 + 只读。
+        // Plex 没有目录浏览语义（不声明 BROWSE），也没有侧车回写；
+        // 歌词与远程歌单不在本期范围（Plex 的歌词接口在各版本间不稳定）。
+        //
+        // 与 Jellyfin 的一处差异：Plex 的 `<Part key="/library/parts/…">`
+        // 是**静态文件**，Range 语义明确，因此声明 RANGE_STREAMING；
+        // Jellyfin 的 `/Audio/{id}/universal` 是转码端点，未声明该项。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        plex::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        _cover_cache: Option<&crate::utils::cover::CoverCache>,
+        _existing_modified: Option<&HashMap<String, i64>>,
+        _progress: Option<ScanProgress>,
+        _read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        plex::fetch_all_songs(config)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        plex::get_stream_url(config, song_id)
+    }
+}
+
+impl SourceConnector for FnMusicConnector {
+    fn id(&self) -> &'static str {
+        "fnmusic"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_fnmusic()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 飞牛音乐：库扫描 + 服务器歌词，只读。
+        // 播放经本地桥接（`authx` 含 nonce/timestamp，必须每次请求前重签，
+        // 静态头会在长时间播放后失效），因此声明 RANGE_STREAMING（对播放器
+        // 表现为可 Range、可 seek）。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::SERVER_LYRICS,
+            SourceCapabilities::READONLY,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        fnmusic::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        fnmusic::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        fnmusic::get_stream_url(config, song_id)
+    }
+    fn get_lyrics(&self, config: &StreamServerConfig, song_id: &str) -> Option<String> {
+        fnmusic::get_lyrics(config, song_id)
+    }
+    fn open_reader(
+        &self,
+        config: &StreamServerConfig,
+        song_id: &str,
+    ) -> Result<Box<dyn bridge::RangeReader>, String> {
+        fnmusic::open_reader(config, song_id)
+    }
+}
+
+impl SourceConnector for DaoLiYuConnector {
+    fn id(&self) -> &'static str {
+        "daoliyu"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_daoliyu()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 道理鱼：库扫描 + 服务器歌词，只读。
+        // 播放走 `/api/tracks/{id}/download`，Bearer 需动态刷新，故经本地桥接
+        // （token 不入播放引擎，由桥接在每次请求前重算头）。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::SERVER_LYRICS,
+            SourceCapabilities::READONLY,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        daoliyu::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        daoliyu::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        daoliyu::get_stream_url(config, song_id)
+    }
+    fn get_lyrics(&self, config: &StreamServerConfig, song_id: &str) -> Option<String> {
+        daoliyu::get_lyrics(config, song_id)
+    }
+    fn open_reader(
+        &self,
+        config: &StreamServerConfig,
+        song_id: &str,
+    ) -> Result<Box<dyn bridge::RangeReader>, String> {
+        daoliyu::open_reader(config, song_id)
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
 ///
 /// 后续新增音乐源时，在此追加注册即可。
@@ -873,6 +1015,9 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(UpnpConnector));
     reg.register(Box::new(FtpConnector));
     reg.register(Box::new(LocalConnector));
+    reg.register(Box::new(PlexConnector));
+    reg.register(Box::new(FnMusicConnector));
+    reg.register(Box::new(DaoLiYuConnector));
     reg
 }
 
@@ -933,6 +1078,9 @@ mod tests {
             ServerType::Upnp,
             ServerType::Ftp,
             ServerType::Smb,
+            ServerType::Plex,
+            ServerType::FnMusic,
+            ServerType::DaoLiYu,
         ] {
             let cfg = config_of(t);
             assert_eq!(
@@ -1057,6 +1205,9 @@ mod tests {
             ServerType::Upnp,
             ServerType::Ftp,
             ServerType::Smb,
+            ServerType::Plex,
+            ServerType::FnMusic,
+            ServerType::DaoLiYu,
         ] {
             let cfg = config_of(t);
             assert!(
@@ -1065,5 +1216,41 @@ mod tests {
                 cfg.server_type
             );
         }
+    }
+
+    /// Plex 是「媒体服务器」形态：可扫库、只读，但**没有**目录浏览，
+    /// 也不能误声明侧车回写 / 远程歌单（命令层据此隐藏写操作入口）。
+    #[test]
+    fn plex_is_a_readonly_library_source() {
+        let cfg = config_of(ServerType::Plex);
+        let caps = capabilities_for(&cfg);
+        assert!(caps.has(SourceCapabilities::SCAN_LIBRARY));
+        assert!(caps.has(SourceCapabilities::READONLY));
+        assert!(caps.has(SourceCapabilities::TRUSTED_HOST));
+        assert!(!caps.has(SourceCapabilities::BROWSE));
+        assert!(!caps.has(SourceCapabilities::WRITABLE));
+        assert!(!caps.has(SourceCapabilities::SIDECAR_WRITABLE));
+        assert!(!caps.has(SourceCapabilities::SERVER_PLAYLISTS));
+        assert!(!caps.has(SourceCapabilities::SERVER_LYRICS));
+    }
+
+    /// Plex 的 `<Part key>` 就是 HTTP 路径 → **不需要**本地桥接。
+    #[test]
+    fn plex_plays_directly_without_bridge() {
+        let mut cfg = config_of(ServerType::Plex);
+        cfg.server_url = "http://192.168.1.10:32400".to_string();
+        cfg.access_token = Some("TOK".to_string());
+
+        let caps = capabilities_for(&cfg);
+        assert!(caps.has(SourceCapabilities::RANGE_STREAMING));
+
+        let url = PlexConnector.get_stream_url(&cfg, "/library/parts/9/1/file.flac");
+        assert!(
+            url.starts_with("http://192.168.1.10:32400/"),
+            "Plex 应为 HTTP 原生直链，实际 {url}"
+        );
+        assert!(url.contains("X-Plex-Token=TOK"), "{url}");
+        // 不能把 HTTP 源误丢进本地桥接。
+        assert!(!url.contains("127.0.0.1"), "{url}");
     }
 }

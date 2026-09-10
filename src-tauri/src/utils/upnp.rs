@@ -201,6 +201,88 @@ pub fn parse_ssdp_headers(text: &str) -> HashMap<String, String> {
     out
 }
 
+// ==================== 设备发现（配置页「自动发现」按钮） ====================
+
+/// 发现到的可用 UPnP 媒体服务器（已确认提供 `ContentDirectory`）。
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveredDevice {
+    /// 设备友好名，可直接用作配置里的「名称」。
+    pub friendly_name: String,
+    /// 设备描述 URL —— 直接填入配置里的「地址」字段即可。
+    pub location: String,
+    pub udn: String,
+    pub manufacturer: Option<String>,
+    pub model_name: Option<String>,
+}
+
+/// 探测单个设备描述的超时（发现流程专用，须远短于常规请求）。
+const PROBE_CONNECT_TIMEOUT: Duration = Duration::from_millis(800);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// SSDP 发现 + 描述校验，只返回真正提供 `ContentDirectory` 的设备。
+///
+/// 局域网里同一个网段往往还有路由器、打印机、智能音箱等一堆会响应 SSDP 的
+/// 设备，其中大部分**没有** `ContentDirectory`。因此这里必须逐个拉设备描述
+/// 校验，且任何单台设备失败都只跳过它自己。
+pub fn discover_devices(timeout: Duration) -> Vec<DiscoveredDevice> {
+    let probed: Vec<(String, Result<UpnpDevice, String>)> = ssdp_discover(timeout)
+        .into_iter()
+        .map(|loc| {
+            let result = probe_device(&loc.location);
+            (loc.location, result)
+        })
+        .collect();
+    collect_devices(probed)
+}
+
+/// 拉取并解析单个设备描述（发现流程专用：短超时、不写设备缓存）。
+fn probe_device(location: &str) -> Result<UpnpDevice, String> {
+    let client = crate::utils::http::build_blocking_client_with_timeout(
+        location,
+        PROBE_CONNECT_TIMEOUT,
+        PROBE_TIMEOUT,
+    )?;
+    let resp = client
+        .get(location)
+        .send()
+        .map_err(|e| format!("请求失败: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status().as_u16()));
+    }
+    let body = resp.text().map_err(|e| format!("读取响应失败: {e}"))?;
+    // 无 ContentDirectory 的设备会在这里被拒绝（解析器负责判定）。
+    parse_device_description(&body, location)
+}
+
+/// 把「描述 URL → 解析结果」合并为按 UDN 去重的设备列表。
+///
+/// 纯函数，便于离线单测覆盖"跳过非媒体设备""同设备多地址去重"等分支。
+fn collect_devices(probed: Vec<(String, Result<UpnpDevice, String>)>) -> Vec<DiscoveredDevice> {
+    let mut out: Vec<DiscoveredDevice> = Vec::new();
+    let mut seen_udn: Vec<String> = Vec::new();
+    for (location, result) in probed {
+        match result {
+            Ok(dev) => {
+                // 同一台设备可能从多个网卡/多个 LOCATION 被重复发现。
+                if seen_udn.iter().any(|u| u == &dev.udn) {
+                    continue;
+                }
+                seen_udn.push(dev.udn.clone());
+                out.push(DiscoveredDevice {
+                    friendly_name: dev.friendly_name,
+                    location: dev.description_url,
+                    udn: dev.udn,
+                    manufacturer: dev.manufacturer,
+                    model_name: dev.model_name,
+                });
+            }
+            Err(e) => log::debug!("跳过非媒体设备 {location}: {e}"),
+        }
+    }
+    out
+}
+
 // ==================== Browse（SOAP） ====================
 
 /// 构造 `ContentDirectory#Browse` 的 SOAP 请求体。
@@ -970,4 +1052,109 @@ mod tests {
     }
 
     use crate::models::ServerType;
+
+    // ---------- 设备发现合并逻辑（离线单测，不依赖真实 SSDP 多播） ----------
+
+    fn device(udn: &str, name: &str, url: &str) -> UpnpDevice {
+        UpnpDevice {
+            friendly_name: name.to_string(),
+            udn: udn.to_string(),
+            manufacturer: Some("FeiNiu".to_string()),
+            model_name: Some("fnOS DLNA".to_string()),
+            control_url: format!("{url}/upnp/control/ContentDirectory"),
+            service_type: "urn:schemas-upnp-org:service:ContentDirectory:1".to_string(),
+            description_url: url.to_string(),
+        }
+    }
+
+    /// 没有 ContentDirectory 的设备（路由器、打印机等）必须被跳过，
+    /// 但**不能**影响同批次里的正常设备。
+    #[test]
+    fn discovery_skips_non_media_devices() {
+        let probed = vec![
+            (
+                "http://192.168.1.1/rootDesc.xml".to_string(),
+                Err("该设备未提供 ContentDirectory 服务".to_string()),
+            ),
+            (
+                "http://192.168.1.10:8200/rootDesc.xml".to_string(),
+                Ok(device(
+                    "uuid:aaaa",
+                    "飞牛 NAS 音乐",
+                    "http://192.168.1.10:8200/rootDesc.xml",
+                )),
+            ),
+        ];
+
+        let found = collect_devices(probed);
+        assert_eq!(found.len(), 1, "非媒体设备应被跳过");
+        assert_eq!(found[0].friendly_name, "飞牛 NAS 音乐");
+        assert_eq!(found[0].location, "http://192.168.1.10:8200/rootDesc.xml");
+        assert_eq!(found[0].udn, "uuid:aaaa");
+    }
+
+    /// 同一台设备可能从多个网卡/多个 LOCATION 被重复发现，应按 UDN 去重。
+    #[test]
+    fn discovery_deduplicates_by_udn() {
+        let probed = vec![
+            (
+                "http://192.168.1.10:8200/rootDesc.xml".to_string(),
+                Ok(device(
+                    "uuid:aaaa",
+                    "飞牛 NAS 音乐",
+                    "http://192.168.1.10:8200/rootDesc.xml",
+                )),
+            ),
+            (
+                "http://10.0.0.5:8200/rootDesc.xml".to_string(),
+                Ok(device(
+                    "uuid:aaaa",
+                    "飞牛 NAS 音乐",
+                    "http://10.0.0.5:8200/rootDesc.xml",
+                )),
+            ),
+            (
+                "http://192.168.1.20:8200/rootDesc.xml".to_string(),
+                Ok(device(
+                    "uuid:bbbb",
+                    "群晖 Audio Station",
+                    "http://192.168.1.20:8200/rootDesc.xml",
+                )),
+            ),
+        ];
+
+        let found = collect_devices(probed);
+        assert_eq!(found.len(), 2, "同一 UDN 只应出现一次");
+        // 保留先发现的那台（顺序稳定，便于 UI 展示）。
+        assert_eq!(found[0].location, "http://192.168.1.10:8200/rootDesc.xml");
+        assert_eq!(found[1].udn, "uuid:bbbb");
+    }
+
+    /// 全部探测失败时必须返回空列表而不是 panic（发现失败是可接受的常态）。
+    #[test]
+    fn discovery_tolerates_total_failure() {
+        let probed = vec![
+            ("http://a/d.xml".to_string(), Err("超时".to_string())),
+            ("http://b/d.xml".to_string(), Err("HTTP 404".to_string())),
+        ];
+        assert!(collect_devices(probed).is_empty());
+        assert!(collect_devices(Vec::new()).is_empty());
+    }
+
+    /// 前端按 camelCase 消费，字段名不能漂移。
+    #[test]
+    fn discovered_device_serializes_as_camel_case() {
+        let d = DiscoveredDevice {
+            friendly_name: "NAS".to_string(),
+            location: "http://h/d.xml".to_string(),
+            udn: "uuid:1".to_string(),
+            manufacturer: None,
+            model_name: Some("m".to_string()),
+        };
+        let json = serde_json::to_string(&d).unwrap();
+        assert!(json.contains("\"friendlyName\""), "{json}");
+        assert!(json.contains("\"location\""), "{json}");
+        assert!(json.contains("\"modelName\""), "{json}");
+        assert!(!json.contains("friendly_name"), "{json}");
+    }
 }

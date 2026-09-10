@@ -59,6 +59,114 @@ pub trait RangeReader: Send {
 pub type SegmentOpener =
     dyn Fn(u64, &mut dyn Write, &dyn Fn(u64), &AtomicBool) -> Result<(), String> + Send + Sync;
 
+/// 上游请求头生成器，**每次请求前**调用。
+///
+/// 为什么不能一次生成、长期复用：飞牛音乐的 `authx` 签名带 nonce 与时间戳，
+/// 静态头在长时间播放或多次 Range seek 后会被服务端判为过期。把生成时机放到
+/// 每次请求，签名始终新鲜；`Err` 表示取令牌失败（冒泡成 HTTP 500）。
+pub type HttpHeaderProvider =
+    dyn Fn() -> Result<Vec<(String, String)>, String> + Send + Sync;
+
+/// 构造「从 `offset` 起向上游发 HTTP Range 请求、流式写入 sink」的分段拉取器。
+///
+/// 与 [`SpoolReader`] 组合即得到一个随机 `RangeReader`：seek 落在当前分段之前时
+/// [`SpoolReader`] 会从目标偏移重开一段，这里便重新发一次 HTTP 请求并**重签头**。
+///
+/// 适用对象是「HTTP 原生、但必须携带动态认证头」的来源（飞牛音乐、道理鱼）——
+/// 它们无法像 WebDAV/S3/Plex 那样把 URL 直接交给播放引擎。
+pub fn http_segment_opener(
+    client: reqwest::blocking::Client,
+    url: String,
+    headers: Arc<HttpHeaderProvider>,
+) -> Arc<SegmentOpener> {
+    Arc::new(move |offset, sink, progress, abort| {
+        let mut request = client.get(&url);
+        if offset > 0 {
+            request = request.header(reqwest::header::RANGE, format!("bytes={offset}-"));
+        }
+        for (name, value) in headers()? {
+            request = request.header(name, value);
+        }
+
+        let mut response = request.send().map_err(|e| format!("上游请求失败: {e}"))?;
+        let status = response.status().as_u16();
+        if status != 200 && status != 206 {
+            return Err(format!("上游返回 HTTP {status}"));
+        }
+
+        let mut buf = vec![0u8; BRIDGE_CHUNK];
+        let mut written = 0u64;
+        loop {
+            if abort.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+            let n = match response.read(&mut buf) {
+                Ok(0) => return Ok(()),
+                Ok(n) => n,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) => return Err(format!("读取上游失败: {e}")),
+            };
+            sink.write_all(&buf[..n])
+                .map_err(|e| format!("写入桥接缓存失败: {e}"))?;
+            written += n as u64;
+            progress(written);
+        }
+    })
+}
+
+/// 解析 `Content-Range` 里的总长度（`bytes 0-1/12345` → `12345`）。
+///
+/// `*` 形式（总长未知）返回 `None`。纯函数，便于离线单测。
+pub fn parse_content_range_total(raw: &str) -> Option<u64> {
+    let total = raw.rsplit('/').next()?.trim();
+    if total == "*" {
+        return None;
+    }
+    total.parse::<u64>().ok()
+}
+
+/// 向上游发一次两字节 Range 探测，返回曲目总长度。
+///
+/// 桥接需要总长才能给出正确的 `Content-Length` 与 seek 边界；`Range: bytes=0-1`
+/// 同时充当「认证头是否有效」的探针——401/403 会就此暴露，而不是等到播放中途。
+pub fn probe_total_len(
+    client: &reqwest::blocking::Client,
+    url: &str,
+    headers: &HttpHeaderProvider,
+) -> Result<Option<u64>, String> {
+    let mut request = client
+        .get(url)
+        .header(reqwest::header::RANGE, "bytes=0-1");
+    for (name, value) in headers()? {
+        request = request.header(name, value);
+    }
+
+    let response = request.send().map_err(|e| format!("上游探测失败: {e}"))?;
+    let status = response.status().as_u16();
+    if status == 401 || status == 403 {
+        return Err("上游拒绝认证（令牌无效或已过期）".to_string());
+    }
+    if status == 206 {
+        if let Some(total) = response
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(parse_content_range_total)
+        {
+            return Ok(Some(total));
+        }
+        return Ok(None);
+    }
+    if status == 200 {
+        return Ok(response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok()));
+    }
+    Err(format!("上游探测返回 HTTP {status}"))
+}
+
 // ==================== 渐进式落盘读取器 ====================
 
 /// 共享的下载进度状态。
@@ -1012,7 +1120,6 @@ mod tests {
     // ---------- 走真实 socket 的端到端验证 ----------
 
     use crate::models::ServerType;
-    use std::io::Read as _;
     use std::net::TcpStream;
     use std::time::Duration;
 
