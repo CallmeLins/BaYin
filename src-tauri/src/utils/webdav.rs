@@ -700,8 +700,29 @@ fn hash_url(url: &str) -> u64 {
     h.finish()
 }
 
+/// 解析一段已下载的音频头部字节（S3 等非 WebDAV 源复用）。
+///
+/// 落临时文件后用 lofty 解析，再删除临时文件。`id` 为歌曲标识（写入 `id`/`file_path`）。
+pub(crate) fn parse_probe_bytes(
+    bytes: &[u8],
+    id: &str,
+    modified: Option<i64>,
+    cover_cache: Option<&CoverCache>,
+) -> ScannedSong {
+    if bytes.is_empty() {
+        return fallback_song_with_modified(id, modified);
+    }
+    let tmp_path = std::env::temp_dir().join(format!("bayin-probe-{:x}.bin", hash_url(id)));
+    if std::fs::write(&tmp_path, bytes).is_err() {
+        return fallback_song_with_modified(id, modified);
+    }
+    let song = parse_probe_file(&tmp_path, id, modified, cover_cache);
+    let _ = std::fs::remove_file(&tmp_path);
+    song
+}
+
 /// 用 lofty 解析探测文件
-fn parse_probe_file(
+pub(crate) fn parse_probe_file(
     path: &std::path::Path,
     url: &str,
     modified: Option<i64>,
@@ -793,7 +814,7 @@ fn fallback_song(url: &str) -> ScannedSong {
 }
 
 /// 文件名级兜底歌曲（增量同步跳过探测时使用），保留远程修改时间
-fn fallback_song_with_modified(url: &str, modified: Option<i64>) -> ScannedSong {
+pub(crate) fn fallback_song_with_modified(url: &str, modified: Option<i64>) -> ScannedSong {
     let ext = url
         .rsplit('.')
         .next()

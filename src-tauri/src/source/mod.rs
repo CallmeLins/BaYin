@@ -175,8 +175,10 @@ pub struct SubsonicConnector;
 pub struct WebdavConnector;
 /// Jellyfin/Emby 连接器适配器。
 pub struct JellyfinConnector;
+/// S3 / S3 兼容对象存储连接器（阶段 B5）。
+pub struct S3Connector;
 
-use crate::utils::{jellyfin, subsonic, webdav};
+use crate::utils::{jellyfin, s3, subsonic, webdav};
 
 impl SourceConnector for SubsonicConnector {
     fn id(&self) -> &'static str {
@@ -343,7 +345,65 @@ impl SourceConnector for JellyfinConnector {
     }
 }
 
-/// 构建默认注册表（内置三个连接器）。
+impl SourceConnector for S3Connector {
+    fn id(&self) -> &'static str {
+        "s3"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_s3()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::BROWSE,
+            SourceCapabilities::INCREMENTAL,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::CACHEABLE,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+            SourceCapabilities::SERVER_LYRICS,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        s3::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        s3::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        match s3::S3Config::from_stream_config(config).and_then(|c| s3::presign_get_url(&c, song_id))
+        {
+            Ok(url) => url,
+            Err(e) => {
+                log::error!("S3 生成播放 URL 失败: {e}");
+                String::new()
+            }
+        }
+    }
+    fn get_lyrics(&self, config: &StreamServerConfig, song_id: &str) -> Option<String> {
+        s3::get_lyrics(config, song_id)
+    }
+    fn list_dir(
+        &self,
+        config: &StreamServerConfig,
+        dir_url: Option<&str>,
+    ) -> Result<Vec<DirEntry>, String> {
+        let cfg = s3::S3Config::from_stream_config(config)?;
+        s3::list_dir(&cfg, dir_url.unwrap_or(""))
+    }
+    fn fetch_bytes(&self, config: &StreamServerConfig, url: &str) -> Result<Vec<u8>, String> {
+        let cfg = s3::S3Config::from_stream_config(config)?;
+        s3::fetch_bytes(&cfg, url)
+    }
+}
+
+/// 构建默认注册表（内置连接器）。
 ///
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
@@ -351,5 +411,6 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(SubsonicConnector));
     reg.register(Box::new(WebdavConnector));
     reg.register(Box::new(JellyfinConnector));
+    reg.register(Box::new(S3Connector));
     reg
 }

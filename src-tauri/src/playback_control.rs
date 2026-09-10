@@ -6,7 +6,6 @@ use tauri::{AppHandle, Manager};
 use crate::audio_engine::{engine::AudioCommand, AudioEngineState};
 use crate::db::DbState;
 use crate::playback::PlaybackDomainState;
-use crate::utils::webdav;
 
 fn random_other_index(len: usize, current: usize) -> usize {
     if len <= 1 {
@@ -92,28 +91,20 @@ fn resolve_source(app_handle: &AppHandle, file_path: &str) -> ResolvedSource {
         }
     };
 
-    if config.is_subsonic() {
+    // 经统一能力层解析：任何已注册连接器（现有 Subsonic/Jellyfin/WebDAV 及后续
+    // SMB/S3/FTP… 新源）都自动可用，播放层无需再改 if-else。
+    let info = crate::source::get_stream_play_info(&config, &parsed.song_id);
+    if info.url.is_empty() {
+        // 未注册类型 / 生成失败：回退到原始虚拟路径（保持既有兜底语义）。
         ResolvedSource {
-            url: crate::utils::subsonic::get_stream_url(&config, &parsed.song_id),
+            url: file_path.to_string(),
             headers: None,
-            cache_key,
-        }
-    } else if config.is_jellyfin_like() {
-        ResolvedSource {
-            url: crate::utils::jellyfin::get_stream_url(&config, &parsed.song_id),
-            headers: None,
-            cache_key,
-        }
-    } else if config.is_webdav() {
-        ResolvedSource {
-            url: webdav::stream_url(&config, &parsed.song_id),
-            headers: Some(webdav::stream_headers(&config)),
             cache_key,
         }
     } else {
         ResolvedSource {
-            url: file_path.to_string(),
-            headers: None,
+            url: info.url,
+            headers: info.headers,
             cache_key,
         }
     }

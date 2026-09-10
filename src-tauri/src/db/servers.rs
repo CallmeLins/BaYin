@@ -41,6 +41,7 @@ impl From<&DbStreamServer> for StreamServerConfig {
                 "jellyfin" => ServerType::Jellyfin,
                 "emby" => ServerType::Emby,
                 "webdav" => ServerType::Webdav,
+                "s3" => ServerType::S3,
                 _ => ServerType::Navidrome,
             },
             server_name: s.server_name.clone(),

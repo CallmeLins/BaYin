@@ -56,6 +56,8 @@ pub enum ServerType {
     Jellyfin,
     Emby,
     Webdav,
+    /// S3 / S3 兼容对象存储（MinIO、群晖、飞牛等）。
+    S3,
 }
 
 /// 统一流媒体服务器配置
@@ -97,6 +99,11 @@ impl StreamServerConfig {
     /// 是否使用 WebDAV 协议（PROPFIND 扫描 + Basic Auth 流式播放）
     pub fn is_webdav(&self) -> bool {
         self.server_type == ServerType::Webdav
+    }
+
+    /// 是否使用 S3 / S3 兼容对象存储协议。
+    pub fn is_s3(&self) -> bool {
+        self.server_type == ServerType::S3
     }
 }
 
