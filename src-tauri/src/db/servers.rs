@@ -52,6 +52,7 @@ impl From<&DbStreamServer> for StreamServerConfig {
                 "pan123" | "123" | "123pan" => ServerType::Pan123,
                 "baidu" | "baidupan" | "baiduyun" => ServerType::Baidu,
                 "aliyun" | "aliyundrive" | "alipan" => ServerType::Aliyun,
+                "gdrive" | "googledrive" | "google" => ServerType::GoogleDrive,
                 _ => ServerType::Navidrome,
             },
             server_name: s.server_name.clone(),

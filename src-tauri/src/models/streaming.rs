@@ -78,6 +78,8 @@ pub enum ServerType {
     Baidu,
     /// 阿里云盘（开放平台 OpenAPI，OAuth 刷新令牌）。
     Aliyun,
+    /// Google Drive（OAuth 刷新令牌，媒体地址需带 Bearer 头）。
+    GoogleDrive,
 }
 
 impl ServerType {
@@ -101,6 +103,7 @@ impl ServerType {
             ServerType::Pan123 => "pan123",
             ServerType::Baidu => "baidu",
             ServerType::Aliyun => "aliyun",
+            ServerType::GoogleDrive => "gdrive",
         }
     }
 }
@@ -199,6 +202,11 @@ impl StreamServerConfig {
     /// 是否使用阿里云盘开放平台 API。
     pub fn is_aliyun(&self) -> bool {
         self.server_type == ServerType::Aliyun
+    }
+
+    /// 是否使用 Google Drive API。
+    pub fn is_gdrive(&self) -> bool {
+        self.server_type == ServerType::GoogleDrive
     }
 }
 

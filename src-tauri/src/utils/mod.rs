@@ -6,6 +6,7 @@ pub mod daoliyu;
 pub mod datetime;
 pub mod fnmusic;
 pub mod ftp;
+pub mod gdrive;
 pub mod http;
 pub mod jellyfin;
 pub mod localfs;

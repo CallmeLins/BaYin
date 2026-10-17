@@ -75,6 +75,8 @@ pub fn policy_for(config: &StreamServerConfig) -> ThrottlePolicy {
         ServerType::Baidu => ThrottlePolicy::new(1, 500, 600),
         // 阿里云盘 list 限流按账号计，200/页，适中即可。
         ServerType::Aliyun => ThrottlePolicy::new(2, 300, 1000),
+        // Google Drive 默认 1000 请求/100 秒/用户，约 10 QPS；留足余量。
+        ServerType::GoogleDrive => ThrottlePolicy::new(3, 200, 2000),
         _ => UNTHROTTLED,
     }
 }

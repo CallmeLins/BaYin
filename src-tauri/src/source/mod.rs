@@ -285,10 +285,12 @@ pub struct Pan123Connector;
 pub struct BaiduConnector;
 /// 阿里云盘连接器（阶段 D4；OAuth 刷新令牌，HTTP 原生直链）。
 pub struct AliyunConnector;
+/// Google Drive 连接器（阶段 D5；OAuth 刷新令牌，媒体地址需带 Bearer 头）。
+pub struct GoogleDriveConnector;
 
 use crate::utils::{
-    aliyun, baidu, daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic,
-    upnp, webdav,
+    aliyun, baidu, daoliyu, fnmusic, ftp, gdrive, jellyfin, localfs, pan115, pan123, plex, s3,
+    subsonic, upnp, webdav,
 };
 
 impl SourceConnector for SubsonicConnector {
@@ -1175,6 +1177,52 @@ impl SourceConnector for AliyunConnector {
     }
 }
 
+impl SourceConnector for GoogleDriveConnector {
+    fn id(&self) -> &'static str {
+        "gdrive"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_gdrive()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // Google Drive：按文件夹 id BFS 扫描 + HTTP 原生直链（需 Bearer 头）。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        gdrive::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        gdrive::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        gdrive::get_stream_url(config, song_id)
+    }
+    fn get_stream_play_info(
+        &self,
+        config: &StreamServerConfig,
+        song_id: &str,
+    ) -> StreamPlayInfo {
+        // `alt=media` 必须带 `Authorization: Bearer`，所以令牌要随播放信息下发。
+        let (url, headers) = gdrive::stream_url_and_headers(config, song_id);
+        StreamPlayInfo {
+            url,
+            headers: (!headers.is_empty()).then_some(headers),
+        }
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
@@ -1193,6 +1241,7 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(Pan123Connector));
     reg.register(Box::new(BaiduConnector));
     reg.register(Box::new(AliyunConnector));
+    reg.register(Box::new(GoogleDriveConnector));
     reg
 }
 
@@ -1395,6 +1444,7 @@ mod tests {
             ServerType::Pan123,
             ServerType::Baidu,
             ServerType::Aliyun,
+            ServerType::GoogleDrive,
         ] {
             let cfg = config_of(t);
             assert!(
