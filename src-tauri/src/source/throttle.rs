@@ -66,17 +66,8 @@ pub fn policy_for(config: &StreamServerConfig) -> ThrottlePolicy {
         ServerType::Upnp => ThrottlePolicy::new(2, 100, 400),
         // 本地 / 系统挂载路径：读的是本机文件系统，无需节流。
         ServerType::Smb => ThrottlePolicy::new(8, 0, 0),
-        // 115 开放平台有 IP 频控，扫描时保守一些。
-        ServerType::Pan115 => ThrottlePolicy::new(2, 100, 1000),
-        // 123 开放平台对 `/api/v2/file/list` 限 3 QPS，留足余量。
-        ServerType::Pan123 => ThrottlePolicy::new(2, 350, 1000),
-        // 百度按 IP 严控频次，且列目录是路径式（每层一次请求），扫大库很慢，
-        // 单轮上限压到 600，宁可多轮也不要触发限流。
-        ServerType::Baidu => ThrottlePolicy::new(1, 500, 600),
-        // 阿里云盘 list 限流按账号计，200/页，适中即可。
-        ServerType::Aliyun => ThrottlePolicy::new(2, 300, 1000),
-        // Google Drive 默认 1000 请求/100 秒/用户，约 10 QPS；留足余量。
-        ServerType::GoogleDrive => ThrottlePolicy::new(3, 200, 2000),
+        // AList 自己会缓存目录，但其后端仍可能是限流的云盘，取 WebDAV 同档。
+        ServerType::Alist => ThrottlePolicy::new(4, 50, 2000),
         _ => UNTHROTTLED,
     }
 }

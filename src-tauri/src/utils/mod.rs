@@ -1,17 +1,12 @@
 pub mod audio;
-pub mod aliyun;
-pub mod baidu;
 pub mod cover;
 pub mod daoliyu;
 pub mod datetime;
 pub mod fnmusic;
 pub mod ftp;
-pub mod gdrive;
 pub mod http;
 pub mod jellyfin;
 pub mod localfs;
-pub mod pan115;
-pub mod pan123;
 pub mod plex;
 pub mod s3;
 pub mod subsonic;

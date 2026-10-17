@@ -48,11 +48,8 @@ impl From<&DbStreamServer> for StreamServerConfig {
                 "plex" => ServerType::Plex,
                 "fnmusic" | "feiniu" | "fnos" => ServerType::FnMusic,
                 "daoliyu" | "dl" => ServerType::DaoLiYu,
-                "pan115" | "115" | "115pan" => ServerType::Pan115,
-                "pan123" | "123" | "123pan" => ServerType::Pan123,
-                "baidu" | "baidupan" | "baiduyun" => ServerType::Baidu,
-                "aliyun" | "aliyundrive" | "alipan" => ServerType::Aliyun,
-                "gdrive" | "googledrive" | "google" => ServerType::GoogleDrive,
+                // AList / OpenList 统一以 WebDAV 端点接入（其默认路径为 /dav）。
+                "alist" | "openlist" => ServerType::Alist,
                 _ => ServerType::Navidrome,
             },
             server_name: s.server_name.clone(),

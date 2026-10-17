@@ -277,20 +277,9 @@ pub struct PlexConnector;
 pub struct FnMusicConnector;
 /// 道理鱼连接器（阶段 C3；Bearer 认证，经本地桥接播放）。
 pub struct DaoLiYuConnector;
-/// 115 网盘连接器（阶段 D1；Bearer + 轮换 refresh_token，HTTP 原生直链）。
-pub struct Pan115Connector;
-/// 123 云盘连接器（阶段 D2；clientID/clientSecret 换令牌，HTTP 原生直链）。
-pub struct Pan123Connector;
-/// 百度网盘连接器（阶段 D3；OAuth 刷新令牌，HTTP 原生直链）。
-pub struct BaiduConnector;
-/// 阿里云盘连接器（阶段 D4；OAuth 刷新令牌，HTTP 原生直链）。
-pub struct AliyunConnector;
-/// Google Drive 连接器（阶段 D5；OAuth 刷新令牌，媒体地址需带 Bearer 头）。
-pub struct GoogleDriveConnector;
 
 use crate::utils::{
-    aliyun, baidu, daoliyu, fnmusic, ftp, gdrive, jellyfin, localfs, pan115, pan123, plex, s3,
-    subsonic, upnp, webdav,
+    daoliyu, fnmusic, ftp, jellyfin, localfs, plex, s3, subsonic, upnp, webdav,
 };
 
 impl SourceConnector for SubsonicConnector {
@@ -336,7 +325,8 @@ impl SourceConnector for WebdavConnector {
         "webdav"
     }
     fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_webdav()
+        // AList / OpenList 暴露的也是 WebDAV，直接复用同一套实现与能力位。
+        config.is_webdav() || config.is_alist()
     }
     fn capabilities(&self) -> SourceCapabilities {
         SourceCapabilities::from_slice(&[
@@ -1016,213 +1006,6 @@ impl SourceConnector for DaoLiYuConnector {
     }
 }
 
-impl SourceConnector for Pan115Connector {
-    fn id(&self) -> &'static str {
-        "pan115"
-    }
-    fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_pan115()
-    }
-    fn capabilities(&self) -> SourceCapabilities {
-        // 115：目录 BFS 扫描 + HTTP 原生直链。
-        // 直链本身支持 Range，但**有时效**，过期后需重新换链；故不声明缓存写透，
-        // 避免把临时签名的字节当成永久缓存。
-        SourceCapabilities::from_slice(&[
-            SourceCapabilities::SCAN_LIBRARY,
-            SourceCapabilities::RANGE_STREAMING,
-            SourceCapabilities::READONLY,
-            SourceCapabilities::TRUSTED_HOST,
-        ])
-    }
-    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
-        pan115::test_connection(config)
-    }
-    fn fetch_all_songs(
-        &self,
-        config: &StreamServerConfig,
-        cover_cache: Option<&crate::utils::cover::CoverCache>,
-        existing_modified: Option<&HashMap<String, i64>>,
-        progress: Option<ScanProgress>,
-        read_tags: bool,
-    ) -> Result<Vec<ScannedSong>, String> {
-        pan115::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
-    }
-    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
-        pan115::get_stream_url(config, song_id)
-    }
-    fn get_stream_play_info(
-        &self,
-        config: &StreamServerConfig,
-        song_id: &str,
-    ) -> StreamPlayInfo {
-        // 115 直链对 UA 敏感，必须带上换链时使用的 UA。
-        StreamPlayInfo {
-            url: pan115::get_stream_url(config, song_id),
-            headers: Some(pan115::stream_headers()),
-        }
-    }
-}
-
-impl SourceConnector for Pan123Connector {
-    fn id(&self) -> &'static str {
-        "pan123"
-    }
-    fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_pan123()
-    }
-    fn capabilities(&self) -> SourceCapabilities {
-        // 123：目录 BFS 扫描 + HTTP 原生直链。
-        // 直链是带时效的 CDN 地址，故不声明缓存写透。
-        SourceCapabilities::from_slice(&[
-            SourceCapabilities::SCAN_LIBRARY,
-            SourceCapabilities::RANGE_STREAMING,
-            SourceCapabilities::READONLY,
-            SourceCapabilities::TRUSTED_HOST,
-        ])
-    }
-    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
-        pan123::test_connection(config)
-    }
-    fn fetch_all_songs(
-        &self,
-        config: &StreamServerConfig,
-        cover_cache: Option<&crate::utils::cover::CoverCache>,
-        existing_modified: Option<&HashMap<String, i64>>,
-        progress: Option<ScanProgress>,
-        read_tags: bool,
-    ) -> Result<Vec<ScannedSong>, String> {
-        pan123::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
-    }
-    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
-        pan123::get_stream_url(config, song_id)
-    }
-}
-
-impl SourceConnector for BaiduConnector {
-    fn id(&self) -> &'static str {
-        "baidu"
-    }
-    fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_baidu()
-    }
-    fn capabilities(&self) -> SourceCapabilities {
-        // 百度：按路径 BFS 扫描 + HTTP 原生直链（dlink + access_token）。
-        SourceCapabilities::from_slice(&[
-            SourceCapabilities::SCAN_LIBRARY,
-            SourceCapabilities::RANGE_STREAMING,
-            SourceCapabilities::READONLY,
-            SourceCapabilities::TRUSTED_HOST,
-        ])
-    }
-    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
-        baidu::test_connection(config)
-    }
-    fn fetch_all_songs(
-        &self,
-        config: &StreamServerConfig,
-        cover_cache: Option<&crate::utils::cover::CoverCache>,
-        existing_modified: Option<&HashMap<String, i64>>,
-        progress: Option<ScanProgress>,
-        read_tags: bool,
-    ) -> Result<Vec<ScannedSong>, String> {
-        baidu::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
-    }
-    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
-        baidu::get_stream_url(config, song_id)
-    }
-    fn get_stream_play_info(
-        &self,
-        config: &StreamServerConfig,
-        song_id: &str,
-    ) -> StreamPlayInfo {
-        // 百度 CDN 只认 `User-Agent: pan.baidu.com`，缺了就 403。
-        StreamPlayInfo {
-            url: baidu::get_stream_url(config, song_id),
-            headers: Some(baidu::stream_headers()),
-        }
-    }
-}
-
-impl SourceConnector for AliyunConnector {
-    fn id(&self) -> &'static str {
-        "aliyun"
-    }
-    fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_aliyun()
-    }
-    fn capabilities(&self) -> SourceCapabilities {
-        // 阿里云盘：按 file_id BFS 扫描 + HTTP 原生直链。
-        SourceCapabilities::from_slice(&[
-            SourceCapabilities::SCAN_LIBRARY,
-            SourceCapabilities::RANGE_STREAMING,
-            SourceCapabilities::READONLY,
-            SourceCapabilities::TRUSTED_HOST,
-        ])
-    }
-    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
-        aliyun::test_connection(config)
-    }
-    fn fetch_all_songs(
-        &self,
-        config: &StreamServerConfig,
-        cover_cache: Option<&crate::utils::cover::CoverCache>,
-        existing_modified: Option<&HashMap<String, i64>>,
-        progress: Option<ScanProgress>,
-        read_tags: bool,
-    ) -> Result<Vec<ScannedSong>, String> {
-        aliyun::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
-    }
-    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
-        aliyun::get_stream_url(config, song_id)
-    }
-}
-
-impl SourceConnector for GoogleDriveConnector {
-    fn id(&self) -> &'static str {
-        "gdrive"
-    }
-    fn matches(&self, config: &StreamServerConfig) -> bool {
-        config.is_gdrive()
-    }
-    fn capabilities(&self) -> SourceCapabilities {
-        // Google Drive：按文件夹 id BFS 扫描 + HTTP 原生直链（需 Bearer 头）。
-        SourceCapabilities::from_slice(&[
-            SourceCapabilities::SCAN_LIBRARY,
-            SourceCapabilities::RANGE_STREAMING,
-            SourceCapabilities::READONLY,
-            SourceCapabilities::TRUSTED_HOST,
-        ])
-    }
-    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
-        gdrive::test_connection(config)
-    }
-    fn fetch_all_songs(
-        &self,
-        config: &StreamServerConfig,
-        cover_cache: Option<&crate::utils::cover::CoverCache>,
-        existing_modified: Option<&HashMap<String, i64>>,
-        progress: Option<ScanProgress>,
-        read_tags: bool,
-    ) -> Result<Vec<ScannedSong>, String> {
-        gdrive::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
-    }
-    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
-        gdrive::get_stream_url(config, song_id)
-    }
-    fn get_stream_play_info(
-        &self,
-        config: &StreamServerConfig,
-        song_id: &str,
-    ) -> StreamPlayInfo {
-        // `alt=media` 必须带 `Authorization: Bearer`，所以令牌要随播放信息下发。
-        let (url, headers) = gdrive::stream_url_and_headers(config, song_id);
-        StreamPlayInfo {
-            url,
-            headers: (!headers.is_empty()).then_some(headers),
-        }
-    }
-}
-
 /// 构建默认注册表（内置连接器）。
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
@@ -1237,11 +1020,6 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(PlexConnector));
     reg.register(Box::new(FnMusicConnector));
     reg.register(Box::new(DaoLiYuConnector));
-    reg.register(Box::new(Pan115Connector));
-    reg.register(Box::new(Pan123Connector));
-    reg.register(Box::new(BaiduConnector));
-    reg.register(Box::new(AliyunConnector));
-    reg.register(Box::new(GoogleDriveConnector));
     reg
 }
 
@@ -1411,14 +1189,8 @@ mod tests {
         assert!(throttle::policy_for(&config_of(ServerType::S3)).max_items > 0);
         assert!(throttle::policy_for(&config_of(ServerType::Ftp)).max_items > 0);
         assert!(throttle::policy_for(&config_of(ServerType::Upnp)).max_items > 0);
-        // 115 有 IP 频控，必须限速。
-        assert!(throttle::policy_for(&config_of(ServerType::Pan115)).max_items > 0);
-        // 123 的列目录接口限 3 QPS，必须限速。
-        assert!(throttle::policy_for(&config_of(ServerType::Pan123)).max_items > 0);
-        // 百度按 IP 严控频次，必须限速且更保守。
-        let baidu_policy = throttle::policy_for(&config_of(ServerType::Baidu));
-        assert!(baidu_policy.max_items > 0);
-        assert!(baidu_policy.interval_ms >= throttle::policy_for(&config_of(ServerType::Pan123)).interval_ms);
+        // AList 后端仍可能是限流的云盘，必须限速。
+        assert!(throttle::policy_for(&config_of(ServerType::Alist)).max_items > 0);
         // 本地挂载是纯本机 IO，不应被限速。
         assert_eq!(throttle::policy_for(&config_of(ServerType::Smb)).interval_ms, 0);
     }
@@ -1440,11 +1212,7 @@ mod tests {
             ServerType::Plex,
             ServerType::FnMusic,
             ServerType::DaoLiYu,
-            ServerType::Pan115,
-            ServerType::Pan123,
-            ServerType::Baidu,
-            ServerType::Aliyun,
-            ServerType::GoogleDrive,
+            ServerType::Alist,
         ] {
             let cfg = config_of(t);
             assert!(

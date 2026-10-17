@@ -70,16 +70,11 @@ pub enum ServerType {
     FnMusic,
     /// 道理鱼音乐服务（Bearer 认证的只读曲库）。
     DaoLiYu,
-    /// 115 网盘（开放平台 OpenAPI，Bearer + 轮换 refresh_token）。
-    Pan115,
-    /// 123 云盘（开放平台 OpenAPI，clientID + clientSecret 换令牌）。
-    Pan123,
-    /// 百度网盘（开放平台 Pan API，OAuth 刷新令牌）。
-    Baidu,
-    /// 阿里云盘（开放平台 OpenAPI，OAuth 刷新令牌）。
-    Aliyun,
-    /// Google Drive（OAuth 刷新令牌，媒体地址需带 Bearer 头）。
-    GoogleDrive,
+    /// AList / OpenList（网盘聚合服务，走其 WebDAV 端点）。
+    ///
+    /// 各家云盘不再单独实现：由 AList 统一挂载与续期，播放器只当一个
+    /// WebDAV 客户端即可。能力位与实现完全复用 [`ServerType::Webdav`]。
+    Alist,
 }
 
 impl ServerType {
@@ -99,11 +94,7 @@ impl ServerType {
             ServerType::Plex => "plex",
             ServerType::FnMusic => "fnmusic",
             ServerType::DaoLiYu => "daoliyu",
-            ServerType::Pan115 => "pan115",
-            ServerType::Pan123 => "pan123",
-            ServerType::Baidu => "baidu",
-            ServerType::Aliyun => "aliyun",
-            ServerType::GoogleDrive => "gdrive",
+            ServerType::Alist => "alist",
         }
     }
 }
@@ -184,29 +175,9 @@ impl StreamServerConfig {
         self.server_type == ServerType::DaoLiYu
     }
 
-    /// 是否使用 115 网盘开放平台 API。
-    pub fn is_pan115(&self) -> bool {
-        self.server_type == ServerType::Pan115
-    }
-
-    /// 是否使用 123 云盘开放平台 API。
-    pub fn is_pan123(&self) -> bool {
-        self.server_type == ServerType::Pan123
-    }
-
-    /// 是否使用百度网盘开放平台 API。
-    pub fn is_baidu(&self) -> bool {
-        self.server_type == ServerType::Baidu
-    }
-
-    /// 是否使用阿里云盘开放平台 API。
-    pub fn is_aliyun(&self) -> bool {
-        self.server_type == ServerType::Aliyun
-    }
-
-    /// 是否使用 Google Drive API。
-    pub fn is_gdrive(&self) -> bool {
-        self.server_type == ServerType::GoogleDrive
+    /// 是否为 AList / OpenList（走其 WebDAV 端点，实现复用 WebDAV）。
+    pub fn is_alist(&self) -> bool {
+        self.server_type == ServerType::Alist
     }
 }
 
