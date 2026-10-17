@@ -68,6 +68,8 @@ pub fn policy_for(config: &StreamServerConfig) -> ThrottlePolicy {
         ServerType::Smb => ThrottlePolicy::new(8, 0, 0),
         // 115 开放平台有 IP 频控，扫描时保守一些。
         ServerType::Pan115 => ThrottlePolicy::new(2, 100, 1000),
+        // 123 开放平台对 `/api/v2/file/list` 限 3 QPS，留足余量。
+        ServerType::Pan123 => ThrottlePolicy::new(2, 350, 1000),
         _ => UNTHROTTLED,
     }
 }

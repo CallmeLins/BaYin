@@ -49,6 +49,7 @@ impl From<&DbStreamServer> for StreamServerConfig {
                 "fnmusic" | "feiniu" | "fnos" => ServerType::FnMusic,
                 "daoliyu" | "dl" => ServerType::DaoLiYu,
                 "pan115" | "115" | "115pan" => ServerType::Pan115,
+                "pan123" | "123" | "123pan" => ServerType::Pan123,
                 _ => ServerType::Navidrome,
             },
             server_name: s.server_name.clone(),

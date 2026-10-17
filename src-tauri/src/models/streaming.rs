@@ -72,6 +72,8 @@ pub enum ServerType {
     DaoLiYu,
     /// 115 网盘（开放平台 OpenAPI，Bearer + 轮换 refresh_token）。
     Pan115,
+    /// 123 云盘（开放平台 OpenAPI，clientID + clientSecret 换令牌）。
+    Pan123,
 }
 
 impl ServerType {
@@ -92,6 +94,7 @@ impl ServerType {
             ServerType::FnMusic => "fnmusic",
             ServerType::DaoLiYu => "daoliyu",
             ServerType::Pan115 => "pan115",
+            ServerType::Pan123 => "pan123",
         }
     }
 }
@@ -175,6 +178,11 @@ impl StreamServerConfig {
     /// 是否使用 115 网盘开放平台 API。
     pub fn is_pan115(&self) -> bool {
         self.server_type == ServerType::Pan115
+    }
+
+    /// 是否使用 123 云盘开放平台 API。
+    pub fn is_pan123(&self) -> bool {
+        self.server_type == ServerType::Pan123
     }
 }
 

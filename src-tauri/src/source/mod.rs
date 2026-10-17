@@ -279,9 +279,11 @@ pub struct FnMusicConnector;
 pub struct DaoLiYuConnector;
 /// 115 网盘连接器（阶段 D1；Bearer + 轮换 refresh_token，HTTP 原生直链）。
 pub struct Pan115Connector;
+/// 123 云盘连接器（阶段 D2；clientID/clientSecret 换令牌，HTTP 原生直链）。
+pub struct Pan123Connector;
 
 use crate::utils::{
-    daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, plex, s3, subsonic, upnp, webdav,
+    daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic, upnp, webdav,
 };
 
 impl SourceConnector for SubsonicConnector {
@@ -1054,8 +1056,42 @@ impl SourceConnector for Pan115Connector {
     }
 }
 
+impl SourceConnector for Pan123Connector {
+    fn id(&self) -> &'static str {
+        "pan123"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_pan123()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 123：目录 BFS 扫描 + HTTP 原生直链。
+        // 直链是带时效的 CDN 地址，故不声明缓存写透。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        pan123::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        pan123::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        pan123::get_stream_url(config, song_id)
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
-///
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
     let mut reg = SourceRegistry::new();
@@ -1070,6 +1106,7 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(FnMusicConnector));
     reg.register(Box::new(DaoLiYuConnector));
     reg.register(Box::new(Pan115Connector));
+    reg.register(Box::new(Pan123Connector));
     reg
 }
 
@@ -1241,6 +1278,8 @@ mod tests {
         assert!(throttle::policy_for(&config_of(ServerType::Upnp)).max_items > 0);
         // 115 有 IP 频控，必须限速。
         assert!(throttle::policy_for(&config_of(ServerType::Pan115)).max_items > 0);
+        // 123 的列目录接口限 3 QPS，必须限速。
+        assert!(throttle::policy_for(&config_of(ServerType::Pan123)).max_items > 0);
         // 本地挂载是纯本机 IO，不应被限速。
         assert_eq!(throttle::policy_for(&config_of(ServerType::Smb)).interval_ms, 0);
     }
@@ -1263,6 +1302,7 @@ mod tests {
             ServerType::FnMusic,
             ServerType::DaoLiYu,
             ServerType::Pan115,
+            ServerType::Pan123,
         ] {
             let cfg = config_of(t);
             assert!(

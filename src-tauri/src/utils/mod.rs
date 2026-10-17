@@ -8,6 +8,7 @@ pub mod http;
 pub mod jellyfin;
 pub mod localfs;
 pub mod pan115;
+pub mod pan123;
 pub mod plex;
 pub mod s3;
 pub mod subsonic;
