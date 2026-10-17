@@ -76,6 +76,8 @@ pub enum ServerType {
     Pan123,
     /// 百度网盘（开放平台 Pan API，OAuth 刷新令牌）。
     Baidu,
+    /// 阿里云盘（开放平台 OpenAPI，OAuth 刷新令牌）。
+    Aliyun,
 }
 
 impl ServerType {
@@ -98,6 +100,7 @@ impl ServerType {
             ServerType::Pan115 => "pan115",
             ServerType::Pan123 => "pan123",
             ServerType::Baidu => "baidu",
+            ServerType::Aliyun => "aliyun",
         }
     }
 }
@@ -191,6 +194,11 @@ impl StreamServerConfig {
     /// 是否使用百度网盘开放平台 API。
     pub fn is_baidu(&self) -> bool {
         self.server_type == ServerType::Baidu
+    }
+
+    /// 是否使用阿里云盘开放平台 API。
+    pub fn is_aliyun(&self) -> bool {
+        self.server_type == ServerType::Aliyun
     }
 }
 

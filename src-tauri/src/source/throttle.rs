@@ -73,6 +73,8 @@ pub fn policy_for(config: &StreamServerConfig) -> ThrottlePolicy {
         // 百度按 IP 严控频次，且列目录是路径式（每层一次请求），扫大库很慢，
         // 单轮上限压到 600，宁可多轮也不要触发限流。
         ServerType::Baidu => ThrottlePolicy::new(1, 500, 600),
+        // 阿里云盘 list 限流按账号计，200/页，适中即可。
+        ServerType::Aliyun => ThrottlePolicy::new(2, 300, 1000),
         _ => UNTHROTTLED,
     }
 }

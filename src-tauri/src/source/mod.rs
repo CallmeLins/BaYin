@@ -283,10 +283,12 @@ pub struct Pan115Connector;
 pub struct Pan123Connector;
 /// 百度网盘连接器（阶段 D3；OAuth 刷新令牌，HTTP 原生直链）。
 pub struct BaiduConnector;
+/// 阿里云盘连接器（阶段 D4；OAuth 刷新令牌，HTTP 原生直链）。
+pub struct AliyunConnector;
 
 use crate::utils::{
-    baidu, daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic, upnp,
-    webdav,
+    aliyun, baidu, daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic,
+    upnp, webdav,
 };
 
 impl SourceConnector for SubsonicConnector {
@@ -1139,6 +1141,40 @@ impl SourceConnector for BaiduConnector {
     }
 }
 
+impl SourceConnector for AliyunConnector {
+    fn id(&self) -> &'static str {
+        "aliyun"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_aliyun()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 阿里云盘：按 file_id BFS 扫描 + HTTP 原生直链。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        aliyun::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        aliyun::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        aliyun::get_stream_url(config, song_id)
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
@@ -1156,6 +1192,7 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(Pan115Connector));
     reg.register(Box::new(Pan123Connector));
     reg.register(Box::new(BaiduConnector));
+    reg.register(Box::new(AliyunConnector));
     reg
 }
 
@@ -1357,6 +1394,7 @@ mod tests {
             ServerType::Pan115,
             ServerType::Pan123,
             ServerType::Baidu,
+            ServerType::Aliyun,
         ] {
             let cfg = config_of(t);
             assert!(
