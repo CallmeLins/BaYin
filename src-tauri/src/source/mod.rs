@@ -281,9 +281,12 @@ pub struct DaoLiYuConnector;
 pub struct Pan115Connector;
 /// 123 云盘连接器（阶段 D2；clientID/clientSecret 换令牌，HTTP 原生直链）。
 pub struct Pan123Connector;
+/// 百度网盘连接器（阶段 D3；OAuth 刷新令牌，HTTP 原生直链）。
+pub struct BaiduConnector;
 
 use crate::utils::{
-    daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic, upnp, webdav,
+    baidu, daoliyu, fnmusic, ftp, jellyfin, localfs, pan115, pan123, plex, s3, subsonic, upnp,
+    webdav,
 };
 
 impl SourceConnector for SubsonicConnector {
@@ -1091,6 +1094,51 @@ impl SourceConnector for Pan123Connector {
     }
 }
 
+impl SourceConnector for BaiduConnector {
+    fn id(&self) -> &'static str {
+        "baidu"
+    }
+    fn matches(&self, config: &StreamServerConfig) -> bool {
+        config.is_baidu()
+    }
+    fn capabilities(&self) -> SourceCapabilities {
+        // 百度：按路径 BFS 扫描 + HTTP 原生直链（dlink + access_token）。
+        SourceCapabilities::from_slice(&[
+            SourceCapabilities::SCAN_LIBRARY,
+            SourceCapabilities::RANGE_STREAMING,
+            SourceCapabilities::READONLY,
+            SourceCapabilities::TRUSTED_HOST,
+        ])
+    }
+    fn test_connection(&self, config: &StreamServerConfig) -> ConnectionTestResult {
+        baidu::test_connection(config)
+    }
+    fn fetch_all_songs(
+        &self,
+        config: &StreamServerConfig,
+        cover_cache: Option<&crate::utils::cover::CoverCache>,
+        existing_modified: Option<&HashMap<String, i64>>,
+        progress: Option<ScanProgress>,
+        read_tags: bool,
+    ) -> Result<Vec<ScannedSong>, String> {
+        baidu::fetch_all_songs(config, cover_cache, existing_modified, progress, read_tags)
+    }
+    fn get_stream_url(&self, config: &StreamServerConfig, song_id: &str) -> String {
+        baidu::get_stream_url(config, song_id)
+    }
+    fn get_stream_play_info(
+        &self,
+        config: &StreamServerConfig,
+        song_id: &str,
+    ) -> StreamPlayInfo {
+        // 百度 CDN 只认 `User-Agent: pan.baidu.com`，缺了就 403。
+        StreamPlayInfo {
+            url: baidu::get_stream_url(config, song_id),
+            headers: Some(baidu::stream_headers()),
+        }
+    }
+}
+
 /// 构建默认注册表（内置连接器）。
 /// 后续新增音乐源时，在此追加注册即可。
 pub fn registry() -> SourceRegistry {
@@ -1107,6 +1155,7 @@ pub fn registry() -> SourceRegistry {
     reg.register(Box::new(DaoLiYuConnector));
     reg.register(Box::new(Pan115Connector));
     reg.register(Box::new(Pan123Connector));
+    reg.register(Box::new(BaiduConnector));
     reg
 }
 
@@ -1280,6 +1329,10 @@ mod tests {
         assert!(throttle::policy_for(&config_of(ServerType::Pan115)).max_items > 0);
         // 123 的列目录接口限 3 QPS，必须限速。
         assert!(throttle::policy_for(&config_of(ServerType::Pan123)).max_items > 0);
+        // 百度按 IP 严控频次，必须限速且更保守。
+        let baidu_policy = throttle::policy_for(&config_of(ServerType::Baidu));
+        assert!(baidu_policy.max_items > 0);
+        assert!(baidu_policy.interval_ms >= throttle::policy_for(&config_of(ServerType::Pan123)).interval_ms);
         // 本地挂载是纯本机 IO，不应被限速。
         assert_eq!(throttle::policy_for(&config_of(ServerType::Smb)).interval_ms, 0);
     }
@@ -1303,6 +1356,7 @@ mod tests {
             ServerType::DaoLiYu,
             ServerType::Pan115,
             ServerType::Pan123,
+            ServerType::Baidu,
         ] {
             let cfg = config_of(t);
             assert!(

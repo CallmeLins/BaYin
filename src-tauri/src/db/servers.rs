@@ -50,6 +50,7 @@ impl From<&DbStreamServer> for StreamServerConfig {
                 "daoliyu" | "dl" => ServerType::DaoLiYu,
                 "pan115" | "115" | "115pan" => ServerType::Pan115,
                 "pan123" | "123" | "123pan" => ServerType::Pan123,
+                "baidu" | "baidupan" | "baiduyun" => ServerType::Baidu,
                 _ => ServerType::Navidrome,
             },
             server_name: s.server_name.clone(),

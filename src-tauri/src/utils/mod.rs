@@ -1,4 +1,5 @@
 pub mod audio;
+pub mod baidu;
 pub mod cover;
 pub mod daoliyu;
 pub mod datetime;
