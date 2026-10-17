@@ -70,6 +70,8 @@ pub enum ServerType {
     FnMusic,
     /// 道理鱼音乐服务（Bearer 认证的只读曲库）。
     DaoLiYu,
+    /// 115 网盘（开放平台 OpenAPI，Bearer + 轮换 refresh_token）。
+    Pan115,
 }
 
 impl ServerType {
@@ -89,6 +91,7 @@ impl ServerType {
             ServerType::Plex => "plex",
             ServerType::FnMusic => "fnmusic",
             ServerType::DaoLiYu => "daoliyu",
+            ServerType::Pan115 => "pan115",
         }
     }
 }
@@ -167,6 +170,11 @@ impl StreamServerConfig {
     /// 是否为道理鱼（Bearer 认证，播放需经本地桥接）。
     pub fn is_daoliyu(&self) -> bool {
         self.server_type == ServerType::DaoLiYu
+    }
+
+    /// 是否使用 115 网盘开放平台 API。
+    pub fn is_pan115(&self) -> bool {
+        self.server_type == ServerType::Pan115
     }
 }
 

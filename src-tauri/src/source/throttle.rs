@@ -66,6 +66,8 @@ pub fn policy_for(config: &StreamServerConfig) -> ThrottlePolicy {
         ServerType::Upnp => ThrottlePolicy::new(2, 100, 400),
         // 本地 / 系统挂载路径：读的是本机文件系统，无需节流。
         ServerType::Smb => ThrottlePolicy::new(8, 0, 0),
+        // 115 开放平台有 IP 频控，扫描时保守一些。
+        ServerType::Pan115 => ThrottlePolicy::new(2, 100, 1000),
         _ => UNTHROTTLED,
     }
 }
