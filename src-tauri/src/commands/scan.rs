@@ -1,6 +1,6 @@
 //! Advanced scanning commands with incremental scan and progress events
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -158,6 +158,8 @@ pub async fn scan_local_to_db(
     // Phase 2: Check which files need scanning (for incremental mode)
     let files_to_scan: Vec<PathBuf>;
     let mut skipped_count = 0;
+    // 增量扫描前已入库的文件路径，用于把本轮写入拆成「新增 / 更新」。
+    let mut existing_file_paths: HashSet<String> = HashSet::new();
 
     match options.mode {
         ScanMode::Incremental => {
@@ -183,6 +185,9 @@ pub async fn scan_local_to_db(
                     .map(|s| (s.file_path, s.file_modified))
                     .collect()
             };
+
+            // 快照：写入阶段据此把每首歌拆成「新增 / 更新」。
+            existing_file_paths = existing_files.keys().cloned().collect();
 
             // Filter to only files that are new or modified
             files_to_scan = audio_paths
@@ -319,6 +324,7 @@ pub async fn scan_local_to_db(
     );
 
     let added_count;
+    let updated_count;
     {
         let mut conn = db.0.lock().map_err(|e| e.to_string())?;
 
@@ -335,7 +341,17 @@ pub async fn scan_local_to_db(
 
         // Save in batches
         let mut total_saved = 0;
+        let mut added = 0usize;
+        let mut updated = 0usize;
         for chunk in songs.chunks(batch_size) {
+            // 先分类再写入：existing_file_paths 是扫描开始前的快照，写入顺序无影响。
+            for song in chunk {
+                if existing_file_paths.contains(&song.file_path) {
+                    updated += 1;
+                } else {
+                    added += 1;
+                }
+            }
             db::songs::save_songs(&mut conn, chunk, "local", None).map_err(|e| e.to_string())?;
             total_saved += chunk.len();
 
@@ -356,7 +372,9 @@ pub async fn scan_local_to_db(
             db::songs::restore_user_stats(&mut conn, &user_stats).map_err(|e| e.to_string())?;
         }
 
-        added_count = total_saved;
+        // Full 模式已先清空 local 曲库，existing_file_paths 为空 → 全部计入新增。
+        added_count = added;
+        updated_count = updated;
     }
 
     // Phase 5: Cleanup - remove songs whose files no longer exist
@@ -432,7 +450,7 @@ pub async fn scan_local_to_db(
     Ok(ScanResult {
         total_songs,
         added: added_count,
-        updated: 0, // TODO: track updates separately
+        updated: updated_count,
         removed: removed_count,
         skipped: skipped_count,
         errors,
@@ -492,6 +510,7 @@ pub async fn scan_stream_to_db(
     }
 
     let mut total_added = 0;
+    let mut total_updated = 0;
     let mut total_errors = 0;
     let mut stream_failures = Vec::new();
 
@@ -664,16 +683,24 @@ pub async fn scan_stream_to_db(
             })
             .collect();
 
+        // 扫描前已入库的 id 命中 → 更新；其余 → 新增。
+        let updated_in_batch = song_inputs
+            .iter()
+            .filter(|s| existing_metadata.contains_key(&s.id))
+            .count();
+        let added_in_batch = song_inputs.len() - updated_in_batch;
+
         // Save to database
         {
             let mut conn = db.0.lock().map_err(|e| e.to_string())?;
-            let saved = db::songs::save_songs(&mut conn, &song_inputs, "stream", Some(&server.id))
+            db::songs::save_songs(&mut conn, &song_inputs, "stream", Some(&server.id))
                 .map_err(|e| e.to_string())?;
             if !existing_user_stats.is_empty() {
                 db::songs::restore_user_stats(&mut conn, &existing_user_stats)
                     .map_err(|e| e.to_string())?;
             }
-            total_added += saved;
+            total_added += added_in_batch;
+            total_updated += updated_in_batch;
         }
 
         emit_progress(
@@ -736,7 +763,7 @@ pub async fn scan_stream_to_db(
     Ok(ScanResult {
         total_songs,
         added: total_added,
-        updated: 0,
+        updated: total_updated,
         removed: 0,
         skipped: 0,
         errors: total_errors,

@@ -34,11 +34,8 @@ const DEFAULT_REGION: &str = "us-east-1";
 const PRESIGN_TTL_SECS: u64 = 6 * 60 * 60;
 const METADATA_PROBE_BYTES: u64 = 1024 * 1024;
 
-/// 可被扫描入音乐的扩展名。
-const AUDIO_EXTS: &[&str] = &[
-    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "ape", "wv", "aiff", "aif", "alac", "dsf",
-    "dff", "mka",
-];
+/// 可被扫描入音乐的扩展名（解码能力真源见 `utils::audio`）。
+const AUDIO_EXTS: &[&str] = crate::utils::audio::PLAYABLE_AUDIO_EXTENSIONS;
 
 // ---------------------------------------------------------------------------
 // 配置

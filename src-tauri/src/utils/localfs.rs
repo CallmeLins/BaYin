@@ -27,13 +27,11 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::models::{ConnectionTestResult, ScannedSong, StreamServerConfig};
+use crate::utils::audio::PLAYABLE_AUDIO_EXTENSIONS;
 use crate::utils::cover::CoverCache;
 
-/// 可被扫描入音乐的扩展名。
-const AUDIO_EXTS: &[&str] = &[
-    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "ape", "wv", "aiff", "aif", "alac", "dsf",
-    "dff", "mka", "mp4", "wma",
-];
+/// 可被扫描入音乐的扩展名（解码能力真源见 `utils::audio`）。
+const AUDIO_EXTS: &[&str] = PLAYABLE_AUDIO_EXTENSIONS;
 
 /// 是否音频文件。
 pub fn is_audio_file(path: &Path) -> bool {

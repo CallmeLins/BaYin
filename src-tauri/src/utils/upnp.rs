@@ -36,10 +36,8 @@ const MAX_CONTAINERS: usize = 2000;
 /// 元数据探测读取的头部字节数。
 const METADATA_PROBE_BYTES: u64 = 1024 * 1024;
 
-const AUDIO_EXTS: &[&str] = &[
-    "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "ape", "wv", "aiff", "aif", "alac", "dsf",
-    "dff", "mka",
-];
+/// 可被扫描入音乐的扩展名（解码能力真源见 `utils::audio`）。
+const AUDIO_EXTS: &[&str] = crate::utils::audio::PLAYABLE_AUDIO_EXTENSIONS;
 
 // ==================== 设备描述 ====================
 

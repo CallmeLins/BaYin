@@ -22,11 +22,8 @@ use crate::utils::cover::CoverCache;
 use crate::utils::http::build_blocking_client_for;
 use sha2::{Digest, Sha256};
 
-/// 支持的音频扩展名（与扫描器保持一致）
-const AUDIO_EXTS: &[&str] = &[
-    "flac", "mp3", "m4a", "m4b", "aac", "ogg", "oga", "opus", "wav", "aiff", "aif", "ape",
-    "wv", "mp4", "mka", "tak", "tta", "mp2",
-];
+/// 支持的音频扩展名（解码能力真源见 `utils::audio`）
+const AUDIO_EXTS: &[&str] = crate::utils::audio::PLAYABLE_AUDIO_EXTENSIONS;
 
 /// 元数据探测下载的头部大小（覆盖 FLAC 头 / MP3 ID3v2 / MP4 moov 常见大小）
 const METADATA_PROBE_BYTES: u64 = 1024 * 1024;

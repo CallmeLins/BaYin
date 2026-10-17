@@ -11,13 +11,22 @@ use lofty::tag::{ItemKey, ItemValue, Tag};
 
 use crate::models::{ScannedSong, ScannedSongWithMtime};
 
-/// 支持的音频文件扩展名
-const AUDIO_EXTENSIONS: &[&str] = &[
-    "mp3", "flac", "wav", "aac", "m4a", "ogg", "wma", "ape", "aiff", "dsf", "dff",
+/// 可播放的音频扩展名——必须与 `Cargo.toml` 中启用的 symphonia features 对齐。
+///
+/// 当前启用的解码器：adpcm / alac / aac / flac / mp1-3 / pcm / vorbis；
+/// 容器：mkv / ogg / riff(wav, aiff) / isomp4。
+/// `wma` / `ape` / `dsf` / `dff` / `wv` / `opus` 没有对应解码器，扫进库只会
+/// 得到一首点开就失败的歌，因此任何扫描白名单都不得包含它们。
+pub const PLAYABLE_AUDIO_EXTENSIONS: &[&str] = &[
+    "mp3", "flac", "wav", "aac", "m4a", "m4b", "mp4", "ogg", "oga", "aiff", "aif", "alac",
+    "mka",
 ];
 
-/// 无损音频格式扩展名
-const LOSSLESS_EXTENSIONS: &[&str] = &["flac", "wav", "ape", "aiff", "dsf", "dff"];
+/// 支持的音频文件扩展名
+const AUDIO_EXTENSIONS: &[&str] = PLAYABLE_AUDIO_EXTENSIONS;
+
+/// 无损音频格式扩展名（只保留解码器真正支持的）
+const LOSSLESS_EXTENSIONS: &[&str] = &["flac", "wav", "aiff", "aif", "alac"];
 
 /// 把服务端返回的容器名 / MIME / 编解码别名归一成可用扩展名。
 ///
@@ -346,7 +355,9 @@ fn krc_text_to_lrc(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::krc_text_to_lrc;
+    use super::{
+        krc_text_to_lrc, normalize_audio_extension, PLAYABLE_AUDIO_EXTENSIONS,
+    };
 
     #[test]
     fn converts_krc_line_to_lrc_karaoke() {
@@ -355,6 +366,25 @@ mod tests {
         assert!(lrc.contains("[00:01.000]"));
         assert!(lrc.contains("<00:01.000>你"));
         assert!(lrc.contains("<00:01.500>好"));
+    }
+
+    #[test]
+    fn rejects_extensions_without_a_decoder() {
+        // 这些格式没有启用 symphonia 解码器，扫进库只会得到一打开就失败的曲目。
+        for ext in ["wma", "ape", "dsf", "dff", "wv", "opus", "tak", "tta"] {
+            assert!(
+                !PLAYABLE_AUDIO_EXTENSIONS.contains(&ext),
+                "{ext} 没有解码器，不应出现在扫描白名单"
+            );
+            assert!(
+                normalize_audio_extension(ext).is_none(),
+                "{ext} 应被归一化拒绝"
+            );
+        }
+        // 反向确认常见可播格式仍然放行。
+        for ext in ["mp3", "flac", "wav", "m4a", "aac", "ogg", "aiff", "alac"] {
+            assert_eq!(normalize_audio_extension(ext).as_deref(), Some(ext));
+        }
     }
 }
 
