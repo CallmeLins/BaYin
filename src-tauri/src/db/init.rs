@@ -4,7 +4,7 @@ use rusqlite::{params, Connection, Result};
 use serde_json::json;
 use std::path::Path;
 
-const CURRENT_SCHEMA_VERSION: i32 = 13;
+const CURRENT_SCHEMA_VERSION: i32 = 14;
 
 /// Initialize the database with tables and indexes
 pub fn init_db(conn: &Connection) -> Result<()> {
@@ -72,6 +72,9 @@ fn run_migrations(conn: &Connection, from_version: i32) -> Result<()> {
     }
     if from_version < 13 {
         migrate_v13(conn)?;
+    }
+    if from_version < 14 {
+        migrate_v14(conn)?;
     }
 
     Ok(())
@@ -477,6 +480,47 @@ fn migrate_v13(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Version 14: 清掉已下线云盘连接器留下的 server 行。
+///
+/// `pan115` / `pan123` / `baidu` / `aliyun` / `gdrive` 曾各自实现为独立连接器，
+/// 后来统一改走 AList（WebDAV）。这些行的 `server_url` 指向各家 OpenAPI、
+/// 凭据是各家令牌，对现存连接器毫无意义；留着只会成为读库时的未识别类型。
+/// 这里连同它们的歌曲与歌单缓存一并删除。
+fn migrate_v14(conn: &Connection) -> Result<()> {
+    const LEGACY_SERVER_TYPES: [&str; 5] = ["pan115", "pan123", "baidu", "aliyun", "gdrive"];
+
+    let stale_ids: Vec<String> = {
+        let mut stmt = conn.prepare(
+            "SELECT id FROM stream_servers
+             WHERE lower(trim(server_type)) IN (?1, ?2, ?3, ?4, ?5)",
+        )?;
+        let rows = stmt.query_map(
+            params![
+                LEGACY_SERVER_TYPES[0],
+                LEGACY_SERVER_TYPES[1],
+                LEGACY_SERVER_TYPES[2],
+                LEGACY_SERVER_TYPES[3],
+                LEGACY_SERVER_TYPES[4],
+            ],
+            |row| row.get(0),
+        )?;
+        rows.collect::<Result<Vec<String>>>()?
+    };
+
+    for id in stale_ids {
+        conn.execute(
+            "DELETE FROM stream_playlist_items WHERE server_id = ?1",
+            [&id],
+        )?;
+        conn.execute("DELETE FROM stream_playlists WHERE server_id = ?1", [&id])?;
+        conn.execute("DELETE FROM songs WHERE server_id = ?1", [&id])?;
+        conn.execute("DELETE FROM stream_servers WHERE id = ?1", [&id])?;
+    }
+
+    conn.execute("INSERT INTO schema_version (version) VALUES (?1)", [14])?;
+    Ok(())
+}
+
 /// Keep only non-sensitive stream metadata in `songs.stream_info`.
 fn sanitize_stream_info(server_id: &str, raw: &str) -> Option<String> {
     let value = serde_json::from_str::<serde_json::Value>(raw).ok()?;
@@ -535,8 +579,79 @@ pub fn open_db(path: &Path) -> Result<Connection> {
 
 #[cfg(test)]
 mod tests {
-    use super::sanitize_stream_info;
+    use super::{init_db, migrate_v14, sanitize_stream_info};
+    use rusqlite::{params, Connection};
     use serde_json::Value;
+
+    /// 造一个「升级前」的库：结构已是最新，但版本号退回 13，并塞入遗留云盘行。
+    fn legacy_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        init_db(&conn).unwrap();
+        conn.execute("DELETE FROM schema_version WHERE version = 14", [])
+            .unwrap();
+
+        for (id, server_type) in [
+            ("srv-pan115", "pan115"),
+            ("srv-baidu", "baidu"),
+            ("srv-dav", "webdav"),
+        ] {
+            conn.execute(
+                "INSERT INTO stream_servers (id, server_type, server_name, server_url,
+                    username, password, legacy_auth, enabled, created_at)
+                 VALUES (?1, ?2, 'S', 'http://x', 'u', '', 0, 1, 100)",
+                params![id, server_type],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO songs (id, title, file_path, source_type, server_id)
+                 VALUES (?1, 'T', '/p', 'stream', ?2)",
+                params![format!("{id}-song"), id],
+            )
+            .unwrap();
+        }
+
+        conn
+    }
+
+    #[test]
+    fn migrate_v14_drops_retired_cloud_servers() {
+        let conn = legacy_db();
+        migrate_v14(&conn).unwrap();
+
+        let remaining: Vec<String> = {
+            let mut stmt = conn
+                .prepare("SELECT server_type FROM stream_servers ORDER BY id")
+                .unwrap();
+            let rows = stmt.query_map([], |row| row.get(0)).unwrap();
+            rows.collect::<rusqlite::Result<_>>().unwrap()
+        };
+        assert_eq!(remaining, vec!["webdav".to_string()]);
+
+        // 遗留服务器的歌曲一并清掉，正常服务器的不受影响。
+        let stray_songs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM songs WHERE server_id IN ('srv-pan115','srv-baidu')",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(stray_songs, 0);
+        let kept_songs: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM songs WHERE server_id = 'srv-dav'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(kept_songs, 1);
+
+        let version: i32 = conn
+            .query_row("SELECT MAX(version) FROM schema_version", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 14);
+    }
 
     #[test]
     fn sanitize_stream_info_strips_embedded_credentials() {

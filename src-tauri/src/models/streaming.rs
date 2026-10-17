@@ -97,6 +97,32 @@ impl ServerType {
             ServerType::Alist => "alist",
         }
     }
+
+    /// 把数据库里的 `server_type` 字符串解析成类型。
+    ///
+    /// **严格解析，不做兜底**：无法识别的标识返回 `None`，由调用方决定跳过还是报错。
+    /// 早期实现是 `_ => Navidrome`，于是历史上存过 `pan115` / `baidu` 这类
+    /// （已下线的独立云盘连接器）的行会被伪装成 Navidrome 出现在服务器列表里。
+    pub fn from_db_str(raw: &str) -> Option<Self> {
+        let normalized = raw.trim().to_ascii_lowercase();
+        Some(match normalized.as_str() {
+            "navidrome" => Self::Navidrome,
+            // `migrate_v7` 已把 opensubsonic 归并为 subsonic，此处保持同一语义。
+            "subsonic" | "opensubsonic" => Self::Subsonic,
+            "jellyfin" => Self::Jellyfin,
+            "emby" => Self::Emby,
+            "webdav" => Self::Webdav,
+            "s3" => Self::S3,
+            "ftp" | "ftps" => Self::Ftp,
+            "smb" | "cifs" => Self::Smb,
+            "upnp" | "dlna" => Self::Upnp,
+            "plex" => Self::Plex,
+            "fnmusic" | "feiniu" | "fnos" => Self::FnMusic,
+            "daoliyu" | "dl" => Self::DaoLiYu,
+            "alist" | "openlist" => Self::Alist,
+            _ => return None,
+        })
+    }
 }
 
 /// 统一流媒体服务器配置

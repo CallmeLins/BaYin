@@ -31,37 +31,24 @@ pub struct DbStreamServer {
     pub created_at: i64,
 }
 
-impl From<&DbStreamServer> for StreamServerConfig {
-    fn from(s: &DbStreamServer) -> Self {
-        Self {
-            server_type: match s.server_type.as_str() {
-                "navidrome" => ServerType::Navidrome,
-                "opensubsonic" => ServerType::Subsonic,
-                "subsonic" => ServerType::Subsonic,
-                "jellyfin" => ServerType::Jellyfin,
-                "emby" => ServerType::Emby,
-                "webdav" => ServerType::Webdav,
-                "s3" => ServerType::S3,
-                "ftp" | "ftps" => ServerType::Ftp,
-                "smb" | "cifs" => ServerType::Smb,
-                "upnp" | "dlna" => ServerType::Upnp,
-                "plex" => ServerType::Plex,
-                "fnmusic" | "feiniu" | "fnos" => ServerType::FnMusic,
-                "daoliyu" | "dl" => ServerType::DaoLiYu,
-                // AList / OpenList 统一以 WebDAV 端点接入（其默认路径为 /dav）。
-                "alist" | "openlist" => ServerType::Alist,
-                _ => ServerType::Navidrome,
-            },
-            server_name: s.server_name.clone(),
-            server_url: s.server_url.clone(),
-            username: s.username.clone(),
-            password: s.password.clone(),
-            legacy_auth: s.legacy_auth,
-            music_folder_id: s.music_folder_id.clone(),
-            base_path: s.base_path.clone(),
-            access_token: s.access_token.clone(),
-            user_id: s.user_id.clone(),
-        }
+impl DbStreamServer {
+    /// 解析成可用于连接的配置。
+    ///
+    /// `server_type` 无法识别时返回 `None`：调用方**不得**回退到任何默认类型，
+    /// 否则会凭空造出一个永远连不上的服务器。
+    pub fn to_config(&self) -> Option<StreamServerConfig> {
+        Some(StreamServerConfig {
+            server_type: ServerType::from_db_str(&self.server_type)?,
+            server_name: self.server_name.clone(),
+            server_url: self.server_url.clone(),
+            username: self.username.clone(),
+            password: self.password.clone(),
+            legacy_auth: self.legacy_auth,
+            music_folder_id: self.music_folder_id.clone(),
+            base_path: self.base_path.clone(),
+            access_token: self.access_token.clone(),
+            user_id: self.user_id.clone(),
+        })
     }
 }
 
@@ -180,7 +167,12 @@ pub fn get_stream_servers(conn: &Connection) -> Result<Vec<DbStreamServer>> {
         })?
         .collect::<Result<Vec<_>>>()?;
 
-    Ok(servers)
+    // 无法识别的 `server_type` 没有任何连接器可用（例如已下线的 `pan115` / `baidu`），
+    // 直接跳过，不要让它们以某个默认类型的样子出现在前端列表里。
+    Ok(servers
+        .into_iter()
+        .filter(|s| ServerType::from_db_str(&s.server_type).is_some())
+        .collect())
 }
 
 /// Get a single stream server configuration by id.
@@ -253,7 +245,11 @@ pub fn load_resolved_stream_config(
         oauth_ref.as_deref(),
     );
 
-    let mut config = StreamServerConfig::from(&server);
+    let mut config = match server.to_config() {
+        Some(config) => config,
+        // 未知 server_type：没有连接器可用，等同于「不存在」。
+        None => return Ok(None),
+    };
     config.password = password;
     config.access_token = access_token;
     Ok(Some(config))
@@ -428,5 +424,29 @@ mod tests {
             .unwrap()
             .expect("server exists");
         assert_eq!(config.password, "plainpw");
+    }
+
+    /// 已下线云盘类型（`pan115` 等）不能被兜底成 Navidrome。
+    #[test]
+    fn retired_cloud_type_is_not_coerced_to_navidrome() {
+        let store = tmp_store();
+        let conn = db_with_server();
+        conn.execute(
+            "INSERT INTO stream_servers (id, server_type, server_name, server_url, username,
+                password, access_token, legacy_auth, enabled, created_at)
+             VALUES ('srv-legacy','pan115','115','https://api.115.com','u','',NULL,0,1,101)",
+            [],
+        )
+        .unwrap();
+
+        // 列表里看不到它（没有连接器能服务这一行）。
+        let servers = get_stream_servers(&conn).unwrap();
+        assert!(servers.iter().any(|s| s.id == "srv-1"));
+        assert!(servers.iter().all(|s| s.id != "srv-legacy"));
+
+        // 也拿不到「可连接配置」，不会以别的类型混进去。
+        assert!(load_resolved_stream_config(&conn, &store, "srv-legacy")
+            .unwrap()
+            .is_none());
     }
 }
