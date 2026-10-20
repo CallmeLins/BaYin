@@ -535,6 +535,16 @@ pub async fn scan_stream_to_db(
                 .ok_or_else(|| format!("流媒体服务器不存在: {}", server.id))?
         };
 
+        // WebDAV / AList 的大库 BFS 可能跑几十分钟，中断后要能接着走：
+        // 这里建立本次扫描的断点句柄，实际读写由 webdav::scan_from 完成。
+        let checkpoint = if config.is_webdav() || config.is_alist() {
+            app.path().app_cache_dir().ok().map(|root| {
+                crate::source::scan::checkpoint::begin(&root, &server.id)
+            })
+        } else {
+            None
+        };
+
         // Incremental sync: existing metadata (title/artist/album/duration + modified) for WebDAV,
         // so unchanged files skip metadata probing and keep their stored tags.
         let existing_metadata = {
@@ -581,6 +591,9 @@ pub async fn scan_stream_to_db(
         .await {
             Ok(songs) => songs,
             Err(e) => {
+                // 失败时**保留断点文件**（下次可续），只解除进程级绑定，
+                // 免得其它一次性扫描误用这份进度。
+                crate::source::scan::checkpoint::clear();
                 total_errors += 1;
                 let failure = format!("{}: {}", server.server_name, e);
                 log::warn!("Failed to fetch songs from {}", failure);
@@ -588,6 +601,8 @@ pub async fn scan_stream_to_db(
                 continue;
             }
         };
+        // fetch 结束：解除绑定。断点文件先留着，等落库成功再删。
+        crate::source::scan::checkpoint::clear();
         // 扫描结束：结束进度转发任务
         progress_task.abort();
 
@@ -701,6 +716,11 @@ pub async fn scan_stream_to_db(
             }
             total_added += added_in_batch;
             total_updated += updated_in_batch;
+        }
+
+        // 数据已落库，这份断点才真正失去意义（落库前崩溃仍可续扫）。
+        if let Some(cp) = &checkpoint {
+            cp.finish();
         }
 
         emit_progress(

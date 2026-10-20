@@ -383,6 +383,8 @@ fn fetch_all_songs_blocking(
         existing_modified,
         progress,
         read_tags,
+        // 全库扫描才落断点；浏览目录（scan_dir）是一次性动作，不该碰它。
+        true,
     )
 }
 
@@ -406,10 +408,15 @@ pub fn scan_dir(
         existing_modified,
         progress,
         false,
+        // 浏览单个目录不进全库扫描的断点体系。
+        false,
     )
 }
 
 /// 核心扫描：BFS 列目录 + （可选）并行读取元数据
+///
+/// `use_checkpoint`：全库扫描时把 BFS 进度落盘，中断后可续扫；
+/// 浏览目录等一次性调用传 `false`，不去碰扫描的断点。
 fn scan_from(
     client: &Client,
     headers: &HeaderMap,
@@ -419,12 +426,41 @@ fn scan_from(
     existing_modified: Option<&HashMap<String, i64>>,
     progress: Option<ProgressSender<(usize, usize)>>,
     read_tags: bool,
+    use_checkpoint: bool,
 ) -> Result<Vec<ScannedSong>, String> {
-    // BFS 扫描目录
-    let mut queue = VecDeque::new();
-    queue.push_back(root_url.to_string());
+    let checkpoint = if use_checkpoint {
+        crate::source::scan::checkpoint::current()
+    } else {
+        None
+    };
 
+    let mut queue = VecDeque::new();
     let mut audio_urls: Vec<(String, Option<i64>)> = Vec::new();
+
+    // 上次扫描中断留下的进度：目录队列接着走，已发现的音频直接续用。
+    let resumed = match &checkpoint {
+        Some(cp) => match cp.load(root_url) {
+            Some(state) => {
+                queue = state.queue;
+                audio_urls = state.audio;
+                log::info!(
+                    "[WebDAV] 断点恢复：{} 个待处理目录、{} 个已发现音频",
+                    queue.len(),
+                    audio_urls.len()
+                );
+                true
+            }
+            None => false,
+        },
+        None => false,
+    };
+
+    if !resumed {
+        queue.push_back(root_url.to_string());
+        if let Some(cp) = &checkpoint {
+            cp.reset(root_url);
+        }
+    }
 
     while let Some(dir) = queue.pop_front() {
         let entries = match list_dir(client, headers, &dir) {
@@ -434,6 +470,7 @@ fn scan_from(
                 Vec::new()
             }
         };
+        let mut discovered: Vec<(String, Option<i64>)> = Vec::new();
         for entry in entries {
             if entry.is_directory {
                 queue.push_back(entry.url);
@@ -445,10 +482,32 @@ fn scan_from(
                     .unwrap_or("")
                     .to_lowercase();
                 if AUDIO_EXTS.contains(&ext.as_str()) {
-                    audio_urls.push((entry.url, entry.modified));
+                    discovered.push((entry.url, entry.modified));
                 }
             }
         }
+        if !discovered.is_empty() {
+            if let Some(cp) = &checkpoint {
+                cp.append_audio(&discovered);
+            }
+            audio_urls.extend(discovered);
+        }
+        if let Some(cp) = &checkpoint {
+            cp.note_dir(&queue);
+        }
+    }
+
+    // 崩溃点可能落在「append 音频之后、写队列快照之前」，那个目录恢复后会被
+    // 再列一次，同一批文件进来两遍。按 url 去重兜底（落库虽幂等，但计数会虚高）。
+    {
+        let mut seen = std::collections::HashSet::new();
+        audio_urls.retain(|(url, _)| seen.insert(url.clone()));
+    }
+
+    // BFS 收尾：把最终队列写实（通常是空的）。否则「最后一个不满 25 个目录的批次」
+    // 没快照，元数据阶段崩了下次会重列一批目录。
+    if let Some(cp) = &checkpoint {
+        cp.save_queue(&queue);
     }
 
     // 快速模式：仅文件名入库，不下载任何音频数据（慢网速下秒级完成）
