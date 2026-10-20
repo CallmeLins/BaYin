@@ -86,10 +86,12 @@ pub fn set_range_cache_config(
 pub fn clear_range_cache(cache_state: State<'_, RangeCacheState>) -> Result<u64, String> {
     let rt = cache_state.0.lock().map_err(|e| e.to_string())?;
     let range_root = rt.root.join("range");
-    let freed = crate::db::cache::total_bytes_on_disk(&range_root);
-    if range_root.exists() {
+    // 经进程级单例清空：同时丢掉内存里的区间表，否则进程会继续以为旧字节还在。
+    let freed = crate::source::cache::range_cache_clear();
+    // 兜底：单例尚未初始化时（启动早期调用）仍把目录删掉。
+    if freed == 0 && range_root.exists() {
         std::fs::remove_dir_all(&range_root).map_err(|e| e.to_string())?;
-        std::fs::create_dir_all(&range_root).ok();
     }
+    std::fs::create_dir_all(&range_root).ok();
     Ok(freed)
 }

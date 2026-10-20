@@ -67,6 +67,11 @@ pub fn total_bytes_on_disk(range_root: &std::path::Path) -> u64 {
         for server in rd.flatten() {
             if let Ok(srd) = std::fs::read_dir(server.path()) {
                 for f in srd.flatten() {
+                    // `.idx` 是区间表的旁路索引，不是缓存下来的音频字节；
+                    // 算进来会让「已用容量」比淘汰阈值多出几千个几十字节的偏差。
+                    if f.path().extension().and_then(|e| e.to_str()) == Some("idx") {
+                        continue;
+                    }
                     if let Ok(meta) = f.metadata() {
                         total += meta.len();
                     }

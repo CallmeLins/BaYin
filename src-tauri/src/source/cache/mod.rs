@@ -1,14 +1,14 @@
-//! 按需缓存能力（A5）骨架。
+//! 按需缓存能力（A5）。
 //!
 //! 目标：把 WebDAV「全量下载缓存」升级为 **Range 稀疏缓存**——只下载播放需要的
-//! 字节段，配合预热队列与容量上限自动清理。
+//! 字节段，配合容量上限自动清理。
 //!
-//! 骨架约定：
+//! 约定：
 //! - `RangeCache`：以 `(server_id, song_id)` 为键，磁盘稀疏文件 + 「已缓存区间表」。
-//! - `RangeFetchPriority`：区分用户主动 vs 后台预热。
+//! - `RangeFetchPriority`：区分用户主动 vs 后台预热（预热队列尚未接入）。
 //!
-//! 真实实现见 `range_cache::RangeCacheStore`（稀疏文件读写），
-//! 接入播放层走 `RangeCache` 行为契约。
+//! 实现见 `range_cache::RangeCacheStore`：区间表随每次写入落到 `.idx`（重启可复用），
+//! 写入后按 LRU 收敛到 `max_bytes` 以内。
 
 pub mod range_cache;
 
@@ -106,6 +106,18 @@ pub fn range_cache_write(server_id: &str, song_id: &str, offset: u64, data: &[u8
             store.write(server_id, song_id, offset, data);
         }
     }
+}
+
+/// 清空进程级 Range 缓存（数据文件 + 索引），返回释放的字节数。
+///
+/// 必须经这里清，而不是直接删 `range/` 目录：内存里的区间表不清，进程会继续
+/// 以为那些字节还在，容量统计也会算上已经不存在的数据。
+pub fn range_cache_clear() -> u64 {
+    let guard = match range_global().read() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    guard.as_ref().map(|s| s.evict_all()).unwrap_or(0)
 }
 
 #[cfg(test)]
