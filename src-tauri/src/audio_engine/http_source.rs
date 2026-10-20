@@ -25,6 +25,17 @@ fn safe_wait<'a, T>(cvar: &Condvar, guard: MutexGuard<'a, T>, name: &str) -> Mut
     })
 }
 
+/// 从 `Content-Range: bytes 100-999/1000` 里取文件总长。
+/// `bytes */1000` 同样适用；`*` 或头缺失时返回 `None`。
+fn content_range_total(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    let value = headers.get("content-range")?.to_str().ok()?;
+    let total = value.rsplit('/').next()?.trim();
+    if total == "*" {
+        return None;
+    }
+    total.parse().ok()
+}
+
 /// Shared state between the download thread and the reader.
 struct StreamBuffer {
     /// Sliding in-memory window of data.
@@ -165,6 +176,19 @@ impl HttpStreamSource {
             }
         }
         let client = builder.build().map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+        // 先看磁盘上有没有「从 0 起连续」的缓存前缀（A5 读取侧）。
+        // 有就直接拿它当本地数据源，只为剩余部分发一次 Range，而不是整首重下。
+        if let Some((sid, uid)) = cache {
+            if let Some((file, prefix)) = crate::source::cache::range_cache_prefix_file(sid, uid) {
+                // 前缀连预缓冲都盖不住就没必要费这次探测。
+                if prefix >= PRE_BUFFER as u64 {
+                    if let Some(result) = Self::open_from_cached_prefix(url, &client, file, prefix, cache) {
+                        return result;
+                    }
+                }
+            }
+        }
 
         let resp = client
             .get(url)
@@ -317,6 +341,136 @@ impl HttpStreamSource {
                 }
             })
             .expect("Failed to spawn download thread")
+    }
+
+    /// 用磁盘缓存的连续前缀替代「从 0 全量下载」。
+    ///
+    /// 三种结局：
+    /// - `None`：缓存前缀帮不上忙（服务器忽略 Range、或探测请求失败），调用方退回原路径；
+    /// - `Some(Ok)`：已建立可播放的源——整首都在本地时连下载线程都不启动；
+    /// - `Some(Err)`：确定性的失败（临时文件创建失败等）。
+    ///
+    /// 覆盖率用一次 `Range: bytes={prefix}-` 探出来：`416` 表示前缀已到文件末尾，
+    /// `206` 表示还剩一段，其它状态说明这个服务器不吃 Range，别勉强。
+    fn open_from_cached_prefix(
+        url: &str,
+        client: &reqwest::blocking::Client,
+        cached: std::fs::File,
+        prefix: u64,
+        cache_key: Option<&(String, String)>,
+    ) -> Option<Result<Self, String>> {
+        let resp = match client
+            .get(url)
+            .header("Range", format!("bytes={}-", prefix))
+            .send()
+        {
+            Ok(r) => r,
+            // 探测失败不该让播放失败——退回原来的完整 GET。
+            Err(_) => return None,
+        };
+
+        let status = resp.status().as_u16();
+        let total = content_range_total(resp.headers());
+        let remaining = resp
+            .headers()
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0);
+
+        // 416，或 206 且总长恰好等于前缀：整首都已经在本地了。
+        if status == 416 || (status == 206 && total == Some(prefix)) {
+            let shared = Arc::new((
+                Mutex::new(StreamBuffer {
+                    data: Vec::with_capacity(512 * 1024),
+                    data_start: 0,
+                    segment_start: 0,
+                    downloaded_end: prefix,
+                    cache_file: Some(cached),
+                    // 关键：这个句柄指向持久缓存。若沿用临时文件语义，
+                    // StreamBuffer::Drop 会把用户攒下的缓存删掉。
+                    cache_path: None,
+                    done: true,
+                    error: None,
+                    abort: false,
+                }),
+                Condvar::new(),
+            ));
+            return Some(Ok(Self {
+                url: url.to_string(),
+                client: client.clone(),
+                buf: shared,
+                position: 0,
+                content_length: prefix,
+                _download_thread: None,
+                cache_key: cache_key.cloned(),
+            }));
+        }
+
+        if status != 206 {
+            return None;
+        }
+
+        // 还剩一段：把前缀拷进临时文件，从 prefix 接着下。
+        let (mut write_handle, read_handle, cache_path) = match create_temp_cache_file() {
+            Ok(v) => v,
+            Err(e) => return Some(Err(e)),
+        };
+        {
+            use std::io::{copy, Seek, SeekFrom};
+            let mut src = cached;
+            if src.seek(SeekFrom::Start(0)).is_err() {
+                return None;
+            }
+            // 拷贝完游标正好停在 prefix，后续 write_all 无缝接上。
+            if copy(&mut src.take(prefix), &mut write_handle).is_err() {
+                return None;
+            }
+        }
+
+        let shared = Arc::new((
+            Mutex::new(StreamBuffer {
+                data: Vec::with_capacity(512 * 1024),
+                data_start: 0,
+                segment_start: 0,
+                downloaded_end: prefix,
+                cache_file: Some(read_handle),
+                cache_path: Some(cache_path),
+                done: false,
+                error: None,
+                abort: false,
+            }),
+            Condvar::new(),
+        ));
+
+        let handle = Self::spawn_download(
+            shared.clone(),
+            resp,
+            Some(write_handle),
+            cache_key.cloned(),
+            prefix,
+        );
+
+        {
+            let (lock, cvar) = &*shared;
+            let mut buf = safe_lock(&lock, "stream_buffer");
+            while buf.data.len() < PRE_BUFFER && !buf.done && buf.error.is_none() {
+                buf = safe_wait(&cvar, buf, "stream_buffer");
+            }
+            if let Some(ref e) = buf.error {
+                return Some(Err(format!("Download error during pre-buffer: {}", e)));
+            }
+        }
+
+        Some(Ok(Self {
+            url: url.to_string(),
+            client: client.clone(),
+            buf: shared,
+            position: 0,
+            content_length: total.unwrap_or(prefix.saturating_add(remaining)),
+            _download_thread: Some(handle),
+            cache_key: cache_key.cloned(),
+        }))
     }
 
     /// Abort current download, handle seek by either reusing cache or making a new Range request.
@@ -643,5 +797,40 @@ impl MediaSource for HttpStreamSource {
         } else {
             None
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::content_range_total;
+    use reqwest::header::{HeaderMap, HeaderValue};
+
+    fn headers_with(range: &'static str) -> HeaderMap {
+        let mut map = HeaderMap::new();
+        map.insert("content-range", HeaderValue::from_static(range));
+        map
+    }
+
+    #[test]
+    fn parses_total_from_content_range() {
+        assert_eq!(content_range_total(&headers_with("bytes 100-999/1000")), Some(1000));
+    }
+
+    /// 416 响应没有数据段，总长以 `bytes */N` 的形式给出。
+    #[test]
+    fn parses_total_from_unsatisfied_range() {
+        assert_eq!(content_range_total(&headers_with("bytes */1000")), Some(1000));
+    }
+
+    #[test]
+    fn unknown_total_is_none() {
+        assert_eq!(content_range_total(&headers_with("bytes 0-99/*")), None);
+        assert_eq!(content_range_total(&HeaderMap::new()), None);
+    }
+
+    /// 无法解析的头部不该把播放带崩，只是拿不到总长。
+    #[test]
+    fn malformed_total_is_none() {
+        assert_eq!(content_range_total(&headers_with("garbage")), None);
     }
 }

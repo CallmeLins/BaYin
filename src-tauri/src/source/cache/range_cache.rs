@@ -338,6 +338,28 @@ impl RangeCacheStore {
         self.evict_if_needed(self.config.max_bytes);
     }
 
+    /// 若缓存从 0 开始连续覆盖了一段（且数据文件还在），返回只读句柄与前缀长度。
+    ///
+    /// 播放层用它判断能否直接本地读：`segment_start == 0` 时，稀疏文件的字节
+    /// 偏移就等于逻辑偏移，可以原样当数据源用，不必拷进临时文件。
+    pub fn prefix_file(&self, server_id: &str, song_id: &str) -> Option<(std::fs::File, u64)> {
+        let key = Self::entry_key(server_id, song_id);
+        let entries = match self.entries.lock() {
+            Ok(g) => g,
+            Err(p) => p.into_inner(),
+        };
+        let entry = entries.get(&key)?;
+        // 区间合并后按 start 升序，只有第一段从 0 起才是「可顺序读的前缀」。
+        let prefix = entry
+            .ranges
+            .first()
+            .filter(|r| r.start == 0)
+            .map(|r| r.end.saturating_add(1))
+            .filter(|len| *len > 0)?;
+        let file = std::fs::File::open(&entry.file).ok()?;
+        Some((file, prefix))
+    }
+
     /// 该来源（某 server 下所有歌曲）缓存总字节数。`.idx` 不算占用。
     pub fn total_bytes(&self, server_id: &str) -> u64 {
         let dir = self.root.join(safe_segment(server_id));
@@ -609,7 +631,9 @@ mod tests {
             },
         );
         store.write("srv1", "old", 0, b"0123456789");
+        std::thread::sleep(std::time::Duration::from_millis(2));
         store.write("srv1", "mid", 0, b"0123456789");
+        std::thread::sleep(std::time::Duration::from_millis(2));
         store.write("srv1", "new", 0, b"0123456789");
 
         // 30 字节 → 必须淘汰一条，且应是最久未访问的 "old"。
@@ -680,6 +704,45 @@ mod tests {
                 "counter drifted after write #{i}"
             );
         }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 只有「从 0 起连续」的那一段能当前缀用；有断档就停在那里。
+    #[test]
+    fn prefix_file_reports_contiguous_head_only() {
+        let store = tmp_store();
+        store.write("srv1", "songA", 0, b"0123456789");
+        // 远跳后写入第二段，中间留洞。
+        store.write("srv1", "songA", 20, b"abcdefghij");
+
+        let (file, prefix) = store.prefix_file("srv1", "songA").expect("prefix exists");
+        assert_eq!(prefix, 10, "prefix must stop at the gap");
+        drop(file);
+
+        // 第一段不从 0 开始 → 没有可用前缀。
+        store.write("srv1", "songB", 100, b"xyz");
+        assert!(store.prefix_file("srv1", "songB").is_none());
+        // 完全没有该条目。
+        assert!(store.prefix_file("srv1", "missing").is_none());
+    }
+
+    /// 条目被淘汰后前缀查询必须返回 None，播放层才不会拿着已删除的路径去读。
+    #[test]
+    fn prefix_file_disappears_after_eviction() {
+        let dir = tmp_dir();
+        let store = RangeCacheStore::new(
+            &dir,
+            CacheConfig {
+                max_bytes: 10,
+                enabled: true,
+            },
+        );
+        store.write("srv1", "old", 0, b"0123456789");
+        // 让 last_access 明确分出先后，否则同毫秒写入的淘汰顺序不确定。
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        store.write("srv1", "new", 0, b"0123456789");
+        assert!(store.prefix_file("srv1", "old").is_none());
+        assert!(store.prefix_file("srv1", "new").is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

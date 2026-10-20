@@ -108,6 +108,24 @@ pub fn range_cache_write(server_id: &str, song_id: &str, offset: u64, data: &[u8
     }
 }
 
+/// 取进程级 Range 缓存的「从 0 起连续前缀」：播放层据此判断能否跳过 HTTP。
+///
+/// 返回 `(只读句柄, 前缀字节数)`；缓存关闭、无该条目或数据文件已丢时返回 `None`。
+pub fn range_cache_prefix_file(
+    server_id: &str,
+    song_id: &str,
+) -> Option<(std::fs::File, u64)> {
+    let guard = match range_global().read() {
+        Ok(g) => g,
+        Err(p) => p.into_inner(),
+    };
+    let store = guard.as_ref()?;
+    if !store.enabled() {
+        return None;
+    }
+    store.prefix_file(server_id, song_id)
+}
+
 /// 清空进程级 Range 缓存（数据文件 + 索引），返回释放的字节数。
 ///
 /// 必须经这里清，而不是直接删 `range/` 目录：内存里的区间表不清，进程会继续
