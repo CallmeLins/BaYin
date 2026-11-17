@@ -12,6 +12,7 @@ import android.graphics.Color
 import android.view.View
 import android.view.WindowInsetsController
 import android.webkit.JavascriptInterface
+import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -50,6 +51,21 @@ class MainActivity : TauriActivity() {
 
     // 设置 WebView 背景透明，避免底部手势导航区域透出白色背景
     webView.setBackgroundColor(Color.TRANSPARENT)
+
+    // ── 车机优化：前端资源全部内嵌在 APK 里，禁止磁盘 HTTP 缓存 ──────────
+    // 否则升级 APK 后 WebView 仍可能命中旧缓存，出现"改了没生效"的假象；
+    // 同时也能省掉一份缓存占用（车机内置存储紧张）。
+    webView.settings.apply {
+      cacheMode = WebSettings.LOAD_NO_CACHE
+      domStorageEnabled = true
+      javaScriptEnabled = true
+      allowFileAccess = false
+      allowContentAccess = false
+      mediaPlaybackRequiresUserGesture = false
+      setSupportMultipleWindows(false)
+      builtInZoomControls = false
+      displayZoomControls = false
+    }
 
     // 添加 JavaScript 接口
     webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
@@ -204,6 +220,108 @@ class MainActivity : TauriActivity() {
       runOnUiThread {
         openAppSettings()
       }
+    }
+
+    /**
+     * 枚举外接存储卷（U 盘 / SD 卡），返回 JSON 数组字符串。
+     *
+     * 实现说明：刻意不用 StorageVolume.getPath()/getDirectory() 这类隐藏或高版本 API
+     * （Android 7~9 上反射受限、Android 10+ 才有 getDirectory），而是用
+     * `getExternalFilesDirs(null)` 反推挂载根：每个返回路径形如
+     *   /storage/XXXX-XXXX/Android/data/<pkg>/files
+     * 截断掉 "/Android/" 之后即得到卷根，这种写法在 7.0~14 全版本可用。
+     */
+    @JavascriptInterface
+    fun listStorageVolumes(): String {
+      val out = StringBuilder("[")
+      var first = true
+      try {
+        val dirs = getExternalFilesDirs(null)
+        val seen = HashSet<String>()
+        for (dir in dirs) {
+          if (dir == null) continue
+          val p = dir.absolutePath
+          val cut = p.indexOf("/Android/")
+          if (cut <= 0) continue
+          val root = p.substring(0, cut)
+          if (!seen.add(root)) continue
+
+          val f = java.io.File(root)
+          val readable = try {
+            f.isDirectory && f.canRead() && (f.list()?.isNotEmpty() == true)
+          } catch (e: Exception) {
+            false
+          }
+          val st = android.os.StatFs(root)
+          val freeMb = st.availableBlocksLong * st.blockSizeLong / (1024 * 1024)
+          val totalMb = st.blockCountLong * st.blockSizeLong / (1024 * 1024)
+          val primary = root.contains("/emulated/")
+          val label = when {
+            primary -> "内置存储"
+            root.startsWith("/storage/") -> root.removePrefix("/storage/")
+            else -> f.name
+          }
+
+          if (!first) out.append(',')
+          first = false
+          out.append("{")
+          out.append("\"root\":").append(quote(root)).append(',')
+          out.append("\"label\":").append(quote(label)).append(',')
+          out.append("\"removable\":").append(!primary).append(',')
+          out.append("\"readable\":").append(readable).append(',')
+          out.append("\"freeMb\":").append(freeMb).append(',')
+          out.append("\"totalMb\":").append(totalMb)
+          out.append("}")
+        }
+      } catch (e: Exception) {
+        Log.w(TAG, "listStorageVolumes failed", e)
+      }
+      out.append("]")
+      val json = out.toString()
+      Log.d(TAG, "listStorageVolumes => $json")
+      return json
+    }
+
+    /** 申请「所有文件访问权限」（Android 11+ 读取 U 盘根目录需要） */
+    @JavascriptInterface
+    fun requestAllFilesAccess(): Boolean {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return true
+      if (android.os.Environment.isExternalStorageManager()) return true
+      return try {
+        val intent = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
+        intent.data = Uri.parse("package:$packageName")
+        startActivity(intent)
+        false
+      } catch (e: Exception) {
+        Log.w(TAG, "cannot open all-files access page", e)
+        false
+      }
+    }
+
+    @JavascriptInterface
+    fun hasAllFilesAccess(): Boolean {
+      return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        android.os.Environment.isExternalStorageManager()
+      } else {
+        ContextCompat.checkSelfPermission(
+          this@MainActivity,
+          android.Manifest.permission.READ_EXTERNAL_STORAGE
+        ) == PackageManager.PERMISSION_GRANTED
+      }
+    }
+
+    private fun quote(s: String): String {
+      val sb = StringBuilder("\"")
+      for (c in s) {
+        when (c) {
+          '"' -> sb.append("\\\"")
+          '\\' -> sb.append("\\\\")
+          '\n' -> sb.append("\\n")
+          '\r' -> sb.append("\\r")
+          else -> sb.append(c)
+        }
+      }
+      return sb.append("\"").toString()
     }
   }
 }

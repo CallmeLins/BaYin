@@ -1,19 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Storage permissions for music scanning -->
+    <!-- ── 车机：外接 U 盘音乐读取 ─────────────────────────────────────
+         Android 7.0 ~ 9.0（API 24~28）：传统存储模型，READ_EXTERNAL_STORAGE 即可直读
+         /storage/XXXX-XXXX（U 盘）下的音频文件。
+         Android 10（API 29）：靠 requestLegacyExternalStorage 继续走传统模型。
+         Android 11+（API 30+）：分区存储强制，直读 U 盘根目录需要「所有文件访问」。
+         三者叠加可覆盖 7.0 ~ 14 的车机；ROM 收紧时再走 SAF（面板提供入口）。 -->
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
 
-    <!-- AndroidTV support -->
+    <!-- U 盘热插拔监听 -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- 车机前台播放（system-media 插件会带出自己的 service 声明） -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- AndroidTV / 车机 Leanback 判定 -->
     <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
 
     <application
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:theme="@style/Theme.bayin"
+        android:requestLegacyExternalStorage="true"
+        tools:ignore="ScopedStorage"
         android:usesCleartextTraffic="${usesCleartextTraffic}">
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
@@ -25,7 +47,6 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
-                <!-- AndroidTV support -->
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>

@@ -1,0 +1,11 @@
+{
+  "name": "bayin-car-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "BaYin Car 构建工具链：老 WebView CSS/JS 降级、签名密钥写入 CI",
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "lightningcss": "^1.27.0",
+    "libsodium-wrappers": "^0.7.15"
+  }
+}

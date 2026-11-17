@@ -1,4 +1,5 @@
 mod audio_engine;
+mod car;
 mod commands;
 mod playback;
 mod playback_control;
@@ -125,6 +126,14 @@ use commands::{
     test_subsonic_connection,
     CoverCacheState,
     TrustState,
+    // 车机命令：显示设置
+    car_get_display_settings,
+    car_set_display_settings,
+    car_reset_display_settings,
+    // 车机命令：外接存储卷
+    car_list_volumes,
+    car_volume_online,
+    car_debug_probe_path,
 };
 use db::DbState;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -311,7 +320,15 @@ pub fn run() {
             get_background_image_data,
             delete_background_image,
             // Software update
-            update_get_latest_release
+            update_get_latest_release,
+            // 车机：显示设置
+            car_get_display_settings,
+            car_set_display_settings,
+            car_reset_display_settings,
+            // 车机：外接存储卷
+            car_list_volumes,
+            car_volume_online,
+            car_debug_probe_path
         ])
         .on_window_event(|_window, _event| {
             #[cfg(desktop)]
@@ -358,6 +375,17 @@ pub fn run() {
             });
             app.manage(DbState(Mutex::new(conn), cred_store));
             app.manage(trust_state);
+
+            // 车机：加载显示设置（缩放/字号/封面/边距），前端启动时读取
+            let car_display = car::display::load(&app_data_dir);
+            log::info!(
+                "car display settings: scale={} text={} cover={} mt={}",
+                car_display.scale,
+                car_display.text_scale,
+                car_display.cover_scale,
+                car_display.margin_top
+            );
+            app.manage(car::display::DisplayState::new(car_display));
 
             // 初始化封面缓存
             let cache_dir = app

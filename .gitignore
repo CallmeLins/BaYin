@@ -1,4 +1,4 @@
-# Logs
+﻿# Logs
 logs
 *.log
 npm-debug.log*
@@ -45,3 +45,11 @@ src-ui/build/
 
 # OS
 Thumbs.db
+
+# 签名材料（禁止入库）
+keystore.properties
+*.jks
+*.keystore
+
+# 前端兼容构建产物（由 tools/build-ui.js 生成）
+src-ui-gen/

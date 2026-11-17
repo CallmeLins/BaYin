@@ -21,6 +21,10 @@ name = "bayin_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
+# 发布构建必须启用：让 tauri 走嵌入资源（custom protocol）而不是 dev 服务器。
+# Tauri CLI 平时会自动加这个 feature；车机分支由 gradle 直接调 cargo，故显式声明并由
+# buildSrc 的 BuildTask 在 release profile 下传入。
+custom-protocol = ["tauri/custom-protocol"]
 # OS keyring 凭据后端（Windows Credential Manager / macOS Keychain / Linux Secret Service）。
 # 默认关闭：跨平台构建需系统 keyring 后端；开启后 CredentialStore 可用 keyring 实现。
 # 注意：仅桌面端（非 android/ios）启用该依赖。
@@ -30,7 +34,7 @@ keyring = ["dep:keyring"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "protocol-asset", "tray-icon", "image-png"] }
+tauri = { version = "2", features = ["protocol-asset", "tray-icon", "image-png"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-store = "2"

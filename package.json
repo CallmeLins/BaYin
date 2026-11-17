@@ -1,14 +1,13 @@
 {
-  "name": "bayin-workspace",
+  "name": "bayin-car-workspace",
   "private": true,
-  "version": "0.1.0",
-  "description": "Workspace scripts for the BaYin Tauri application",
+  "version": "2.4.2",
+  "description": "BaYin - Android car head-unit build (local library + USB storage only)",
   "scripts": {
-    "dev": "npm run dev --prefix src-ui",
-    "build": "npm run build --prefix src-ui",
     "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "android:init": "tauri android init",
+    "android:build": "tauri android build --apk",
+    "android:dev": "tauri android dev"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.0"

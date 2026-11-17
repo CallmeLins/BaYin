@@ -1,0 +1,123 @@
+/* BaYin Car — 车机设置面板样式（与参考图一致的「标签 — 数值 ±」行式布局） */
+
+.ba-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 2147483000;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(28, 28, 32, .86);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .35);
+}
+.ba-fab.show { display: flex; }
+
+.ba-panel-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483001;
+  background: rgba(0, 0, 0, .55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.ba-panel-mask.open { display: flex; }
+
+.ba-panel {
+  width: min(920px, 92vw);
+  max-height: 88vh;
+  overflow: auto;
+  background: #f7f9ff;
+  color: #1a1c22;
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .45);
+  font-family: -apple-system, "Noto Sans SC", system-ui, sans-serif;
+}
+
+.ba-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 12px;
+}
+.ba-panel-title { font-size: 22px; font-weight: 700; }
+.ba-panel-actions { display: flex; align-items: center; gap: 10px; }
+.ba-btn-text {
+  border: 0;
+  background: transparent;
+  color: #1a73ff;
+  font-size: 15px;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.ba-btn-text:hover { background: rgba(26, 115, 255, .08); }
+.ba-btn-close {
+  border: 0; background: transparent; font-size: 22px; line-height: 1;
+  cursor: pointer; color: #6b7280; padding: 4px 10px; border-radius: 8px;
+}
+
+.ba-note {
+  margin: 0 24px 14px;
+  padding: 14px 16px;
+  background: #eef3ff;
+  border: 1px solid #dbe6ff;
+  border-radius: 12px;
+  color: #44506a;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ba-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 28px;
+  padding: 4px 24px 24px;
+}
+.ba-group { min-width: 0; }
+.ba-group-title {
+  font-size: 13px;
+  color: #77839b;
+  padding: 6px 8px 2px;
+  letter-spacing: .06em;
+}
+
+.ba-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+}
+.ba-row-label { flex: 1 1 auto; font-size: 16px; }
+.ba-step {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 1px solid #c9d4e8;
+  background: #fff;
+  color: #1a1c22;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.ba-step:disabled { opacity: .35; cursor: default; }
+.ba-row-value {
+  width: 86px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-aspect-ratio: 1/1) {
+  .ba-groups { grid-template-columns: 1fr; }
+}

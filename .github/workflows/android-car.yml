@@ -1,0 +1,120 @@
+name: Android Car Build
+
+# 车机版构建：手工触发，或推送到 car-dev 分支时自动跑。
+# 产物是**固定签名**的 APK（同一把 keystore），因此不同版本之间可以直接覆盖安装。
+on:
+  workflow_dispatch:
+    inputs:
+      abis:
+        description: '构建的 ABI（逗号分隔）'
+        default: 'arm64,arm'
+        required: false
+  push:
+    branches: [car-dev]
+    paths-ignore:
+      - '**.md'
+      - 'Docs/**'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  NDK_VERSION: 26.3.11579264
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [arm64, arm]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup NDK
+        run: |
+          sdkmanager --install "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./src-tauri -> target
+
+      - name: Install workspace deps
+        run: |
+          npm install --no-audit --no-fund
+          cd tools && npm install --no-audit --no-fund
+
+      - name: Build frontend (car build pipeline)
+        run: node tools/build-ui.js
+
+      - name: Restore keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "::error::缺少 secret ANDROID_KEYSTORE_BASE64，无法固定签名"
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/keys"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/keys/release.jks"
+          chmod 600 "$RUNNER_TEMP/keys/release.jks"
+
+      - name: Build signed APK (${{ matrix.abi }})
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/keys/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          npx tauri android build --apk --target ${{ matrix.abi }}
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          find src-tauri/gen/android/app/build/outputs/apk -name '*.apk' -print -exec cp {} out/ \;
+          ls -lh out
+
+      - name: Verify signature
+        run: |
+          set -euo pipefail
+          apk=$(find out -name '*.apk' | head -n1)
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bayin-car-${{ matrix.abi }}
+          path: out/*.apk
+          if-no-files-found: error
+
+      - name: Attach to release (when a tag is pushed)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*.apk

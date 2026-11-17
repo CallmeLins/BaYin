@@ -1,4 +1,4 @@
-pub mod background;
+﻿pub mod background;
 pub mod streaming;
 pub mod scanner;
 pub mod db;
@@ -12,6 +12,7 @@ pub mod trust;
 pub mod cache;
 pub mod creds;
 pub mod writeback;
+pub mod car;
 
 pub use background::*;
 pub use streaming::*;
@@ -27,3 +28,4 @@ pub use trust::*;
 pub use cache::*;
 pub use creds::*;
 pub use writeback::*;
+pub use car::*;

@@ -1,0 +1,110 @@
+/* BaYin Car v10 — 车机适配注入层（在上游 Tailwind 产物之后加载） */
+:root {
+  --ba-scale: 1;
+  --ba-text: 1.3;
+  --ba-cover: 0.85;
+  --ba-mt: 7%;
+  --ba-mb: 0%;
+  --ba-ml: 0%;
+  --ba-mr: 0%;
+  --ba-safe-top: 0px;
+  --ba-sidebar-w: 240px;
+}
+
+/* ── 字号：只重写 Tailwind v4 的字号 token，其余全跟着走 ─────────── */
+html.ba-car {
+  --text-xs:   calc(0.75rem  * var(--ba-text));
+  --text-sm:   calc(0.875rem * var(--ba-text));
+  --text-base: calc(1rem     * var(--ba-text));
+  --text-lg:   calc(1.125rem * var(--ba-text));
+  --text-xl:   calc(1.25rem  * var(--ba-text));
+  --text-2xl:  calc(1.5rem   * var(--ba-text));
+  --text-3xl:  calc(1.875rem * var(--ba-text));
+  --text-4xl:  calc(2.25rem  * var(--ba-text));
+  --text-5xl:  calc(3rem     * var(--ba-text));
+}
+
+/* ── 边距 + 缩放：外层留边距，内层等比放大 ─────────────────────── */
+html.ba-car body {
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+/* 视口容器：#root 里的第一层会被包进 .ba-viewport */
+#root { width: 100%; height: 100%; }
+
+.ba-frame {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  /* 上下边距由 JS 按视口高度换算成 px（CSS 的 % padding 以宽度为基准） */
+  padding: calc(var(--ba-mt-px, 0px) + var(--ba-safe-top, 0px)) var(--ba-mr-px, 0px)
+           var(--ba-mb-px, 0px) var(--ba-ml-px, 0px);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.ba-frame > .ba-zoom {
+  width: calc(100% / var(--ba-scale));
+  height: calc(100% / var(--ba-scale));
+  transform: scale(var(--ba-scale));
+  transform-origin: left top;
+  overflow: hidden;
+}
+
+/* 应用根节点用的是 100dvh（已降级为 100vh），会比缩放容器高；
+   这里让它填满容器，避免底部内容被裁掉。 */
+.ba-frame > .ba-zoom > * {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+}
+
+/* ── 侧栏：宽屏固定 docked，窄屏（竖屏车机）堆叠 ───────────────── */
+html.ba-car .bayin-glass-sidebar {
+  width: var(--ba-sidebar-w) !important;
+}
+@media (max-aspect-ratio: 1/1) {
+  html.ba-car .bayin-glass-sidebar {
+    width: 84px !important;
+  }
+}
+
+/* ── 标签栏 / 导航项：内容自适应高度，放大字号不截断 ───────────── */
+html.ba-car nav,
+html.ba-car nav > * {
+  height: auto;
+}
+html.ba-car .ba-nav-item,
+html.ba-car nav a,
+html.ba-car nav button {
+  height: auto !important;
+  min-height: calc(2.5rem * var(--ba-text));
+  white-space: normal !important;
+  word-break: break-word;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  line-height: 1.35;
+  padding-top: .35rem;
+  padding-bottom: .35rem;
+}
+
+/* ── 封面尺寸：重写封面网格列数 ─────────────────────────────────
+   上游：grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5
+   这里改成按 --ba-cover 换算的最小宽度自适应列数，封面越大列越少。 */
+html.ba-car .ba-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--ba-cover)), 1fr)) !important;
+}
+
+/* ── 老 WebView：关掉重特效，避免掉帧/OOM ──────────────────────── */
+html.ba-legacy * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter: none !important;
+  box-shadow: none !important;
+}
+html.ba-legacy .bayin-glass,
+html.ba-legacy .bayin-glass-sidebar {
+  background: rgba(22, 22, 26, .96) !important;
+}
