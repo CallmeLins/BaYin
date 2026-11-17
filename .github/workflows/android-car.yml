@@ -30,7 +30,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        abi: [arm64, arm]
+        # Tauri CLI 的 --target 取值是 aarch64 / armv7 / i686 / x86_64，
+        # 对应 gradle flavor arm64 / arm / x86 / x86_64。
+        abi: [aarch64, armv7]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
