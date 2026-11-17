@@ -27,8 +27,8 @@ dist-ssr
 .claude/
 .gemini/
 .workbuddy/
-Docs/
-
+Docs/*
+!Docs/车机使用与适配说明.md
 # Tauri
 src-tauri/target/
 src-tauri/gen/
