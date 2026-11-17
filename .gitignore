@@ -32,7 +32,8 @@ Docs/*
 # Tauri
 src-tauri/target/
 src-tauri/gen/
-
+# buildSrc 源码必须入库（否则 CI 上 rust gradle 插件缺失，脚本编译失败）
+!src-tauri/gen/android/buildSrc/src/
 # Build output
 build/
 src-ui/build/
