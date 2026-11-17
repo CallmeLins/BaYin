@@ -52,7 +52,7 @@ jobs:
             SDKMGR="$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n1)"
           fi
           yes | "$SDKMGR" --licenses > /dev/null 2>&1 || true
-          yes | "$SDKMGR" --install \
+          "$SDKMGR" --install \
             "ndk;${NDK_VERSION}" "platforms;android-36" "build-tools;36.0.0" "platform-tools"
           echo "NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
